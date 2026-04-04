@@ -78,6 +78,15 @@ export interface TerminalSession {
   projectId: ProjectId
   title: string
   cwd: string
+  shell?: string
+  shellPath?: string
+  cols?: number
+  rows?: number
+  isRunning?: boolean
+  restoredFromPersistence?: boolean
+  scrollbackBytes?: number
+  startupCommand?: string
+  lastExitReason?: string
 }
 
 export interface CodexThread {
@@ -86,7 +95,7 @@ export interface CodexThread {
   title: string
   lastMessage?: string
   unread: boolean
-  status: 'idle' | 'running' | 'waiting_approval'
+  status: 'idle' | 'running' | 'waiting_approval' | 'waitingApproval' | 'error' | 'disconnected'
 }
 
 export interface CodexApproval {
@@ -94,6 +103,10 @@ export interface CodexApproval {
   threadId: ThreadId
   projectId: ProjectId
   actionType: string
+  category?: string
+  riskLevel?: string
+  policyAction?: string
+  policyReason?: string
   description: string
   context?: string
 }

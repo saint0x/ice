@@ -1,8 +1,9 @@
 import { memo, useState } from 'react'
 import {
-  MessageSquare, Loader2, Bot, FileCode, TerminalSquare, ArrowRight
+  MessageSquare, Loader2, Bot, ShieldAlert, ArrowRight
 } from 'lucide-react'
 import type { Tab } from '@/types'
+import { codexThreadCreate, codexTurnStart } from '@/lib/backend'
 import { useCodexStore } from '@/stores/codex'
 import styles from './CodexSurface.module.css'
 
@@ -13,7 +14,31 @@ interface Props {
 export const CodexSurface = memo(function CodexSurface({ tab }: Props) {
   const threadId = tab.meta?.threadId as string | undefined
   const thread = useCodexStore((s) => threadId ? s.threads.get(threadId) : undefined)
+  const approvals = useCodexStore((s) => s.approvals.filter((approval) => approval.projectId === tab.projectId && (!threadId || approval.threadId === threadId)))
+  const addThread = useCodexStore((s) => s.addThread)
   const [input, setInput] = useState('')
+
+  const sendPrompt = async () => {
+    const prompt = input.trim()
+    if (!prompt) return
+    setInput('')
+    let targetThreadId = threadId
+    if (!targetThreadId) {
+      const created = await codexThreadCreate(tab.projectId, tab.title === 'New Thread' ? undefined : tab.title)
+      addThread({
+        id: created.threadId,
+        projectId: created.projectId,
+        title: created.title ?? 'New Thread',
+        lastMessage: created.lastAssistantMessage ?? undefined,
+        unread: created.unread,
+        status: created.status === 'waitingApproval' ? 'waitingApproval' : (created.status as 'idle' | 'running' | 'error' | 'disconnected'),
+      })
+      targetThreadId = created.threadId
+    }
+    if (targetThreadId) {
+      await codexTurnStart(tab.projectId, targetThreadId, prompt)
+    }
+  }
 
   return (
     <div className={styles.surface}>
@@ -28,62 +53,40 @@ export const CodexSurface = memo(function CodexSurface({ tab }: Props) {
       </div>
 
       <div className={styles.messages}>
-        {/* User — right */}
-        <div className={styles.userRow}>
-          <div className={styles.userBubble}>
-            Can you implement the pane grid layout system? I need split views with drag handles that feel native.
-          </div>
-        </div>
-
-        {/* Agent — left */}
-        <div className={styles.agentRow}>
-          <div className={styles.agentAvatar}>
-            <Bot size={14} />
-          </div>
-          <div className={styles.agentContent}>
-            <div className={styles.agentBubble}>
-              I'll create a recursive split layout system with smooth drag resizing. The implementation will use a tree structure where each node is either a leaf pane or a split container.
+        {thread?.lastMessage ? (
+          <div className={styles.agentRow}>
+            <div className={styles.agentAvatar}>
+              <Bot size={14} />
             </div>
-            <div className={styles.artifacts}>
-              <div className={styles.artifact}>
-                <FileCode size={12} />
-                <span>PaneGrid.tsx</span>
-                <span className={styles.artifactAction}>Created</span>
-              </div>
-              <div className={styles.artifact}>
-                <FileCode size={12} />
-                <span>Pane.tsx</span>
-                <span className={styles.artifactAction}>Created</span>
+            <div className={styles.agentContent}>
+              <div className={styles.agentBubble}>{thread.lastMessage}</div>
+            </div>
+          </div>
+        ) : (
+          <div className={styles.agentRow}>
+            <div className={styles.agentAvatar}>
+              <Bot size={14} />
+            </div>
+            <div className={styles.agentContent}>
+              <div className={styles.agentBubble}>
+                {thread ? 'Thread is ready. Send the next prompt to Codex.' : 'Start a new Codex thread by sending a prompt.'}
               </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* User */}
-        <div className={styles.userRow}>
-          <div className={styles.userBubble}>
-            Now add resize handles and keyboard shortcuts.
-          </div>
-        </div>
-
-        {/* Agent */}
-        <div className={styles.agentRow}>
-          <div className={styles.agentAvatar}>
-            <Bot size={14} />
-          </div>
-          <div className={styles.agentContent}>
-            <div className={styles.agentBubble}>
-              Done. <code>Cmd+\</code> splits horizontally, <code>Cmd+Shift+\</code> splits vertically. Drag handles respond to mouse events with <code>4px</code> hit targets.
+        {approvals.map((approval) => (
+          <div key={approval.id} className={styles.agentRow}>
+            <div className={styles.agentAvatar}>
+              <ShieldAlert size={14} />
             </div>
-            <div className={styles.artifacts}>
-              <div className={styles.artifact}>
-                <TerminalSquare size={12} />
-                <span>useKeyboardShortcuts.ts</span>
-                <span className={styles.artifactAction}>Modified</span>
+            <div className={styles.agentContent}>
+              <div className={styles.agentBubble}>
+                Approval required: {approval.description}
               </div>
             </div>
           </div>
-        </div>
+        ))}
 
         {thread?.status === 'running' && (
           <div className={styles.agentRow}>
@@ -106,13 +109,14 @@ export const CodexSurface = memo(function CodexSurface({ tab }: Props) {
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey && input.trim()) {
                 e.preventDefault()
-                setInput('')
+                void sendPrompt()
               }
             }}
           />
           <button
             className={`${styles.sendBtn} ${input.trim() ? styles.sendBtnReady : ''}`}
             aria-label="Send"
+            onClick={() => void sendPrompt()}
           >
             <ArrowRight size={14} />
           </button>

@@ -4,6 +4,7 @@ import {
   Search, Play, Bug, CheckCircle, ChevronRight, ChevronDown
 } from 'lucide-react'
 import type { Project, SidebarSection } from '@/types'
+import { codexThreadCreate, toCodexThread } from '@/lib/backend'
 import { useProjectsStore } from '@/stores/projects'
 import { useGitStore } from '@/stores/git'
 import { useTerminalStore } from '@/stores/terminal'
@@ -33,9 +34,12 @@ export const ProjectSection = memo(function ProjectSection({ project }: Props) {
   const gitChangeCount = useGitStore((s) => s.gitState.get(project.id)?.changes.length ?? 0)
   const sessions = useTerminalStore((s) => s.sessions)
   const allThreads = useCodexStore((s) => s.threads)
+  const addThread = useCodexStore((s) => s.addThread)
+  const setActiveThread = useCodexStore((s) => s.setActiveThread)
   const openTab = useWorkspaceStore((s) => s.openTab)
   const activePaneId = useWorkspaceStore((s) => s.activePaneId)
   const setBottomDockOpen = useWorkspaceStore((s) => s.setBottomDockOpen)
+  const setChatPanelOpen = useWorkspaceStore((s) => s.setChatPanelOpen)
   const isActive = project.id === activeProjectId
 
   const terminalCount = useMemo(() => {
@@ -74,12 +78,18 @@ export const ProjectSection = memo(function ProjectSection({ project }: Props) {
     (type: 'codex' | 'search' | 'terminal') => {
       setActiveProject(project.id)
       if (type === 'codex') {
-        openTab(activePaneId, 'codex', 'New Thread', project.id, {})
+        setChatPanelOpen(true)
+        void codexThreadCreate(project.id).then((thread) => {
+          const mapped = toCodexThread(thread)
+          addThread(mapped)
+          setActiveThread(project.id, mapped.id)
+          openTab(activePaneId, 'codex', mapped.title, project.id, { threadId: mapped.id })
+        })
       } else if (type === 'terminal') {
         setBottomDockOpen(true)
       }
     },
-    [project.id, setActiveProject, openTab, activePaneId, setBottomDockOpen]
+    [activePaneId, addThread, openTab, project.id, setActiveProject, setActiveThread, setBottomDockOpen, setChatPanelOpen]
   )
 
   const getBadge = (section: SidebarSection): string | undefined => {

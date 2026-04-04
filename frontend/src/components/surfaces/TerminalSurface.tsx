@@ -1,6 +1,8 @@
 import { memo, useRef, useEffect } from 'react'
 import type { TerminalSession } from '@/types'
+import { terminalRespawn, terminalWrite, toTerminalSession } from '@/lib/backend'
 import { useThemeStore } from '@/stores/theme'
+import { useTerminalStore } from '@/stores/terminal'
 import styles from './TerminalSurface.module.css'
 
 interface Props {
@@ -39,7 +41,10 @@ function buildTerminalTheme() {
 export const TerminalSurface = memo(function TerminalSurface({ session }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<import('@xterm/xterm').Terminal | null>(null)
+  const fitRef = useRef<import('@xterm/addon-fit').FitAddon | null>(null)
   const themeId = useThemeStore((s) => s.themeId)
+  const scrollback = useTerminalStore((s) => s.scrollback.get(session.id) ?? '')
+  const upsertSession = useTerminalStore((s) => s.upsertSession)
 
   useEffect(() => {
     let disposed = false
@@ -64,10 +69,12 @@ export const TerminalSurface = memo(function TerminalSurface({ session }: Props)
       term.loadAddon(fitAddon)
       term.open(containerRef.current)
       fitAddon.fit()
+      fitRef.current = fitAddon
+      term.write(scrollback)
 
-      term.writeln(`\x1b[38;5;244m❯ \x1b[0m${session.title} — ${session.cwd || 'ready'}`)
-      term.writeln('')
-      term.write('\x1b[38;5;244m❯ \x1b[0m')
+      term.onData((data) => {
+        void terminalWrite(session.id, data)
+      })
 
       termRef.current = term
 
@@ -80,6 +87,7 @@ export const TerminalSurface = memo(function TerminalSurface({ session }: Props)
         observer.disconnect()
         term.dispose()
         termRef.current = null
+        fitRef.current = null
       }
     }
 
@@ -88,7 +96,22 @@ export const TerminalSurface = memo(function TerminalSurface({ session }: Props)
       disposed = true
       cleanup.then((fn) => fn?.())
     }
-  }, [session.id, session.title, session.cwd])
+  }, [scrollback, session.id])
+
+  useEffect(() => {
+    if (!session.isRunning) {
+      void terminalRespawn(session.id).then((record) => {
+        upsertSession(toTerminalSession(record))
+      }).catch(() => {})
+    }
+  }, [session.id, session.isRunning, upsertSession])
+
+  useEffect(() => {
+    if (!termRef.current) return
+    termRef.current.reset()
+    termRef.current.write(scrollback)
+    fitRef.current?.fit()
+  }, [scrollback])
 
   // Update terminal theme when app theme changes
   useEffect(() => {

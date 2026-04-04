@@ -1,11 +1,14 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type Event, type UnlistenFn } from '@tauri-apps/api/event'
 import type {
+  CodexApproval,
+  CodexThread,
   FileEntry,
   GitChange,
   GitState,
   PaneLayout,
   Project,
+  TerminalSession,
   Tab,
 } from '@/types'
 
@@ -115,6 +118,62 @@ interface FsEventPayload {
   projectId: string
 }
 
+interface TerminalSessionRecordDto {
+  sessionId: string
+  projectId: string
+  cwd: string
+  shell: string
+  shellPath: string
+  title: string
+  cols: number
+  rows: number
+  isRunning: boolean
+  startupCommand?: string | null
+  restoredFromPersistence: boolean
+  scrollbackBytes: number
+  lastExitReason?: string | null
+}
+
+interface TerminalScrollbackDto {
+  sessionId: string
+  content: string
+}
+
+interface TerminalEventPayload {
+  type: string
+  session?: TerminalSessionRecordDto
+  sessionId?: string
+  data?: string
+}
+
+interface CodexThreadDto {
+  projectId: string
+  threadId: string
+  title?: string | null
+  status: string
+  lastAssistantMessage?: string | null
+  unread: boolean
+}
+
+interface CodexApprovalDto {
+  requestId: number
+  projectId: string
+  threadId?: string | null
+  actionType: string
+  category: string
+  riskLevel: string
+  policyAction: string
+  policyReason?: string | null
+  description: string
+  contextJson?: unknown
+}
+
+interface CodexEventPayload {
+  type: string
+  thread?: CodexThreadDto
+  approval?: CodexApprovalDto
+}
+
 export async function appBootstrap() {
   return invoke<AppBootstrapDto>('app_bootstrap')
 }
@@ -155,6 +214,68 @@ export async function workspaceSessionSet(sessionState: WorkspaceSessionPersistD
   })
 }
 
+export async function terminalList(projectId?: string) {
+  return invoke<TerminalSessionRecordDto[]>('terminal_list', { projectId })
+}
+
+export async function terminalCreate(projectId: string) {
+  return invoke<TerminalSessionRecordDto>('terminal_create', {
+    input: { projectId },
+  })
+}
+
+export async function terminalClose(sessionId: string) {
+  return invoke<void>('terminal_close', { sessionId })
+}
+
+export async function terminalWrite(sessionId: string, data: string) {
+  return invoke<void>('terminal_write', {
+    input: { sessionId, data },
+  })
+}
+
+export async function terminalScrollbackRead(sessionId: string) {
+  return invoke<TerminalScrollbackDto>('terminal_scrollback_read', {
+    input: { sessionId },
+  })
+}
+
+export async function terminalRespawn(sessionId: string) {
+  return invoke<TerminalSessionRecordDto>('terminal_respawn', { sessionId })
+}
+
+export async function codexThreadsList(projectId?: string) {
+  return invoke<CodexThreadDto[]>('codex_threads_list', { projectId })
+}
+
+export async function codexApprovalsList(projectId?: string) {
+  return invoke<CodexApprovalDto[]>('codex_approvals_list', { projectId })
+}
+
+export async function codexThreadCreate(projectId: string, title?: string) {
+  return invoke<CodexThreadDto>('codex_thread_create', {
+    input: { projectId, title },
+  })
+}
+
+export async function codexTurnStart(projectId: string, threadId: string, prompt: string) {
+  return invoke<unknown>('codex_turn_start', {
+    input: { projectId, threadId, prompt },
+  })
+}
+
+export async function codexServerRequestRespond(requestId: number, result: unknown = { approved: true }) {
+  return invoke<void>('codex_server_request_respond', {
+    input: { requestId, result },
+  })
+}
+
+export async function codexServerRequestDeny(requestId: number, message?: string) {
+  return invoke<void>('codex_server_request_deny', {
+    input: { requestId, message },
+  })
+}
+
 export function listenGitEvents(handler: (payload: GitEventPayload) => void): Promise<UnlistenFn> {
   return listen<GitEventPayload>('app://git', (event: Event<GitEventPayload>) => {
     if (event.payload) handler(event.payload)
@@ -163,6 +284,18 @@ export function listenGitEvents(handler: (payload: GitEventPayload) => void): Pr
 
 export function listenFsEvents(handler: (payload: FsEventPayload) => void): Promise<UnlistenFn> {
   return listen<FsEventPayload>('app://fs', (event: Event<FsEventPayload>) => {
+    if (event.payload) handler(event.payload)
+  })
+}
+
+export function listenTerminalEvents(handler: (payload: TerminalEventPayload) => void): Promise<UnlistenFn> {
+  return listen<TerminalEventPayload>('app://terminal', (event: Event<TerminalEventPayload>) => {
+    if (event.payload) handler(event.payload)
+  })
+}
+
+export function listenCodexEvents(handler: (payload: CodexEventPayload) => void): Promise<UnlistenFn> {
+  return listen<CodexEventPayload>('app://codex', (event: Event<CodexEventPayload>) => {
     if (event.payload) handler(event.payload)
   })
 }
@@ -197,6 +330,50 @@ export function toGitState(dto: GitStatusSummaryDto): GitState {
     ahead: dto.ahead,
     behind: dto.behind,
     changes: dto.changes,
+  }
+}
+
+export function toTerminalSession(dto: TerminalSessionRecordDto): TerminalSession {
+  return {
+    id: dto.sessionId,
+    projectId: dto.projectId,
+    title: dto.title,
+    cwd: dto.cwd,
+    shell: dto.shell,
+    shellPath: dto.shellPath,
+    cols: dto.cols,
+    rows: dto.rows,
+    isRunning: dto.isRunning,
+    restoredFromPersistence: dto.restoredFromPersistence,
+    scrollbackBytes: dto.scrollbackBytes,
+    startupCommand: dto.startupCommand ?? undefined,
+    lastExitReason: dto.lastExitReason ?? undefined,
+  }
+}
+
+export function toCodexThread(dto: CodexThreadDto): CodexThread {
+  return {
+    id: dto.threadId,
+    projectId: dto.projectId,
+    title: dto.title ?? 'New Thread',
+    lastMessage: dto.lastAssistantMessage ?? undefined,
+    unread: dto.unread,
+    status: normalizeCodexStatus(dto.status),
+  }
+}
+
+export function toCodexApproval(dto: CodexApprovalDto): CodexApproval {
+  return {
+    id: String(dto.requestId),
+    threadId: dto.threadId ?? '',
+    projectId: dto.projectId,
+    actionType: dto.actionType,
+    category: dto.category,
+    riskLevel: dto.riskLevel,
+    policyAction: dto.policyAction,
+    policyReason: dto.policyReason ?? undefined,
+    description: dto.description,
+    context: dto.contextJson ? JSON.stringify(dto.contextJson) : undefined,
   }
 }
 
@@ -284,6 +461,20 @@ function normalizeContentType(kind: string): Tab['type'] {
     return kind
   }
   return 'settings'
+}
+
+function normalizeCodexStatus(status: string): CodexThread['status'] {
+  if (
+    status === 'idle' ||
+    status === 'running' ||
+    status === 'waiting_approval' ||
+    status === 'waitingApproval' ||
+    status === 'error' ||
+    status === 'disconnected'
+  ) {
+    return status
+  }
+  return 'idle'
 }
 
 function toPaneLayout(dto: WorkspacePaneDto): PaneLayout {

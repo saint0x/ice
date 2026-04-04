@@ -4,6 +4,7 @@ import { useWorkspaceStore } from '@/stores/workspace'
 import { useTerminalStore } from '@/stores/terminal'
 import { useProjectsStore } from '@/stores/projects'
 import { TerminalSurface } from '@/components/surfaces/TerminalSurface'
+import { terminalClose, terminalCreate, toTerminalSession } from '@/lib/backend'
 import styles from './BottomDock.module.css'
 
 export const BottomDock = memo(function BottomDock() {
@@ -15,8 +16,8 @@ export const BottomDock = memo(function BottomDock() {
   const allSessions = useTerminalStore((s) => s.sessions)
   const activeSessionId = useTerminalStore((s) => activeProjectId ? s.activeSessionId.get(activeProjectId) : null)
   const setActiveSession = useTerminalStore((s) => s.setActiveSession)
-  const createSession = useTerminalStore((s) => s.createSession)
   const closeSession = useTerminalStore((s) => s.closeSession)
+  const upsertSession = useTerminalStore((s) => s.upsertSession)
   const resizeRef = useRef<{ startY: number; startH: number } | null>(null)
 
   const projectSessions = useMemo(() => {
@@ -59,7 +60,12 @@ export const BottomDock = memo(function BottomDock() {
               key={session.id}
               className={`${styles.tab} ${session.id === activeSessionId ? styles.active : ''}`}
               onClick={() => activeProjectId && setActiveSession(activeProjectId, session.id)}
-              onAuxClick={(e) => { if (e.button === 1) closeSession(session.id) }}
+              onAuxClick={(e) => {
+                if (e.button === 1) {
+                  closeSession(session.id)
+                  void terminalClose(session.id)
+                }
+              }}
             >
               <Terminal size={12} />
               <span className={styles.tabTitle}>{session.title}</span>
@@ -67,7 +73,13 @@ export const BottomDock = memo(function BottomDock() {
           ))}
           <button
             className={styles.addBtn}
-            onClick={() => activeProjectId && createSession(activeProjectId)}
+            onClick={() => {
+              if (!activeProjectId) return
+              void terminalCreate(activeProjectId).then((session) => {
+                upsertSession(toTerminalSession(session))
+                setActiveSession(activeProjectId, session.sessionId)
+              })
+            }}
             aria-label="New Terminal"
           >
             <Plus size={13} />

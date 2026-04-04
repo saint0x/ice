@@ -1,15 +1,24 @@
 import { useEffect, useRef } from 'react'
 import {
   appBootstrap,
+  codexApprovalsList,
+  codexThreadsList,
   gitStatusRead,
+  listenCodexEvents,
   listenFsEvents,
   listenGitEvents,
+  listenTerminalEvents,
   projectTreeReadNested,
   projectWatchStart,
   projectWatchStop,
+  terminalList,
+  terminalScrollbackRead,
+  toCodexApproval,
+  toCodexThread,
   toFileTree,
   toGitState,
   toProject,
+  toTerminalSession,
   toWorkspaceChromePersist,
   toWorkspaceInput,
   toWorkspaceSessionPersist,
@@ -19,6 +28,8 @@ import {
 import { useFilesStore } from '@/stores/files'
 import { useGitStore } from '@/stores/git'
 import { useProjectsStore } from '@/stores/projects'
+import { useCodexStore } from '@/stores/codex'
+import { useTerminalStore } from '@/stores/terminal'
 import { useWorkspaceStore } from '@/stores/workspace'
 
 const TREE_REFRESH_EVENT_TYPES = new Set([
@@ -35,6 +46,17 @@ export function useBackendIntegration() {
   const updateProject = useProjectsStore((state) => state.updateProject)
   const hydrateTree = useFilesStore((state) => state.hydrateTree)
   const hydrateGitState = useGitStore((state) => state.hydrateGitState)
+  const hydrateSessions = useTerminalStore((state) => state.hydrateSessions)
+  const upsertSession = useTerminalStore((state) => state.upsertSession)
+  const setScrollback = useTerminalStore((state) => state.setScrollback)
+  const appendScrollback = useTerminalStore((state) => state.appendScrollback)
+  const closeSession = useTerminalStore((state) => state.closeSession)
+  const hydrateThreads = useCodexStore((state) => state.hydrateThreads)
+  const hydrateApprovals = useCodexStore((state) => state.hydrateApprovals)
+  const addThread = useCodexStore((state) => state.addThread)
+  const updateThread = useCodexStore((state) => state.updateThread)
+  const addApproval = useCodexStore((state) => state.addApproval)
+  const resolveApproval = useCodexStore((state) => state.resolveApproval)
   const hydrateWorkspace = useWorkspaceStore((state) => state.hydrateWorkspace)
 
   const sidebarOpen = useWorkspaceStore((state) => state.sidebarOpen)
@@ -52,6 +74,8 @@ export function useBackendIntegration() {
     let disposed = false
     let fsUnlisten: (() => void) | undefined
     let gitUnlisten: (() => void) | undefined
+    let terminalUnlisten: (() => void) | undefined
+    let codexUnlisten: (() => void) | undefined
     const watchedProjects = new Set<string>()
 
     const refreshTree = async (projectId: string) => {
@@ -68,6 +92,24 @@ export function useBackendIntegration() {
       const projects = data.projects.map(toProject)
       hydrateProjects(projects)
       hydrateWorkspace(toWorkspaceInput(data.workspaceChrome, data.workspaceSession))
+
+      const [sessions, threads, approvals] = await Promise.all([
+        terminalList(),
+        codexThreadsList(),
+        codexApprovalsList(),
+      ])
+      if (disposed) return
+      hydrateSessions(sessions.map(toTerminalSession))
+      hydrateThreads(threads.map(toCodexThread))
+      hydrateApprovals(approvals.map(toCodexApproval))
+      await Promise.all(
+        sessions.map(async (session) => {
+          const scrollback = await terminalScrollbackRead(session.sessionId)
+          if (!disposed) {
+            setScrollback(session.sessionId, scrollback.content)
+          }
+        }),
+      )
 
       await Promise.all(
         data.projects.map(async (project) => {
@@ -104,15 +146,60 @@ export function useBackendIntegration() {
       gitUnlisten = unlisten
     })
 
+    void listenTerminalEvents((payload) => {
+      if (
+        (payload.type === 'sessionCreated' ||
+          payload.type === 'sessionRenamed' ||
+          payload.type === 'sessionExited' ||
+          payload.type === 'sessionReadError') &&
+        payload.session
+      ) {
+        upsertSession(toTerminalSession(payload.session))
+        return
+      }
+      if (payload.type === 'data' && payload.sessionId && payload.data) {
+        appendScrollback(payload.sessionId, payload.data)
+        return
+      }
+      if (payload.type === 'sessionClosed' && payload.sessionId) {
+        closeSession(payload.sessionId)
+      }
+    }).then((unlisten) => {
+      terminalUnlisten = unlisten
+    })
+
+    void listenCodexEvents((payload) => {
+      if ((payload.type === 'threadCreated' || payload.type === 'threadUpdated') && payload.thread) {
+        const thread = toCodexThread(payload.thread)
+        if (payload.type === 'threadCreated') {
+          addThread(thread)
+        } else {
+          updateThread(thread.id, thread)
+        }
+        return
+      }
+      if (payload.type === 'approvalPending' && payload.approval) {
+        addApproval(toCodexApproval(payload.approval))
+        return
+      }
+      if (payload.type === 'approvalBlocked' && payload.approval) {
+        resolveApproval(String(payload.approval.requestId))
+      }
+    }).then((unlisten) => {
+      codexUnlisten = unlisten
+    })
+
     return () => {
       disposed = true
       fsUnlisten?.()
       gitUnlisten?.()
+      terminalUnlisten?.()
+      codexUnlisten?.()
       for (const projectId of watchedProjects) {
         void projectWatchStop(projectId)
       }
     }
-  }, [hydrateGitState, hydrateProjects, hydrateTree, hydrateWorkspace, updateProject])
+  }, [addApproval, addThread, appendScrollback, closeSession, hydrateApprovals, hydrateGitState, hydrateProjects, hydrateSessions, hydrateThreads, hydrateTree, hydrateWorkspace, resolveApproval, setScrollback, updateProject, updateThread, upsertSession])
 
   useEffect(() => {
     if (!hydratedRef.current) return

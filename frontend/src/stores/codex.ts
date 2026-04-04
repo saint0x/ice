@@ -6,6 +6,8 @@ interface CodexState {
   approvals: CodexApproval[]
   activeThreadId: Map<ProjectId, ThreadId | null>
 
+  hydrateThreads: (threads: CodexThread[]) => void
+  hydrateApprovals: (approvals: CodexApproval[]) => void
   addThread: (thread: CodexThread) => void
   setActiveThread: (projectId: ProjectId, threadId: ThreadId) => void
   updateThread: (threadId: ThreadId, patch: Partial<CodexThread>) => void
@@ -34,6 +36,26 @@ export const useCodexStore = create<CodexState>((set) => ({
   ]),
   approvals: [],
   activeThreadId: new Map([['proj-1', 'thread-1']]),
+
+  hydrateThreads: (threads) =>
+    set((s) => {
+      const nextThreads = new Map<ThreadId, CodexThread>()
+      const nextActiveThreadId = new Map(s.activeThreadId)
+      for (const thread of threads) {
+        nextThreads.set(thread.id, thread)
+      }
+      const projectIds = new Set<string>(threads.map((thread) => thread.projectId))
+      for (const projectId of projectIds) {
+        const activeId = nextActiveThreadId.get(projectId)
+        const projectThreads = threads.filter((thread) => thread.projectId === projectId)
+        if (!activeId || !nextThreads.has(activeId)) {
+          nextActiveThreadId.set(projectId, projectThreads[0]?.id ?? null)
+        }
+      }
+      return { threads: nextThreads, activeThreadId: nextActiveThreadId }
+    }),
+
+  hydrateApprovals: (approvals) => set({ approvals }),
 
   addThread: (thread) =>
     set((s) => {

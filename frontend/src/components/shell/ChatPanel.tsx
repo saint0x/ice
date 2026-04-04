@@ -1,8 +1,9 @@
 import { memo, useCallback, useMemo, useRef, useState } from 'react'
 import {
   MessageSquare, X, Bot, Loader2, Sparkles,
-  FileCode, TerminalSquare, ArrowRight
+  ShieldAlert, ArrowRight, Check, Ban
 } from 'lucide-react'
+import { codexServerRequestDeny, codexServerRequestRespond, codexThreadCreate, codexTurnStart, toCodexThread } from '@/lib/backend'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useProjectsStore } from '@/stores/projects'
 import { useCodexStore } from '@/stores/codex'
@@ -17,6 +18,9 @@ export const ChatPanel = memo(function ChatPanel() {
   const project = useProjectsStore((s) => activeProjectId ? s.projects.get(activeProjectId) : undefined)
   const allThreads = useCodexStore((s) => s.threads)
   const activeThreadId = useCodexStore((s) => activeProjectId ? s.activeThreadId.get(activeProjectId) : undefined)
+  const setActiveThread = useCodexStore((s) => s.setActiveThread)
+  const addThread = useCodexStore((s) => s.addThread)
+  const approvals = useCodexStore((s) => s.approvals.filter((approval) => approval.projectId === activeProjectId))
 
   const [input, setInput] = useState('')
   const resizeRef = useRef<{ startX: number; startW: number } | null>(null)
@@ -30,6 +34,23 @@ export const ChatPanel = memo(function ChatPanel() {
   }, [allThreads, activeProjectId])
 
   const activeThread = activeThreadId ? allThreads.get(activeThreadId) : undefined
+
+  const sendPrompt = useCallback(async () => {
+    const prompt = input.trim()
+    if (!prompt || !activeProjectId) return
+    setInput('')
+    let threadId = activeThreadId
+    if (!threadId) {
+      const created = await codexThreadCreate(activeProjectId)
+      const mapped = toCodexThread(created)
+      addThread(mapped)
+      setActiveThread(activeProjectId, mapped.id)
+      threadId = mapped.id
+    }
+    if (threadId) {
+      await codexTurnStart(activeProjectId, threadId, prompt)
+    }
+  }, [activeProjectId, activeThreadId, addThread, input, setActiveThread])
 
   const onResizeStart = useCallback(
     (e: React.MouseEvent) => {
@@ -70,62 +91,39 @@ export const ChatPanel = memo(function ChatPanel() {
       {activeThread ? (
         <>
           <div className={styles.messages}>
-            {/* User message — right aligned */}
-            <div className={styles.userRow}>
-              <div className={styles.userBubble}>
-                Can you implement the pane grid layout system? I need split views with drag handles.
-              </div>
-            </div>
-
-            {/* Agent message — left aligned */}
             <div className={styles.agentRow}>
               <div className={styles.agentAvatar}>
                 <Bot size={14} />
               </div>
               <div className={styles.agentContent}>
                 <div className={styles.agentBubble}>
-                  I'll create a recursive split layout system. Each node is either a leaf pane or a split container with a drag handle.
-                </div>
-                <div className={styles.artifacts}>
-                  <div className={styles.artifact}>
-                    <FileCode size={12} />
-                    <span>PaneGrid.tsx</span>
-                    <span className={styles.artifactAction}>Created</span>
-                  </div>
-                  <div className={styles.artifact}>
-                    <FileCode size={12} />
-                    <span>Pane.tsx</span>
-                    <span className={styles.artifactAction}>Created</span>
-                  </div>
+                  {activeThread.lastMessage ?? 'Thread is ready. Send the next prompt to Codex.'}
                 </div>
               </div>
             </div>
 
-            {/* Another user message */}
-            <div className={styles.userRow}>
-              <div className={styles.userBubble}>
-                Now add keyboard shortcuts for splitting panes.
-              </div>
-            </div>
-
-            {/* Agent response with tool use */}
-            <div className={styles.agentRow}>
-              <div className={styles.agentAvatar}>
-                <Bot size={14} />
-              </div>
-              <div className={styles.agentContent}>
-                <div className={styles.agentBubble}>
-                  I've added <code>Cmd+\</code> for horizontal split and <code>Cmd+Shift+\</code> for vertical split. The shortcuts work through a global keyboard handler.
+            {approvals.map((approval) => (
+              <div key={approval.id} className={styles.agentRow}>
+                <div className={styles.agentAvatar}>
+                  <ShieldAlert size={14} />
                 </div>
-                <div className={styles.artifacts}>
-                  <div className={styles.artifact}>
-                    <TerminalSquare size={12} />
-                    <span>useKeyboardShortcuts.ts</span>
-                    <span className={styles.artifactAction}>Modified</span>
+                <div className={styles.agentContent}>
+                  <div className={styles.agentBubble}>
+                    {approval.description}
+                  </div>
+                  <div className={styles.artifacts}>
+                    <button className={styles.artifact} onClick={() => void codexServerRequestRespond(Number(approval.id))}>
+                      <Check size={12} />
+                      <span>Approve</span>
+                    </button>
+                    <button className={styles.artifact} onClick={() => void codexServerRequestDeny(Number(approval.id))}>
+                      <Ban size={12} />
+                      <span>Deny</span>
+                    </button>
                   </div>
                 </div>
               </div>
-            </div>
+            ))}
 
             {activeThread.status === 'running' && (
               <div className={styles.agentRow}>
@@ -148,13 +146,14 @@ export const ChatPanel = memo(function ChatPanel() {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey && input.trim()) {
                     e.preventDefault()
-                    setInput('')
+                    void sendPrompt()
                   }
                 }}
               />
               <button
                 className={`${styles.sendBtn} ${input.trim() ? styles.sendBtnReady : ''}`}
                 aria-label="Send"
+                onClick={() => void sendPrompt()}
               >
                 <ArrowRight size={14} />
               </button>
@@ -188,10 +187,17 @@ export const ChatPanel = memo(function ChatPanel() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 spellCheck={false}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey && input.trim()) {
+                    e.preventDefault()
+                    void sendPrompt()
+                  }
+                }}
               />
               <button
                 className={`${styles.sendBtn} ${input.trim() ? styles.sendBtnReady : ''}`}
                 aria-label="Send"
+                onClick={() => void sendPrompt()}
               >
                 <ArrowRight size={14} />
               </button>

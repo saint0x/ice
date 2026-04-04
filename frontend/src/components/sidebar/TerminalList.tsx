@@ -1,6 +1,7 @@
 import { memo, useMemo } from 'react'
 import { Terminal, Plus, X } from 'lucide-react'
 import type { ProjectId } from '@/types'
+import { terminalClose, terminalCreate, toTerminalSession } from '@/lib/backend'
 import { useTerminalStore } from '@/stores/terminal'
 import { useWorkspaceStore } from '@/stores/workspace'
 import styles from './TerminalList.module.css'
@@ -9,8 +10,8 @@ export const TerminalList = memo(function TerminalList({ projectId }: { projectI
   const allSessions = useTerminalStore((s) => s.sessions)
   const activeSessionId = useTerminalStore((s) => s.activeSessionId.get(projectId))
   const setActiveSession = useTerminalStore((s) => s.setActiveSession)
-  const createSession = useTerminalStore((s) => s.createSession)
   const closeSession = useTerminalStore((s) => s.closeSession)
+  const upsertSession = useTerminalStore((s) => s.upsertSession)
   const setBottomDockOpen = useWorkspaceStore((s) => s.setBottomDockOpen)
 
   const sessions = useMemo(() => {
@@ -36,14 +37,27 @@ export const TerminalList = memo(function TerminalList({ projectId }: { projectI
           <span className={styles.title}>{session.title}</span>
           <button
             className={styles.closeBtn}
-            onClick={(e) => { e.stopPropagation(); closeSession(session.id) }}
+            onClick={(e) => {
+              e.stopPropagation()
+              closeSession(session.id)
+              void terminalClose(session.id)
+            }}
             aria-label="Close terminal"
           >
             <X size={10} />
           </button>
         </div>
       ))}
-      <button className={styles.addBtn} onClick={() => createSession(projectId)}>
+      <button
+        className={styles.addBtn}
+        onClick={() => {
+          setBottomDockOpen(true)
+          void terminalCreate(projectId).then((session) => {
+            upsertSession(toTerminalSession(session))
+            setActiveSession(projectId, session.sessionId)
+          })
+        }}
+      >
         <Plus size={12} />
         <span>New Terminal</span>
       </button>

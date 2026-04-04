@@ -13,9 +13,9 @@ Rules for this checklist:
 
 ### Backend Wiring
 
-- [ ] Replace the remaining demo Zustand seed data in [terminal.ts](/Users/deepsaint/Desktop/ice/frontend/src/stores/terminal.ts) and [codex.ts](/Users/deepsaint/Desktop/ice/frontend/src/stores/codex.ts) with Tauri IPC loaders.
+- [ ] Replace any remaining browser-side placeholder state with backend-driven data.
 - [ ] Subscribe to backend events for filesystem, git, browser, terminal, and Codex updates instead of relying on local-only mutations.
-- [ ] Add browser, terminal, and Codex event subscriptions on top of the now-live filesystem and git listeners.
+- [ ] Add browser event subscriptions on top of the now-live filesystem, git, terminal, and Codex listeners.
 - [ ] Persist and hydrate workspace layout from the backend rather than purely local in-memory state.
 
 ### Filesystem / Editor
@@ -49,18 +49,15 @@ Rules for this checklist:
 
 ### Terminal
 
-- [ ] Replace the demo xterm banner with live PTY data from backend terminal events in [TerminalSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/TerminalSurface.tsx).
-- [ ] Wire terminal create / rename / close / resize / write flows to backend IPC.
+- [ ] Wire terminal rename and resize flows to backend IPC.
 - [ ] Bind terminal tabs to backend `terminal_scrollback_read` plus live `app://terminal` events so restored sessions render persisted output before new PTY data arrives.
 - [ ] Use backend `terminal_respawn` for restored stopped sessions instead of inventing new local terminal ids.
 - [ ] Keep the bottom dock session model synced to backend session persistence.
 
 ### Codex / Agent UX
 
-- [ ] Replace the demo thread store with backend thread and approval state.
 - [ ] Render real streaming turn output in [CodexSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/CodexSurface.tsx).
 - [ ] Add approval prompts bound to backend pending approvals, using approval `category` and `riskLevel` for intent-specific UI.
-- [ ] Add thread creation and prompt submission wired to backend Codex commands.
 - [ ] Use `project_codex_sidebar` for project-scoped sidebar thread previews instead of recomputing them from the full thread store.
 
 ### Multi-Project UX
@@ -110,6 +107,10 @@ Rules for this checklist:
 - ✅ The frontend now persists workspace chrome/session changes back through `workspace_chrome_set` and `workspace_session_set`, replacing the old local-only workspace seed path in [workspace.ts](/Users/deepsaint/Desktop/ice/frontend/src/stores/workspace.ts).
 - ✅ The sidebar file tree now hydrates from `project_tree_read_nested`, so [FileTree.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/sidebar/FileTree.tsx) consumes backend-shaped `children` hierarchies directly.
 - ✅ The git store now hydrates from live backend status reads and `app://git` events instead of demo git rows.
+- ✅ Terminal sessions and scrollback now hydrate from backend `terminal_list` / `terminal_scrollback_read`, and the frontend listens to live `app://terminal` events through [useBackendIntegration.ts](/Users/deepsaint/Desktop/ice/frontend/src/hooks/useBackendIntegration.ts).
+- ✅ Terminal create, close, write, and respawn flows now route through backend IPC in [TerminalList.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/sidebar/TerminalList.tsx), [BottomDock.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/shell/BottomDock.tsx), and [TerminalSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/TerminalSurface.tsx).
+- ✅ Codex threads and approvals now hydrate from backend `codex_threads_list` / `codex_approvals_list`, and the frontend listens to live `app://codex` events through [useBackendIntegration.ts](/Users/deepsaint/Desktop/ice/frontend/src/hooks/useBackendIntegration.ts).
+- ✅ Codex thread creation, prompt submission, and approval approve/deny actions now route through backend IPC in [CodexSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/CodexSurface.tsx), [ChatPanel.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/shell/ChatPanel.tsx), and [ProjectSection.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/sidebar/ProjectSection.tsx).
 - ✅ Backend persistence now tracks an explicit schema version in SQLite, which gives production migrations a canonical upgrade baseline instead of implicit table-shape assumptions.
 - ✅ The backend tree API now supports hidden-file and `.gitignore` controls, and the file-read API now distinguishes binary files from editable text.
 - ✅ The backend now exposes project-scoped filename and content search commands for the sidebar search entrypoint.
