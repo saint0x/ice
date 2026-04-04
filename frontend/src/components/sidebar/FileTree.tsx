@@ -1,5 +1,5 @@
-import { memo, useCallback } from 'react'
-import { ChevronRight, ChevronDown, File, Folder, FolderOpen } from 'lucide-react'
+import { memo, useCallback, useState } from 'react'
+import { ChevronRight, ChevronDown, File, Folder, FolderOpen, Upload } from 'lucide-react'
 import type { FileEntry, ProjectId } from '@/types'
 import { useFilesStore } from '@/stores/files'
 import { useWorkspaceStore } from '@/stores/workspace'
@@ -83,8 +83,10 @@ export const FileTree = memo(function FileTree({ projectId }: Props) {
   const selectedPath = useFilesStore((s) => s.selectedPath.get(projectId) ?? null)
   const toggleExpand = useFilesStore((s) => s.toggleExpand)
   const setSelected = useFilesStore((s) => s.setSelected)
+  const setTree = useFilesStore((s) => s.setTree)
   const openTab = useWorkspaceStore((s) => s.openTab)
   const activePaneId = useWorkspaceStore((s) => s.activePaneId)
+  const [isDragOver, setIsDragOver] = useState(false)
 
   const onSelect = useCallback(
     (path: string) => {
@@ -102,10 +104,66 @@ export const FileTree = memo(function FileTree({ projectId }: Props) {
     [projectId, toggleExpand]
   )
 
-  if (!tree) return <div className={styles.empty}>No files loaded</div>
+  const onDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(true)
+  }, [])
+
+  const onDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(false)
+  }, [])
+
+  const onDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(false)
+
+    const files = e.dataTransfer.files
+    if (files.length === 0) return
+
+    const currentTree = useFilesStore.getState().trees.get(projectId) ?? []
+    const newEntries: FileEntry[] = []
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
+      if (!file) continue
+      newEntries.push({
+        name: file.name,
+        path: file.name,
+        isDir: false,
+        depth: 0,
+        gitStatus: 'added',
+      })
+    }
+
+    setTree(projectId, [...currentTree, ...newEntries])
+  }, [projectId, setTree])
+
+  if (!tree || tree.length === 0) {
+    return (
+      <div
+        className={`${styles.dropZone} ${isDragOver ? styles.dropZoneActive : ''}`}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+      >
+        <Upload size={16} className={styles.dropIcon} />
+        <span className={styles.dropText}>Drop files here</span>
+        <span className={styles.dropHint}>or open a project folder</span>
+      </div>
+    )
+  }
 
   return (
-    <div className={styles.tree}>
+    <div
+      className={`${styles.tree} ${isDragOver ? styles.treeDropActive : ''}`}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
       {tree.map((entry) => (
         <FileRow
           key={entry.path}

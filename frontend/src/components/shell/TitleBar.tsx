@@ -1,9 +1,10 @@
-import { memo, useState, useRef, useEffect } from 'react'
+import { memo, useState, useRef, useEffect, useCallback } from 'react'
 import {
   Minus, Square, X, Snowflake, PanelLeft, PanelBottom, MessageSquare,
-  Palette, Check
+  Palette, Check, FolderTree, Globe, Terminal
 } from 'lucide-react'
 import { useWorkspaceStore } from '@/stores/workspace'
+import { useProjectsStore } from '@/stores/projects'
 import { useThemeStore, THEMES } from '@/stores/theme'
 import type { ThemeId } from '@/stores/theme'
 import styles from './TitleBar.module.css'
@@ -15,6 +16,10 @@ export const TitleBar = memo(function TitleBar() {
   const setBottomDockOpen = useWorkspaceStore((s) => s.setBottomDockOpen)
   const chatPanelOpen = useWorkspaceStore((s) => s.chatPanelOpen)
   const setChatPanelOpen = useWorkspaceStore((s) => s.setChatPanelOpen)
+  const openTab = useWorkspaceStore((s) => s.openTab)
+  const activePaneId = useWorkspaceStore((s) => s.activePaneId)
+  const activeProjectId = useProjectsStore((s) => s.activeProjectId)
+  const activeProject = useProjectsStore((s) => activeProjectId ? s.projects.get(activeProjectId) : undefined)
   const themeId = useThemeStore((s) => s.themeId)
   const setTheme = useThemeStore((s) => s.setTheme)
 
@@ -37,6 +42,22 @@ export const TitleBar = memo(function TitleBar() {
     setThemeMenuOpen(false)
   }
 
+  const onOpenFiles = useCallback(() => {
+    if (!activeProjectId || !activeProject) return
+    openTab(activePaneId, 'editor', `${activeProject.name} — Files`, activeProjectId, {})
+  }, [activeProjectId, activeProject, activePaneId, openTab])
+
+  const onOpenBrowser = useCallback(() => {
+    if (!activeProjectId || !activeProject) return
+    openTab(activePaneId, 'browser', 'New Tab', activeProjectId, { url: 'https://localhost:3000' })
+  }, [activeProjectId, activeProject, activePaneId, openTab])
+
+  const onOpenTerminal = useCallback(() => {
+    if (!activeProjectId) return
+    const state = useWorkspaceStore.getState()
+    state.setBottomDockOpen(true)
+  }, [activeProjectId])
+
   return (
     <div className={styles.titleBar} data-tauri-drag-region>
       <div className={styles.left}>
@@ -57,6 +78,21 @@ export const TitleBar = memo(function TitleBar() {
           aria-label="Toggle sidebar"
         >
           <PanelLeft size={14} />
+        </button>
+
+        <div className={styles.navDivider} />
+
+        <button className={styles.navBtn} onClick={onOpenFiles} title="Files">
+          <FolderTree size={13} />
+          <span>Files</span>
+        </button>
+        <button className={styles.navBtn} onClick={onOpenBrowser} title="Browser">
+          <Globe size={13} />
+          <span>Browser</span>
+        </button>
+        <button className={styles.navBtn} onClick={onOpenTerminal} title="Terminal">
+          <Terminal size={13} />
+          <span>Terminal</span>
         </button>
       </div>
 

@@ -74,6 +74,33 @@
   -webkit-app-region: no-drag;
 }
 
+/* ── Nav buttons (Files, Browser, Terminal) ── */
+.navDivider {
+  width: 1px;
+  height: 16px;
+  background: var(--border-variant);
+  flex-shrink: 0;
+}
+
+.navBtn {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: 24px;
+  padding: 0 var(--sp-3);
+  border-radius: var(--radius-tab);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  -webkit-app-region: no-drag;
+}
+
+.navBtn:hover {
+  background: var(--sidebar-row-hover);
+  color: var(--text-primary);
+}
+
 /* ── Toolbar buttons ── */
 .toolBtn {
   display: flex;

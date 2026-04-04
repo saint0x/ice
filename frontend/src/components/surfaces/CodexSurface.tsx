@@ -1,5 +1,7 @@
-import { memo } from 'react'
-import { MessageSquare, Loader2, Send, Bot, User } from 'lucide-react'
+import { memo, useState } from 'react'
+import {
+  MessageSquare, Loader2, Bot, FileCode, TerminalSquare, ArrowRight
+} from 'lucide-react'
 import type { Tab } from '@/types'
 import { useCodexStore } from '@/stores/codex'
 import styles from './CodexSurface.module.css'
@@ -11,6 +13,7 @@ interface Props {
 export const CodexSurface = memo(function CodexSurface({ tab }: Props) {
   const threadId = tab.meta?.threadId as string | undefined
   const thread = useCodexStore((s) => threadId ? s.threads.get(threadId) : undefined)
+  const [input, setInput] = useState('')
 
   return (
     <div className={styles.surface}>
@@ -23,43 +26,97 @@ export const CodexSurface = memo(function CodexSurface({ tab }: Props) {
           </span>
         )}
       </div>
+
       <div className={styles.messages}>
-        <div className={styles.message}>
-          <div className={styles.messageHeader}>
-            <User size={12} />
-            <span className={styles.role}>You</span>
-          </div>
-          <div className={styles.messageBody}>
+        {/* User — right */}
+        <div className={styles.userRow}>
+          <div className={styles.userBubble}>
             Can you implement the pane grid layout system? I need split views with drag handles that feel native.
           </div>
         </div>
-        <div className={`${styles.message} ${styles.assistant}`}>
-          <div className={styles.messageHeader}>
-            <Bot size={12} />
-            <span className={styles.role}>Codex</span>
+
+        {/* Agent — left */}
+        <div className={styles.agentRow}>
+          <div className={styles.agentAvatar}>
+            <Bot size={14} />
           </div>
-          <div className={styles.messageBody}>
-            I'll create a recursive split layout system with smooth drag resizing. The implementation will use a tree structure where each node is either a leaf pane or a split container.
-          </div>
-          <div className={styles.toolEvent}>
-            <span className={styles.toolLabel}>Created file</span>
-            <code className={styles.toolValue}>src/components/panes/PaneGrid.tsx</code>
-          </div>
-          <div className={styles.toolEvent}>
-            <span className={styles.toolLabel}>Created file</span>
-            <code className={styles.toolValue}>src/components/panes/Pane.tsx</code>
+          <div className={styles.agentContent}>
+            <div className={styles.agentBubble}>
+              I'll create a recursive split layout system with smooth drag resizing. The implementation will use a tree structure where each node is either a leaf pane or a split container.
+            </div>
+            <div className={styles.artifacts}>
+              <div className={styles.artifact}>
+                <FileCode size={12} />
+                <span>PaneGrid.tsx</span>
+                <span className={styles.artifactAction}>Created</span>
+              </div>
+              <div className={styles.artifact}>
+                <FileCode size={12} />
+                <span>Pane.tsx</span>
+                <span className={styles.artifactAction}>Created</span>
+              </div>
+            </div>
           </div>
         </div>
+
+        {/* User */}
+        <div className={styles.userRow}>
+          <div className={styles.userBubble}>
+            Now add resize handles and keyboard shortcuts.
+          </div>
+        </div>
+
+        {/* Agent */}
+        <div className={styles.agentRow}>
+          <div className={styles.agentAvatar}>
+            <Bot size={14} />
+          </div>
+          <div className={styles.agentContent}>
+            <div className={styles.agentBubble}>
+              Done. <code>Cmd+\</code> splits horizontally, <code>Cmd+Shift+\</code> splits vertically. Drag handles respond to mouse events with <code>4px</code> hit targets.
+            </div>
+            <div className={styles.artifacts}>
+              <div className={styles.artifact}>
+                <TerminalSquare size={12} />
+                <span>useKeyboardShortcuts.ts</span>
+                <span className={styles.artifactAction}>Modified</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {thread?.status === 'running' && (
+          <div className={styles.agentRow}>
+            <div className={styles.agentAvatar}>
+              <Loader2 size={14} className={styles.spinner} />
+            </div>
+            <div className={styles.thinkingLabel}>Thinking...</div>
+          </div>
+        )}
       </div>
+
       <div className={styles.inputArea}>
-        <input
-          className={styles.input}
-          placeholder="Send a message..."
-          spellCheck={false}
-        />
-        <button className={styles.sendBtn} aria-label="Send">
-          <Send size={13} />
-        </button>
+        <div className={styles.inputWrapper}>
+          <input
+            className={styles.input}
+            placeholder="Send a message..."
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            spellCheck={false}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey && input.trim()) {
+                e.preventDefault()
+                setInput('')
+              }
+            }}
+          />
+          <button
+            className={`${styles.sendBtn} ${input.trim() ? styles.sendBtnReady : ''}`}
+            aria-label="Send"
+          >
+            <ArrowRight size={14} />
+          </button>
+        </div>
       </div>
     </div>
   )

@@ -75,81 +75,113 @@
   color: var(--text-primary);
 }
 
-/* ── Messages ── */
+/* ══════════════════════════════════════════
+   MESSAGES — Vercel-style chat layout
+   ══════════════════════════════════════════ */
 .messages {
   flex: 1;
   overflow-y: auto;
-  padding: var(--sp-4);
+  padding: var(--sp-5);
   display: flex;
   flex-direction: column;
   gap: var(--sp-5);
 }
 
-.message {
+/* User messages — right aligned */
+.userRow {
   display: flex;
+  justify-content: flex-end;
+}
+
+.userBubble {
+  max-width: 85%;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--bg-element-selected);
+  border-radius: var(--radius-panel) var(--radius-panel) var(--sp-2) var(--radius-panel);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+/* Agent messages — left aligned with avatar */
+.agentRow {
+  display: flex;
+  align-items: flex-start;
   gap: var(--sp-3);
 }
 
-.avatar {
-  width: 22px;
-  height: 22px;
+.agentAvatar {
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   background: var(--bg-element);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  color: var(--text-muted);
-}
-
-.assistantAvatar {
-  background: var(--bg-element-selected);
   color: var(--color-info);
 }
 
-.messageContent {
+.agentContent {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
 }
 
-.role {
-  font-size: var(--text-xs);
-  font-weight: var(--weight-semibold);
-  color: var(--text-muted);
-  margin-bottom: var(--sp-1);
-}
-
-.body {
+.agentBubble {
   font-size: var(--text-sm);
   color: var(--text-primary);
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
-.toolCall {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  margin-top: var(--sp-2);
-  font-size: var(--text-xs);
-}
-
-.toolCall code {
+.agentBubble code {
   font-family: var(--font-mono);
-  color: var(--color-info);
   font-size: 11px;
+  background: var(--bg-element);
+  padding: 1px 4px;
+  border-radius: 4px;
+  color: var(--text-accent);
 }
 
-.toolLabel {
-  color: var(--text-muted);
+/* Artifacts (file changes) */
+.artifacts {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border-radius: var(--radius-tab);
+  overflow: hidden;
+  margin-top: var(--sp-1);
 }
 
-.thinking {
+.artifact {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--bg-elevated);
   font-size: var(--text-xs);
   color: var(--text-muted);
-  padding: var(--sp-2) 0;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.artifact:hover {
+  background: var(--bg-element-hover);
+}
+
+.artifactAction {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--color-success);
+  font-weight: var(--weight-medium);
+}
+
+.thinkingLabel {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  padding-top: 5px;
 }
 
 .spinner {
@@ -161,12 +193,19 @@
   to { transform: rotate(360deg); }
 }
 
-/* ── Thread list ── */
+/* ══════════════════════════════════════════
+   THREAD LIST
+   ══════════════════════════════════════════ */
 .threadList {
   flex: 1;
   display: flex;
   flex-direction: column;
+}
+
+.threadListInner {
+  flex: 1;
   overflow-y: auto;
+  padding: var(--sp-2);
 }
 
 .threadRow {
@@ -179,7 +218,7 @@
   color: var(--text-muted);
   text-align: left;
   border-radius: var(--radius-tab);
-  margin: 0 var(--sp-2);
+  width: 100%;
   transition: background var(--transition-fast);
 }
 
@@ -202,11 +241,12 @@
   align-items: center;
   justify-content: center;
   gap: var(--sp-3);
+  padding: var(--sp-9) 0;
 }
 
 .emptyIcon {
   color: var(--text-disabled);
-  opacity: 0.5;
+  opacity: 0.4;
 }
 
 .emptyTitle {
@@ -219,29 +259,36 @@
   color: var(--text-disabled);
 }
 
-/* ── Input ── */
+/* ══════════════════════════════════════════
+   INPUT AREA
+   ══════════════════════════════════════════ */
 .inputArea {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
   padding: var(--sp-4);
   border-top: 1px solid var(--border-variant);
   flex-shrink: 0;
 }
 
-.input {
-  flex: 1;
-  height: 32px;
+.inputWrapper {
+  display: flex;
+  align-items: center;
   background: var(--bg-elevated);
   border: 1px solid var(--border-variant);
   border-radius: var(--radius-input);
+  overflow: hidden;
+  transition: border-color var(--transition-fast);
+}
+
+.inputWrapper:focus-within {
+  border-color: var(--border-focused);
+}
+
+.input {
+  flex: 1;
+  height: 36px;
   padding: 0 var(--sp-4);
   font-size: var(--text-sm);
   color: var(--text-primary);
-}
-
-.input:focus {
-  border-color: var(--border-focused);
+  background: transparent;
 }
 
 .sendBtn {
@@ -250,12 +297,17 @@
   justify-content: center;
   width: 32px;
   height: 32px;
-  border-radius: var(--radius-button);
-  background: var(--bg-element);
-  color: var(--text-primary);
-  transition: background var(--transition-fast);
+  margin-right: 2px;
+  border-radius: var(--radius-tab);
+  color: var(--text-disabled);
+  transition: background var(--transition-fast), color var(--transition-fast);
 }
 
-.sendBtn:hover {
+.sendBtnReady {
+  color: var(--text-primary);
+  background: var(--bg-element);
+}
+
+.sendBtnReady:hover {
   background: var(--bg-element-hover);
 }
