@@ -14,7 +14,6 @@ Rules for this checklist:
 ### Filesystem / IDE
 
 - [ ] Add nested tree snapshot support so the frontend does not have to reconstruct deep directory structure from flat rows.
-- [ ] Add search primitives for filename and content search scoped by `projectId`.
 - [ ] Add save conflict handling for files changed externally after open.
 - [ ] Add richer editor read metadata for non-UTF-8 text encodings beyond the current UTF-8-safe read contract.
 
@@ -101,6 +100,7 @@ Rules for this checklist:
 - ✅ File watch support exists and emits `app://fs` events for live project updates.
 - ✅ Tree reads now support ignore-aware traversal controls for `.gitignore`, hidden files, and entry-count suppression.
 - ✅ File reads now expose binary-safe metadata through [service.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/fs/service.rs), and text reads reject binary payloads instead of pretending they are editable text.
+- ✅ Project-scoped filename and content search primitives now exist in [service.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/fs/service.rs), with ignore-aware path search and `rg`-backed content search.
 
 ### Git
 

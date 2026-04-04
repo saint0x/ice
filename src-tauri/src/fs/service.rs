@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
+use tokio::process::Command;
 
 use crate::app::events::FS_EVENT;
 use crate::git::service::GitService;
@@ -50,6 +51,37 @@ pub struct FileReadResult {
     pub is_binary: bool,
     pub size_bytes: u64,
     pub encoding: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileSearchResult {
+    pub query: String,
+    pub paths: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContentSearchMatch {
+    pub path: String,
+    pub line_number: usize,
+    pub line: String,
+    pub submatches: Vec<ContentSearchSubmatch>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContentSearchSubmatch {
+    pub start: usize,
+    pub end: usize,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContentSearchResult {
+    pub query: String,
+    pub matches: Vec<ContentSearchMatch>,
 }
 
 struct ProjectWatcher {
@@ -137,6 +169,50 @@ impl FsService {
         result
             .content
             .ok_or_else(|| anyhow!("text file content was unexpectedly empty"))
+    }
+
+    pub async fn search_paths(
+        &self,
+        project_id: &str,
+        query: &str,
+        limit: usize,
+        projects: &ProjectService,
+    ) -> Result<FileSearchResult> {
+        let root = projects.resolve_project_path(project_id).await?;
+        let query = query.trim().to_lowercase();
+        if query.is_empty() {
+            return Ok(FileSearchResult {
+                query,
+                paths: Vec::new(),
+            });
+        }
+
+        let query_for_search = query.clone();
+        let paths = tokio::task::spawn_blocking(move || {
+            search_paths_under_root(&root, &query_for_search, limit)
+        })
+        .await??;
+        Ok(FileSearchResult { query, paths })
+    }
+
+    pub async fn search_text(
+        &self,
+        project_id: &str,
+        query: &str,
+        limit: usize,
+        projects: &ProjectService,
+    ) -> Result<ContentSearchResult> {
+        let root = projects.resolve_project_path(project_id).await?;
+        let query = query.trim().to_string();
+        if query.is_empty() {
+            return Ok(ContentSearchResult {
+                query,
+                matches: Vec::new(),
+            });
+        }
+
+        let matches = search_text_with_rg(&root, &query, limit).await?;
+        Ok(ContentSearchResult { query, matches })
     }
 
     pub async fn write_text_file(
@@ -403,6 +479,124 @@ fn should_refresh_git(kind: &EventKind, paths: &[String]) -> bool {
     paths.iter().any(|path| path != ".git")
 }
 
+fn search_paths_under_root(root: &Path, query: &str, limit: usize) -> Result<Vec<String>> {
+    let mut paths = Vec::new();
+    let mut builder = WalkBuilder::new(root);
+    builder
+        .add_custom_ignore_filename(".gitignore")
+        .hidden(true)
+        .git_ignore(true)
+        .git_global(true)
+        .git_exclude(true)
+        .parents(true)
+        .follow_links(false);
+
+    for entry in builder.build() {
+        let entry = entry?;
+        let path = entry.path();
+        if path == root {
+            continue;
+        }
+        let rel_path = path
+            .strip_prefix(root)
+            .unwrap_or(path)
+            .to_string_lossy()
+            .to_string();
+        if entry
+            .file_name()
+            .to_string_lossy()
+            .to_lowercase()
+            .contains(query)
+            || rel_path.to_lowercase().contains(query)
+        {
+            paths.push(rel_path);
+            if paths.len() >= limit {
+                break;
+            }
+        }
+    }
+
+    Ok(paths)
+}
+
+async fn search_text_with_rg(
+    root: &Path,
+    query: &str,
+    limit: usize,
+) -> Result<Vec<ContentSearchMatch>> {
+    let output = Command::new("rg")
+        .arg("--json")
+        .arg("--hidden")
+        .arg("--glob")
+        .arg("!.git")
+        .arg("--smart-case")
+        .arg("--max-count")
+        .arg(limit.to_string())
+        .arg(query)
+        .arg(root)
+        .output()
+        .await
+        .context("failed to execute rg for project content search")?;
+
+    if !output.status.success() && output.status.code() != Some(1) {
+        return Err(anyhow!(
+            "{}",
+            String::from_utf8_lossy(&output.stderr).trim().to_string()
+        ));
+    }
+
+    let mut matches = Vec::new();
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        let Some(record) = parse_rg_match_record(line, root) else {
+            continue;
+        };
+        matches.push(record);
+        if matches.len() >= limit {
+            break;
+        }
+    }
+    Ok(matches)
+}
+
+fn parse_rg_match_record(line: &str, root: &Path) -> Option<ContentSearchMatch> {
+    let value: serde_json::Value = serde_json::from_str(line).ok()?;
+    if value.get("type")?.as_str()? != "match" {
+        return None;
+    }
+    let data = value.get("data")?;
+    let path_text = data.get("path")?.get("text")?.as_str()?;
+    let rel_path = Path::new(path_text)
+        .strip_prefix(root)
+        .ok()
+        .map(|path| path.to_string_lossy().to_string())
+        .unwrap_or_else(|| path_text.to_string());
+    let line_number = data.get("line_number")?.as_u64()? as usize;
+    let line_text = data
+        .get("lines")?
+        .get("text")?
+        .as_str()?
+        .trim_end()
+        .to_string();
+    let submatches = data
+        .get("submatches")?
+        .as_array()?
+        .iter()
+        .filter_map(|submatch| {
+            Some(ContentSearchSubmatch {
+                start: submatch.get("start")?.as_u64()? as usize,
+                end: submatch.get("end")?.as_u64()? as usize,
+                text: submatch.get("match")?.get("text")?.as_str()?.to_string(),
+            })
+        })
+        .collect::<Vec<_>>();
+    Some(ContentSearchMatch {
+        path: rel_path,
+        line_number,
+        line: line_text,
+        submatches,
+    })
+}
+
 fn is_binary_bytes(bytes: &[u8]) -> bool {
     let sample = &bytes[..bytes.len().min(MAX_BINARY_SNIFF_BYTES)];
     sample.iter().any(|byte| *byte == 0)
@@ -410,9 +604,12 @@ fn is_binary_bytes(bytes: &[u8]) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_binary_bytes, walk_tree, TreeReadOptions};
+    use super::{
+        is_binary_bytes, parse_rg_match_record, search_paths_under_root, walk_tree, TreeReadOptions,
+    };
     use std::collections::HashMap;
     use std::fs;
+    use std::path::Path;
     use tempfile::tempdir;
 
     #[test]
@@ -439,5 +636,28 @@ mod tests {
         assert!(paths.contains(&"visible.txt".to_string()));
         assert!(!paths.contains(&"ignored.txt".to_string()));
         assert!(!paths.contains(&".hidden.txt".to_string()));
+    }
+
+    #[test]
+    fn path_search_respects_gitignore() {
+        let temp = tempdir().expect("temp dir");
+        let root = temp.path();
+        fs::write(root.join(".gitignore"), "ignored.txt\n").expect("write gitignore");
+        fs::write(root.join("src-main.ts"), "visible").expect("write visible");
+        fs::write(root.join("ignored.txt"), "ignored").expect("write ignored");
+
+        let paths = search_paths_under_root(root, "src", 20).expect("search paths");
+        assert_eq!(paths, vec!["src-main.ts".to_string()]);
+    }
+
+    #[test]
+    fn parses_rg_json_matches() {
+        let root = Path::new("/tmp/project");
+        let line = r#"{"type":"match","data":{"path":{"text":"/tmp/project/src/main.rs"},"lines":{"text":"fn main() {}\n"},"line_number":7,"absolute_offset":10,"submatches":[{"match":{"text":"main"},"start":3,"end":7}]}}"#;
+        let record = parse_rg_match_record(line, root).expect("parsed match");
+        assert_eq!(record.path, "src/main.rs");
+        assert_eq!(record.line_number, 7);
+        assert_eq!(record.submatches.len(), 1);
+        assert_eq!(record.submatches[0].text, "main");
     }
 }

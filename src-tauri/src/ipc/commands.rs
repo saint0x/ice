@@ -165,6 +165,38 @@ pub async fn file_read(
 }
 
 #[tauri::command]
+pub async fn file_search_paths(
+    input: SearchInput,
+    state: State<'_, AppState>,
+) -> Result<crate::fs::service::FileSearchResult, AppError> {
+    Ok(state
+        .fs
+        .search_paths(
+            &input.project_id,
+            &input.query,
+            input.limit.unwrap_or(50),
+            &state.projects,
+        )
+        .await?)
+}
+
+#[tauri::command]
+pub async fn file_search_text(
+    input: SearchInput,
+    state: State<'_, AppState>,
+) -> Result<crate::fs::service::ContentSearchResult, AppError> {
+    Ok(state
+        .fs
+        .search_text(
+            &input.project_id,
+            &input.query,
+            input.limit.unwrap_or(50),
+            &state.projects,
+        )
+        .await?)
+}
+
+#[tauri::command]
 pub async fn file_write_text(
     input: WriteFileInput,
     state: State<'_, AppState>,

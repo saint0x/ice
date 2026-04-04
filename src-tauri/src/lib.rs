@@ -39,6 +39,8 @@ pub fn run() {
             commands::project_watch_stop,
             commands::file_read,
             commands::file_read_text,
+            commands::file_search_paths,
+            commands::file_search_text,
             commands::file_write_text,
             commands::dir_create,
             commands::entry_delete,

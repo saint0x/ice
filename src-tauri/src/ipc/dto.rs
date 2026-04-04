@@ -78,6 +78,14 @@ pub struct ReadFileInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SearchInput {
+    pub project_id: String,
+    pub query: String,
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WriteFileInput {
     pub project_id: String,
     pub path: String,
