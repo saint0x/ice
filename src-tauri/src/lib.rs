@@ -27,6 +27,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::app_health,
             commands::app_config_get,
+            commands::app_config_set,
             commands::project_add,
             commands::project_remove,
             commands::project_list,

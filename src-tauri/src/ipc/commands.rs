@@ -22,6 +22,15 @@ pub async fn app_config_get(
 }
 
 #[tauri::command]
+pub async fn app_config_set(
+    input: AppConfigSetInput,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    state.persistence.config_set(input.key, input.value).await?;
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn project_add(
     input: AddProjectInput,
     state: State<'_, AppState>,

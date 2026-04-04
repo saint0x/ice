@@ -10,6 +10,13 @@ pub struct HealthDto {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AppConfigSetInput {
+    pub key: String,
+    pub value: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AddProjectInput {
     pub root_path: String,
     pub trusted: Option<bool>,

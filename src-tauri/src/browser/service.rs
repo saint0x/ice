@@ -239,10 +239,10 @@ impl BrowserService {
             .write()
             .retain(|_, tab| tab.record.project_id != project_id);
         self.persistence
-            .delete_browser_tabs_for_project(project_id.to_string())
+            .delete_browser_history_for_project(project_id.to_string())
             .await?;
         self.persistence
-            .delete_browser_history_for_project(project_id.to_string())
+            .delete_browser_tabs_for_project(project_id.to_string())
             .await
     }
 
