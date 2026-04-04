@@ -1,9 +1,11 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, RotateCw, Lock, Globe, ExternalLink } from 'lucide-react'
+import { ArrowLeft, ArrowRight, RotateCw, Lock, Globe, ExternalLink, Search, X, AlertTriangle } from 'lucide-react'
 import type { Tab } from '@/types'
 import {
   browserRendererAttach,
   browserRendererDetach,
+  browserFindInPage,
+  browserFindInPageReport,
   browserTabBack,
   browserTabForward,
   browserTabNavigate,
@@ -24,6 +26,9 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
   const browserTab = useBrowserStore((s) => browserTabId ? s.tabs.get(browserTabId) : undefined)
   const upsertBrowserTab = useBrowserStore((s) => s.upsertTab)
   const [draftUrl, setDraftUrl] = useState<string | null>(null)
+  const [findQuery, setFindQuery] = useState('')
+  const [findResult, setFindResult] = useState<string | null>(null)
+  const [surfaceError, setSurfaceError] = useState<string | null>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
   const rendererId = useMemo(() => (
@@ -39,6 +44,62 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
       void browserRendererDetach(browserTabId)
     }
   }, [browserTabId, rendererId, tab.id])
+
+  const runFindInPage = async (mode: 'first' | 'next') => {
+    if (!browserTabId) return
+    const query = findQuery.trim()
+    if (!query) {
+      setFindResult(null)
+      return
+    }
+    setSurfaceError(null)
+    await browserFindInPage({
+      tabId: browserTabId,
+      query,
+      forward: true,
+      findNext: mode === 'next',
+    })
+    try {
+      const targetWindow = iframeRef.current?.contentWindow
+      const targetDocument = iframeRef.current?.contentDocument
+      if (!targetWindow || !targetDocument) {
+        throw new Error('Browser renderer is unavailable')
+      }
+      const haystack = targetDocument.body?.innerText ?? ''
+      const matches = countMatches(haystack, query)
+      const targetWindowWithFind = targetWindow as Window & {
+        find?: (
+          searchString: string,
+          caseSensitive?: boolean,
+          backwards?: boolean,
+          wrapAround?: boolean,
+          wholeWord?: boolean,
+          searchInFrames?: boolean,
+          showDialog?: boolean,
+        ) => boolean
+      }
+      const found = typeof targetWindowWithFind.find === 'function'
+        ? targetWindowWithFind.find(query, false, false, mode === 'next', false, false, false)
+        : matches > 0
+      const result = await browserFindInPageReport({
+        tabId: browserTabId,
+        query,
+        matches,
+        activeMatchOrdinal: found ? 1 : 0,
+        finalUpdate: true,
+      })
+      setFindResult(result.matches > 0 ? `${result.activeMatchOrdinal}/${result.matches} matches` : 'No matches')
+    } catch {
+      await browserFindInPageReport({
+        tabId: browserTabId,
+        query,
+        matches: 0,
+        activeMatchOrdinal: 0,
+        finalUpdate: true,
+      }).catch(() => {})
+      setFindResult('Find unavailable for this page')
+    }
+  }
 
   return (
     <div className={styles.surface}>
@@ -82,6 +143,12 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
             onClick={() => {
               if (!browserTabId) return
               void browserTabOpenExternal(browserTabId)
+                .then((request) => {
+                  window.open(request.url, '_blank', 'noopener,noreferrer')
+                })
+                .catch((error: unknown) => {
+                  setSurfaceError(error instanceof Error ? error.message : 'Failed to open external browser')
+                })
             }}
           >
             <ExternalLink size={13} />
@@ -107,8 +174,43 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
             }}
           />
         </div>
+        <div className={styles.findBar}>
+          <Search size={11} className={styles.findIcon} />
+          <input
+            className={styles.findInput}
+            value={findQuery}
+            onChange={(event) => setFindQuery(event.target.value)}
+            placeholder="Find in page"
+            spellCheck={false}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                void runFindInPage(event.shiftKey ? 'next' : 'first')
+              }
+            }}
+          />
+          {findResult && <span className={styles.findResult}>{findResult}</span>}
+          {findQuery && (
+            <button
+              className={styles.findClear}
+              onClick={() => {
+                setFindQuery('')
+                setFindResult(null)
+              }}
+              aria-label="Clear find"
+            >
+              <X size={11} />
+            </button>
+          )}
+        </div>
       </div>
       <div className={styles.viewport}>
+        {surfaceError && (
+          <div className={styles.errorBanner}>
+            <AlertTriangle size={12} />
+            <span>{surfaceError}</span>
+          </div>
+        )}
         <iframe
           ref={iframeRef}
           key={browserTabId ?? tab.id}
@@ -152,4 +254,11 @@ function safeBrowserOrigin(url: string): string | null {
   } catch {
     return null
   }
+}
+
+function countMatches(haystack: string, needle: string) {
+  if (!needle) return 0
+  const pattern = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const matches = haystack.match(new RegExp(pattern, 'gi'))
+  return matches?.length ?? 0
 }

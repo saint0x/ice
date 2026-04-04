@@ -8,11 +8,12 @@
 .toolbar {
   display: flex;
   align-items: center;
-  height: var(--toolbar-height);
+  min-height: var(--toolbar-height);
   padding: 0 var(--sp-3);
   gap: var(--sp-3);
   border-bottom: 1px solid var(--border-variant);
   flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .navButtons {
@@ -39,13 +40,57 @@
 .addressBar {
   display: flex;
   align-items: center;
-  flex: 1;
+  flex: 1 1 280px;
   height: 26px;
   background: var(--bg-panel);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-input);
   padding: 0 var(--sp-3);
   gap: var(--sp-2);
+}
+
+.findBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 220px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: var(--radius-input);
+  border: 1px solid var(--border-color);
+  background: var(--bg-panel);
+}
+
+.findIcon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.findInput {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+}
+
+.findResult {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.findClear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  color: var(--text-muted);
+}
+
+.findClear:hover {
+  background: var(--bg-element-selected);
 }
 
 .lockIcon {
@@ -63,6 +108,23 @@
   position: relative;
   flex: 1;
   overflow: hidden;
+}
+
+.errorBanner {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-error) 10%, var(--bg-panel));
+  border: 1px solid color-mix(in srgb, var(--color-error) 25%, transparent);
+  color: var(--text-primary);
+  font-size: var(--text-xs);
 }
 
 .frame {

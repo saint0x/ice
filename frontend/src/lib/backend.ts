@@ -223,6 +223,20 @@ interface BrowserEventPayload {
   tabId?: string
 }
 
+interface BrowserExternalOpenRequestDto {
+  tabId: string
+  projectId: string
+  url: string
+}
+
+interface BrowserFindInPageResultDto {
+  tabId: string
+  query: string
+  matches: number
+  activeMatchOrdinal: number
+  finalUpdate: boolean
+}
+
 export async function appBootstrap() {
   return invoke<AppBootstrapDto>('app_bootstrap')
 }
@@ -450,7 +464,26 @@ export async function browserTabRendererStateSet(input: {
 }
 
 export async function browserTabOpenExternal(tabId: string) {
-  return invoke('browser_tab_open_external', { tabId })
+  return invoke<BrowserExternalOpenRequestDto>('browser_tab_open_external', { tabId })
+}
+
+export async function browserFindInPage(input: {
+  tabId: string
+  query: string
+  forward?: boolean
+  findNext?: boolean
+}) {
+  return invoke<void>('browser_find_in_page', { input })
+}
+
+export async function browserFindInPageReport(input: {
+  tabId: string
+  query: string
+  matches: number
+  activeMatchOrdinal: number
+  finalUpdate?: boolean
+}) {
+  return invoke<BrowserFindInPageResultDto>('browser_find_in_page_report', { input })
 }
 
 export function listenGitEvents(handler: (payload: GitEventPayload) => void): Promise<UnlistenFn> {
