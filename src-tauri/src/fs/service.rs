@@ -1,4 +1,6 @@
 use anyhow::{anyhow, Context, Result};
+use chardetng::EncodingDetector;
+use encoding_rs::{Encoding, UTF_8};
 use ignore::WalkBuilder;
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use parking_lot::Mutex;
@@ -51,6 +53,7 @@ pub struct FileReadResult {
     pub is_binary: bool,
     pub size_bytes: u64,
     pub encoding: Option<String>,
+    pub has_bom: bool,
     pub modified_at_ms: Option<u128>,
     pub version_token: Option<String>,
 }
@@ -94,6 +97,12 @@ struct ProjectWatcher {
 struct FileVersion {
     modified_at_ms: Option<u128>,
     token: String,
+}
+
+struct DecodedText {
+    content: String,
+    encoding: &'static Encoding,
+    has_bom: bool,
 }
 
 impl FsService {
@@ -149,19 +158,20 @@ impl FsService {
                 is_binary: true,
                 size_bytes,
                 encoding: None,
+                has_bom: false,
                 modified_at_ms: version.as_ref().and_then(|version| version.modified_at_ms),
                 version_token: version.as_ref().map(|version| version.token.clone()),
             });
         }
 
-        let content = String::from_utf8(bytes)
-            .map_err(|_| anyhow!("file is not valid UTF-8 text and cannot be edited safely"))?;
+        let decoded = decode_text_bytes(&bytes)?;
         Ok(FileReadResult {
             path: path.to_string(),
-            content: Some(content),
+            content: Some(decoded.content),
             is_binary: false,
             size_bytes,
-            encoding: Some("utf-8".to_string()),
+            encoding: Some(decoded.encoding.name().to_ascii_lowercase()),
+            has_bom: decoded.has_bom,
             modified_at_ms: version.as_ref().and_then(|version| version.modified_at_ms),
             version_token: version.as_ref().map(|version| version.token.clone()),
         })
@@ -234,6 +244,8 @@ impl FsService {
         path: &str,
         content: &str,
         expected_version_token: Option<&str>,
+        encoding_name: Option<&str>,
+        has_bom: bool,
         projects: &ProjectService,
     ) -> Result<()> {
         let root = projects.resolve_project_path(project_id).await?;
@@ -257,7 +269,8 @@ impl FsService {
         if let Some(parent) = full_path.parent() {
             tokio::fs::create_dir_all(parent).await?;
         }
-        tokio::fs::write(&full_path, content).await?;
+        let encoded = encode_text_content(content, encoding_name, has_bom)?;
+        tokio::fs::write(&full_path, encoded).await?;
         self.app.emit(
             FS_EVENT,
             serde_json::json!({ "type": "fileWritten", "projectId": project_id, "path": path }),
@@ -509,6 +522,81 @@ fn should_refresh_git(kind: &EventKind, paths: &[String]) -> bool {
     paths.iter().any(|path| path != ".git")
 }
 
+fn decode_text_bytes(bytes: &[u8]) -> Result<DecodedText> {
+    let (bom_encoding, bom_length) = detect_bom(bytes);
+    let candidate_bytes = &bytes[bom_length..];
+    let encoding = bom_encoding.unwrap_or_else(|| {
+        if std::str::from_utf8(candidate_bytes).is_ok() {
+            UTF_8
+        } else {
+            let mut detector = EncodingDetector::new();
+            detector.feed(candidate_bytes, true);
+            detector.guess(None, true)
+        }
+    });
+    let (content, _, had_errors) = encoding.decode(candidate_bytes);
+    if had_errors {
+        return Err(anyhow!(
+            "file could not be decoded safely with detected text encoding {}",
+            encoding.name()
+        ));
+    }
+    Ok(DecodedText {
+        content: content.into_owned(),
+        encoding,
+        has_bom: bom_length > 0,
+    })
+}
+
+fn encode_text_content(
+    content: &str,
+    encoding_name: Option<&str>,
+    has_bom: bool,
+) -> Result<Vec<u8>> {
+    let encoding = match encoding_name.and_then(|name| Encoding::for_label(name.as_bytes())) {
+        Some(encoding) => encoding,
+        None => UTF_8,
+    };
+    let (encoded, _, had_errors) = encoding.encode(content);
+    if had_errors {
+        return Err(anyhow!(
+            "content could not be encoded safely as {}",
+            encoding.name()
+        ));
+    }
+    let mut bytes = Vec::new();
+    if has_bom {
+        bytes.extend_from_slice(
+            bom_bytes_for_encoding(encoding)
+                .ok_or_else(|| anyhow!("BOM is not supported for encoding {}", encoding.name()))?,
+        );
+    }
+    bytes.extend_from_slice(encoded.as_ref());
+    Ok(bytes)
+}
+
+fn detect_bom(bytes: &[u8]) -> (Option<&'static Encoding>, usize) {
+    if bytes.starts_with(&[0xEF, 0xBB, 0xBF]) {
+        return (Some(UTF_8), 3);
+    }
+    if bytes.starts_with(&[0xFF, 0xFE]) {
+        return (Encoding::for_label(b"utf-16le"), 2);
+    }
+    if bytes.starts_with(&[0xFE, 0xFF]) {
+        return (Encoding::for_label(b"utf-16be"), 2);
+    }
+    (None, 0)
+}
+
+fn bom_bytes_for_encoding(encoding: &'static Encoding) -> Option<&'static [u8]> {
+    match encoding.name() {
+        "UTF-8" => Some(&[0xEF, 0xBB, 0xBF]),
+        "UTF-16LE" => Some(&[0xFF, 0xFE]),
+        "UTF-16BE" => Some(&[0xFE, 0xFF]),
+        _ => None,
+    }
+}
+
 fn file_version(metadata: &std::fs::Metadata) -> Option<FileVersion> {
     let modified = metadata.modified().ok();
     let modified_at_ms = modified.as_ref().map(system_time_to_millis);
@@ -655,8 +743,8 @@ fn is_binary_bytes(bytes: &[u8]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        file_version, is_binary_bytes, parse_rg_match_record, search_paths_under_root, walk_tree,
-        TreeReadOptions,
+        decode_text_bytes, encode_text_content, file_version, is_binary_bytes,
+        parse_rg_match_record, search_paths_under_root, walk_tree, TreeReadOptions,
     };
     use std::collections::HashMap;
     use std::fs;
@@ -726,5 +814,20 @@ mod tests {
         let second =
             file_version(&fs::metadata(&file_path).expect("meta two")).expect("second version");
         assert_ne!(first.token, second.token);
+    }
+
+    #[test]
+    fn decodes_utf8_bom_text() {
+        let decoded = decode_text_bytes(&[0xEF, 0xBB, 0xBF, b'h', b'i']).expect("decode utf8 bom");
+        assert_eq!(decoded.content, "hi");
+        assert!(decoded.has_bom);
+        assert_eq!(decoded.encoding.name(), "UTF-8");
+    }
+
+    #[test]
+    fn encodes_utf16le_with_bom() {
+        let encoded = encode_text_content("hi", Some("utf-16le"), true).expect("encode utf16le");
+        assert_eq!(&encoded[..2], &[0xFF, 0xFE]);
+        assert!(encoded.len() > 2);
     }
 }

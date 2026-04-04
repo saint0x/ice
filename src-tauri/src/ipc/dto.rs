@@ -91,6 +91,8 @@ pub struct WriteFileInput {
     pub path: String,
     pub content: String,
     pub expected_version_token: Option<String>,
+    pub encoding: Option<String>,
+    pub has_bom: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]

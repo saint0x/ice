@@ -100,6 +100,7 @@ Rules for this checklist:
 - ✅ The backend tree API now supports hidden-file and `.gitignore` controls, and the file-read API now distinguishes binary files from editable text.
 - ✅ The backend now exposes project-scoped filename and content search commands for the sidebar search entrypoint.
 - ✅ The backend file-read/write contract now supports optimistic save conflict detection through a version token.
+- ✅ The backend file-read/write contract now exposes encoding and BOM metadata so the frontend can preserve legacy text files correctly on save.
 
 ### Visual / Product Direction
 

@@ -208,6 +208,8 @@ pub async fn file_write_text(
             &input.path,
             &input.content,
             input.expected_version_token.as_deref(),
+            input.encoding.as_deref(),
+            input.has_bom.unwrap_or(false),
             &state.projects,
         )
         .await?;

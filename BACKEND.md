@@ -14,7 +14,6 @@ Rules for this checklist:
 ### Filesystem / IDE
 
 - [ ] Add nested tree snapshot support so the frontend does not have to reconstruct deep directory structure from flat rows.
-- [ ] Add richer editor read metadata for non-UTF-8 text encodings beyond the current UTF-8-safe read contract.
 
 ### Git
 
@@ -101,6 +100,7 @@ Rules for this checklist:
 - ✅ File reads now expose binary-safe metadata through [service.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/fs/service.rs), and text reads reject binary payloads instead of pretending they are editable text.
 - ✅ Project-scoped filename and content search primitives now exist in [service.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/fs/service.rs), with ignore-aware path search and `rg`-backed content search.
 - ✅ File reads now return a version token, and writes can reject stale saves to prevent clobbering files changed externally after open.
+- ✅ File reads now detect text encodings and BOM state, and file writes can preserve non-UTF-8 text encodings instead of forcing UTF-8 on save.
 
 ### Git
 
