@@ -13,23 +13,19 @@ Rules for this checklist:
 
 ### Backend Wiring
 
-- [ ] Replace all demo Zustand seed data in [projects.ts](/Users/deepsaint/Desktop/ice/frontend/src/stores/projects.ts), [files.ts](/Users/deepsaint/Desktop/ice/frontend/src/stores/files.ts), [git.ts](/Users/deepsaint/Desktop/ice/frontend/src/stores/git.ts), [terminal.ts](/Users/deepsaint/Desktop/ice/frontend/src/stores/terminal.ts), and [codex.ts](/Users/deepsaint/Desktop/ice/frontend/src/stores/codex.ts) with Tauri IPC loaders.
+- [ ] Replace the remaining demo Zustand seed data in [terminal.ts](/Users/deepsaint/Desktop/ice/frontend/src/stores/terminal.ts) and [codex.ts](/Users/deepsaint/Desktop/ice/frontend/src/stores/codex.ts) with Tauri IPC loaders.
 - [ ] Subscribe to backend events for filesystem, git, browser, terminal, and Codex updates instead of relying on local-only mutations.
-: `app://fs` now emits watch events and `app://git` now emits debounced status refreshes after filesystem mutations.
-- [ ] Replace the local workspace session seed in [workspace.ts](/Users/deepsaint/Desktop/ice/frontend/src/stores/workspace.ts) with `workspace_session_get` / `workspace_session_set`.
+- [ ] Add browser, terminal, and Codex event subscriptions on top of the now-live filesystem and git listeners.
 - [ ] Persist and hydrate workspace layout from the backend rather than purely local in-memory state.
 
 ### Filesystem / Editor
 
-- [ ] Hydrate the sidebar file tree from the backend tree API.
-- [ ] Use `project_tree_read_nested` as the default sidebar tree loader so [FileTree.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/sidebar/FileTree.tsx) can consume backend-shaped `children` hierarchies directly.
 - [ ] Open real editor tabs from `file_read` / `file_read_text` and push edits through backend writes.
 - [ ] Add dirty-state tracking, save affordances, and stale-version conflict UI using the backend file `versionToken`.
 - [ ] Wire the Search quick action in [ProjectSection.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/sidebar/ProjectSection.tsx) to `file_search_paths` and `file_search_text`.
 
 ### Git
 
-- [ ] Replace the demo git store with live git status data.
 - [ ] Add stage / unstage / commit interactions in [GitSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/GitSurface.tsx).
 - [ ] Use `git_commit_readiness` to preflight author config and message validity before enabling the final commit action.
 - [ ] Add file-level diff rendering and change selection flows.
@@ -110,6 +106,10 @@ Rules for this checklist:
 - ✅ The frontend types already model the right major concepts in [index.ts](/Users/deepsaint/Desktop/ice/frontend/src/types/index.ts): projects, tabs, pane layouts, file entries, git state, terminal sessions, Codex threads, and approvals.
 - ✅ Important state is already keyed by `projectId` across project, file, git, terminal, and Codex stores.
 - ✅ The backend now exposes a first-class workspace session payload through bootstrap and dedicated workspace session IPC commands, so the frontend no longer needs to invent pane/tab state locally.
+- ✅ The frontend now bootstraps projects, workspace chrome/session, nested file trees, and git state from the backend through [backend.ts](/Users/deepsaint/Desktop/ice/frontend/src/lib/backend.ts) and [useBackendIntegration.ts](/Users/deepsaint/Desktop/ice/frontend/src/hooks/useBackendIntegration.ts).
+- ✅ The frontend now persists workspace chrome/session changes back through `workspace_chrome_set` and `workspace_session_set`, replacing the old local-only workspace seed path in [workspace.ts](/Users/deepsaint/Desktop/ice/frontend/src/stores/workspace.ts).
+- ✅ The sidebar file tree now hydrates from `project_tree_read_nested`, so [FileTree.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/sidebar/FileTree.tsx) consumes backend-shaped `children` hierarchies directly.
+- ✅ The git store now hydrates from live backend status reads and `app://git` events instead of demo git rows.
 - ✅ Backend persistence now tracks an explicit schema version in SQLite, which gives production migrations a canonical upgrade baseline instead of implicit table-shape assumptions.
 - ✅ The backend tree API now supports hidden-file and `.gitignore` controls, and the file-read API now distinguishes binary files from editable text.
 - ✅ The backend now exposes project-scoped filename and content search commands for the sidebar search entrypoint.

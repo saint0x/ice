@@ -36,7 +36,7 @@ Rules for this checklist:
 
 ### Frontend Contract Support
 
-- [ ] Replace the frontend’s demo Zustand seeds with real IPC-backed loaders and event sync.
+- [ ] Replace the remaining frontend demo Zustand seeds for terminal and Codex with real IPC-backed loaders and event sync.
 - [ ] Publish a typed shared contract for project, tree, git, browser, terminal, Codex, and approval payloads.
 
 ### Testing / Release
@@ -148,6 +148,7 @@ Rules for this checklist:
 - ✅ Thin command routing exists in [commands.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/ipc/commands.rs).
 - ✅ Commands now cover health, config read, project lifecycle, tree/file operations, workspace layout/session/chrome, git actions, browser actions, terminal actions, Codex actions, and approval listing.
 - ✅ Backend sidebar projection commands now exist for project-scoped browser tab summaries and Codex thread summaries tailored to sidebar rendering.
+- ✅ The current frontend can now hydrate projects, workspace state, nested file trees, and git state directly from the backend through `app_bootstrap`, `project_tree_read_nested`, `git_status_read`, `workspace_chrome_set`, and `workspace_session_set`.
 
 ### Verification
 

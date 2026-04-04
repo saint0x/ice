@@ -95,8 +95,9 @@ export const TerminalSurface = memo(function TerminalSurface({ session }: Props)
     if (termRef.current) {
       // Small delay to let CSS vars update
       requestAnimationFrame(() => {
-        termRef.current?.options.theme
-        termRef.current?.options && (termRef.current.options.theme = buildTerminalTheme())
+        if (termRef.current?.options) {
+          termRef.current.options.theme = buildTerminalTheme()
+        }
       })
     }
   }, [themeId])

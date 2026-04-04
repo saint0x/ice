@@ -6,6 +6,7 @@ interface ProjectsState {
   projectOrder: ProjectId[]
   activeProjectId: ProjectId | null
 
+  hydrateProjects: (projects: Project[]) => void
   addProject: (project: Project) => void
   removeProject: (id: ProjectId) => void
   setActiveProject: (id: ProjectId) => void
@@ -40,6 +41,25 @@ export const useProjectsStore = create<ProjectsState>((set) => ({
   projects: new Map(DEMO_PROJECTS.map((p) => [p.id, p])),
   projectOrder: DEMO_PROJECTS.map((p) => p.id),
   activeProjectId: DEMO_PROJECTS[0]?.id ?? null,
+
+  hydrateProjects: (projects) =>
+    set((s) => {
+      const nextProjects = new Map<ProjectId, Project>()
+      for (const project of projects) {
+        const existing = s.projects.get(project.id)
+        nextProjects.set(project.id, {
+          ...project,
+          collapsed: existing?.collapsed ?? project.collapsed,
+          expandedSections: existing?.expandedSections ?? project.expandedSections,
+        })
+      }
+      const projectOrder = projects.map((project) => project.id)
+      const activeProjectId =
+        (s.activeProjectId && nextProjects.has(s.activeProjectId) ? s.activeProjectId : null)
+        ?? projectOrder[0]
+        ?? null
+      return { projects: nextProjects, projectOrder, activeProjectId }
+    }),
 
   addProject: (project) =>
     set((s) => {

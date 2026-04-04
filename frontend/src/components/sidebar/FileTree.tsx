@@ -60,7 +60,7 @@ const FileRow = memo(function FileRow({
         </span>
         {entry.gitStatus && (
           <span className={styles.gitIndicator} style={{ color: statusColor }}>
-            {entry.gitStatus[0].toUpperCase()}
+            {entry.gitStatus.charAt(0).toUpperCase()}
           </span>
         )}
       </button>

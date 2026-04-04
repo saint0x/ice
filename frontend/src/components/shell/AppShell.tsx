@@ -6,10 +6,12 @@ import { BottomDock } from './BottomDock'
 import { ChatPanel } from './ChatPanel'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
+import { useBackendIntegration } from '@/hooks/useBackendIntegration'
 import styles from './AppShell.module.css'
 
 export const AppShell = memo(function AppShell() {
   useKeyboardShortcuts()
+  useBackendIntegration()
 
   const bottomDockOpen = useWorkspaceStore((s) => s.bottomDockOpen)
   const chatPanelOpen = useWorkspaceStore((s) => s.chatPanelOpen)

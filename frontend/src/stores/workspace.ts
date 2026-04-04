@@ -17,6 +17,17 @@ interface WorkspaceState {
   chatPanelOpen: boolean
   chatPanelWidth: number
 
+  hydrateWorkspace: (input: {
+    layout: PaneLayout
+    tabs: Tab[]
+    activePaneId: PaneId
+    sidebarOpen: boolean
+    sidebarWidth: number
+    bottomDockOpen: boolean
+    bottomDockHeight: number
+    chatPanelOpen: boolean
+    chatPanelWidth: number
+  }) => void
   openTab: (paneId: PaneId, type: ContentType, title: string, projectId: ProjectId, meta?: Record<string, unknown>) => TabId
   closeTab: (paneId: PaneId, tabId: TabId) => void
   activateTab: (paneId: PaneId, tabId: TabId) => void
@@ -73,6 +84,20 @@ function collectPaneIds(layout: PaneLayout): PaneId[] {
   return layout.children.flatMap(collectPaneIds)
 }
 
+function syncCountersFromWorkspace(layout: PaneLayout, tabs: Tab[]) {
+  const paneIds = collectPaneIds(layout)
+  const maxPane = paneIds.reduce((max, id) => {
+    const match = /^pane-(\d+)$/.exec(id)
+    return match ? Math.max(max, Number(match[1])) : max
+  }, 0)
+  const maxTab = tabs.reduce((max, tab) => {
+    const match = /^tab-(\d+)$/.exec(tab.id)
+    return match ? Math.max(max, Number(match[1])) : max
+  }, 0)
+  _paneCounter = Math.max(_paneCounter, maxPane)
+  _tabCounter = Math.max(_tabCounter, maxTab)
+}
+
 function simplifyLayout(layout: PaneLayout): PaneLayout {
   if (layout.type === 'leaf') return layout
   const children = layout.children.map(simplifyLayout)
@@ -102,6 +127,22 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   bottomDockHeight: 240,
   chatPanelOpen: false,
   chatPanelWidth: 360,
+
+  hydrateWorkspace: (input) =>
+    set(() => {
+      syncCountersFromWorkspace(input.layout, input.tabs)
+      return {
+        layout: input.layout,
+        tabs: new Map(input.tabs.map((tab) => [tab.id, tab])),
+        activePaneId: input.activePaneId,
+        sidebarOpen: input.sidebarOpen,
+        sidebarWidth: input.sidebarWidth,
+        bottomDockOpen: input.bottomDockOpen,
+        bottomDockHeight: input.bottomDockHeight,
+        chatPanelOpen: input.chatPanelOpen,
+        chatPanelWidth: input.chatPanelWidth,
+      }
+    }),
 
   openTab: (paneId, type, title, projectId, meta) => {
     const tabId = nextTabId()

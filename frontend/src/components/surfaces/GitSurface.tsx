@@ -56,7 +56,7 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
                   <Icon size={11} style={{ color: STATUS_COLOR[c.status] }} />
                   <span className={styles.changePath}>{c.path}</span>
                   <span className={styles.changeStatus} style={{ color: STATUS_COLOR[c.status] }}>
-                    {c.status[0].toUpperCase()}
+                    {c.status.charAt(0).toUpperCase()}
                   </span>
                 </div>
               )
@@ -73,7 +73,7 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
                   <Icon size={11} style={{ color: STATUS_COLOR[c.status] }} />
                   <span className={styles.changePath}>{c.path}</span>
                   <span className={styles.changeStatus} style={{ color: STATUS_COLOR[c.status] }}>
-                    {c.status[0].toUpperCase()}
+                    {c.status.charAt(0).toUpperCase()}
                   </span>
                 </div>
               )
