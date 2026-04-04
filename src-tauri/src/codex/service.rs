@@ -1012,3 +1012,44 @@ fn extract_default_listen(help_text: &str) -> Option<String> {
         .and_then(|line| line.split("[default:").nth(1))
         .map(|value| value.trim().trim_end_matches(']').to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{build_pending_approval, extract_default_listen, CodexThreadBinding};
+    use serde_json::json;
+    use std::collections::HashMap;
+
+    #[test]
+    fn extracts_default_listen_from_help_text() {
+        let help = "Transport endpoint URL\n\n          [default: stdio://]\n";
+        assert_eq!(extract_default_listen(help).as_deref(), Some("stdio://"));
+    }
+
+    #[test]
+    fn pending_approval_includes_policy_metadata() {
+        let mut threads = HashMap::new();
+        threads.insert(
+            "thread-1".to_string(),
+            CodexThreadBinding {
+                project_id: "project-a".to_string(),
+                thread_id: "thread-1".to_string(),
+                title: Some("Agent".to_string()),
+                model: Some("gpt-5-codex".to_string()),
+                status: "idle".to_string(),
+                last_turn_id: None,
+                last_assistant_message: None,
+                unread: false,
+            },
+        );
+        let payload = json!({
+            "params": {
+                "threadId": "thread-1",
+                "command": "git reset --hard HEAD~1"
+            }
+        });
+        let approval = build_pending_approval(9, "git/exec", &payload, &threads).expect("approval");
+        assert_eq!(approval.project_id, "project-a");
+        assert_eq!(approval.category, "git");
+        assert_eq!(approval.policy_action, "block");
+    }
+}

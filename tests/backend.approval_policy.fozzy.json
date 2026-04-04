@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "name": "backend-approval-policy",
+  "steps": [
+    {
+      "type": "trace_event",
+      "name": "verify_approval_policy_contract",
+      "fields": {
+        "target": "src-tauri/security+codex"
+      }
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test security::approvals::tests::classifies_destructive_shell_command_as_high_risk_command -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test security::approvals::tests::classifies_destructive_shell_command_as_high_risk_command -- --exact"
+      ],
+      "expect_exit": 0
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test security::approvals::tests::blocks_destructive_shell_command_by_policy -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test security::approvals::tests::blocks_destructive_shell_command_by_policy -- --exact"
+      ],
+      "expect_exit": 0
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test codex::service::tests::pending_approval_includes_policy_metadata -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test codex::service::tests::pending_approval_includes_policy_metadata -- --exact"
+      ],
+      "expect_exit": 0
+    }
+  ]
+}

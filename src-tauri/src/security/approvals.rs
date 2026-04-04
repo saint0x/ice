@@ -59,26 +59,6 @@ pub fn classify_approval(method: &str, payload: &Value) -> (String, String, Stri
         .unwrap_or_default()
         .to_ascii_lowercase();
 
-    if method_lower.contains("exec")
-        || method_lower.contains("shell")
-        || method_lower.contains("command")
-    {
-        let risk = if path_text.contains("rm ")
-            || path_text.contains("sudo")
-            || path_text.contains("chmod")
-            || path_text.contains("chown")
-        {
-            "high"
-        } else {
-            "medium"
-        };
-        return (
-            "command".to_string(),
-            risk.to_string(),
-            "Run Command".to_string(),
-        );
-    }
-
     if method_lower.contains("delete") || method_lower.contains("remove") {
         return (
             "filesystem".to_string(),
@@ -123,6 +103,26 @@ pub fn classify_approval(method: &str, payload: &Value) -> (String, String, Stri
             "git".to_string(),
             risk.to_string(),
             "Git Action".to_string(),
+        );
+    }
+
+    if method_lower.contains("exec")
+        || method_lower.contains("shell")
+        || method_lower.contains("command")
+    {
+        let risk = if path_text.contains("rm ")
+            || path_text.contains("sudo")
+            || path_text.contains("chmod")
+            || path_text.contains("chown")
+        {
+            "high"
+        } else {
+            "medium"
+        };
+        return (
+            "command".to_string(),
+            risk.to_string(),
+            "Run Command".to_string(),
         );
     }
 
@@ -272,5 +272,42 @@ impl SecurityService {
             serde_json::json!({ "type": "approvalAudit", "audit": audit }),
         );
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{apply_approval_policy, classify_approval};
+    use serde_json::json;
+
+    #[test]
+    fn classifies_destructive_shell_command_as_high_risk_command() {
+        let payload = json!({ "command": "rm -rf /tmp/demo" });
+        let (category, risk_level, title) = classify_approval("shell/exec", &payload);
+        assert_eq!(category, "command");
+        assert_eq!(risk_level, "high");
+        assert_eq!(title, "Run Command");
+    }
+
+    #[test]
+    fn blocks_destructive_shell_command_by_policy() {
+        let payload = json!({ "command": "sudo rm -rf /" });
+        let (policy_action, policy_reason) =
+            apply_approval_policy("shell/exec", "command", "high", &payload);
+        assert_eq!(policy_action, "block");
+        assert!(policy_reason
+            .expect("policy reason")
+            .contains("Blocked destructive shell command"));
+    }
+
+    #[test]
+    fn prompts_high_risk_filesystem_mutation() {
+        let payload = json!({ "path": "src/main.rs" });
+        let (policy_action, policy_reason) =
+            apply_approval_policy("fs/delete", "filesystem", "high", &payload);
+        assert_eq!(policy_action, "prompt");
+        assert!(policy_reason
+            .expect("policy reason")
+            .contains("High-risk filesystem mutation"));
     }
 }

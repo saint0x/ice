@@ -56,7 +56,7 @@ Rules for this checklist:
 
 ### Testing / Release
 
-- [ ] Expand Fozzy scenarios from backend gates into feature-focused flows for filesystem mutation, git mutation, terminal lifecycle, browser navigation, and approval handling.
+- [ ] Expand Fozzy scenarios further into git mutation, terminal lifecycle, browser navigation, and Codex recovery flows.
 - [ ] Add host-backed Fozzy coverage for the new git and filesystem mutation commands.
 - [ ] Add startup smoke tests that assert canonical storage under `~/.ice`.
 - [ ] Add release packaging checks for Tauri bundles once the frontend wiring is complete.
@@ -158,3 +158,4 @@ Rules for this checklist:
 - ✅ `cargo test` passes in `/Users/deepsaint/Desktop/ice/src-tauri`.
 - ✅ Persistence tests cover workspace, browser tab/history, terminal session, Codex thread, approval, and config storage in [db.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/persistence/db.rs).
 - ✅ Fozzy coverage exists with [backend.production_gate.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.production_gate.fozzy.json) and [backend.topology.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.topology.fozzy.json).
+- ✅ Feature-focused Fozzy scenarios now exist for approval policy and FS/editor contracts in [backend.approval_policy.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.approval_policy.fozzy.json) and [backend.fs_editor.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.fs_editor.fozzy.json).
