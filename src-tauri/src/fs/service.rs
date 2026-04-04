@@ -1,9 +1,11 @@
 use anyhow::{anyhow, Context, Result};
 use serde::Serialize;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Emitter};
 
 use crate::app::events::FS_EVENT;
+use crate::git::service::GitService;
 use crate::projects::service::ProjectService;
 
 pub struct FsService {
@@ -17,6 +19,7 @@ pub struct FsEntry {
     pub name: String,
     pub is_dir: bool,
     pub depth: usize,
+    pub git_status: Option<String>,
 }
 
 impl FsService {
@@ -30,14 +33,18 @@ impl FsService {
         relative_path: Option<&str>,
         max_depth: usize,
         projects: &ProjectService,
+        git: &GitService,
     ) -> Result<Vec<FsEntry>> {
-        let root = projects.resolve_project_path(project_id).await?;
+        let project = projects.require_project(project_id).await?;
+        let root = PathBuf::from(&project.root_path);
         let start = match relative_path {
             Some(path) if !path.is_empty() => resolve_under_root(&root, path)?,
             _ => root.clone(),
         };
+        let status_map = git.path_status_map(&project).await.unwrap_or_default();
         let entries =
-            tokio::task::spawn_blocking(move || walk_tree(&root, &start, max_depth)).await??;
+            tokio::task::spawn_blocking(move || walk_tree(&root, &start, max_depth, &status_map))
+                .await??;
         self.app.emit(
             FS_EVENT,
             serde_json::json!({ "type": "treeRead", "projectId": project_id, "count": entries.len() }),
@@ -75,6 +82,74 @@ impl FsService {
         )?;
         Ok(())
     }
+
+    pub async fn create_dir(
+        &self,
+        project_id: &str,
+        path: &str,
+        projects: &ProjectService,
+    ) -> Result<()> {
+        let root = projects.resolve_project_path(project_id).await?;
+        let full_path = resolve_under_root(&root, path)?;
+        tokio::fs::create_dir_all(&full_path).await?;
+        self.app.emit(
+            FS_EVENT,
+            serde_json::json!({ "type": "dirCreated", "projectId": project_id, "path": path }),
+        )?;
+        Ok(())
+    }
+
+    pub async fn delete_entry(
+        &self,
+        project_id: &str,
+        path: &str,
+        recursive: bool,
+        projects: &ProjectService,
+    ) -> Result<()> {
+        let root = projects.resolve_project_path(project_id).await?;
+        let full_path = resolve_under_root(&root, path)?;
+        let metadata = tokio::fs::metadata(&full_path).await?;
+        if metadata.is_dir() {
+            if recursive {
+                tokio::fs::remove_dir_all(&full_path).await?;
+            } else {
+                tokio::fs::remove_dir(&full_path).await?;
+            }
+        } else {
+            tokio::fs::remove_file(&full_path).await?;
+        }
+        self.app.emit(
+            FS_EVENT,
+            serde_json::json!({ "type": "entryDeleted", "projectId": project_id, "path": path }),
+        )?;
+        Ok(())
+    }
+
+    pub async fn rename_entry(
+        &self,
+        project_id: &str,
+        from: &str,
+        to: &str,
+        projects: &ProjectService,
+    ) -> Result<()> {
+        let root = projects.resolve_project_path(project_id).await?;
+        let from_path = resolve_under_root(&root, from)?;
+        let to_path = resolve_under_root(&root, to)?;
+        if let Some(parent) = to_path.parent() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
+        tokio::fs::rename(&from_path, &to_path).await?;
+        self.app.emit(
+            FS_EVENT,
+            serde_json::json!({
+                "type": "entryRenamed",
+                "projectId": project_id,
+                "from": from,
+                "to": to
+            }),
+        )?;
+        Ok(())
+    }
 }
 
 fn resolve_under_root(root: &Path, relative: &str) -> Result<PathBuf> {
@@ -86,9 +161,14 @@ fn resolve_under_root(root: &Path, relative: &str) -> Result<PathBuf> {
     Ok(normalized)
 }
 
-fn walk_tree(root: &Path, start: &Path, max_depth: usize) -> Result<Vec<FsEntry>> {
+fn walk_tree(
+    root: &Path,
+    start: &Path,
+    max_depth: usize,
+    status_map: &HashMap<String, String>,
+) -> Result<Vec<FsEntry>> {
     let mut out = Vec::new();
-    walk_tree_inner(root, start, 0, max_depth, &mut out)?;
+    walk_tree_inner(root, start, 0, max_depth, status_map, &mut out)?;
     Ok(out)
 }
 
@@ -97,6 +177,7 @@ fn walk_tree_inner(
     dir: &Path,
     depth: usize,
     max_depth: usize,
+    status_map: &HashMap<String, String>,
     out: &mut Vec<FsEntry>,
 ) -> Result<()> {
     let entries = std::fs::read_dir(dir)
@@ -106,18 +187,20 @@ fn walk_tree_inner(
     for child in children {
         let path = child.path();
         let metadata = child.metadata()?;
+        let rel_path = path
+            .strip_prefix(root)
+            .unwrap_or(&path)
+            .to_string_lossy()
+            .to_string();
         out.push(FsEntry {
-            path: path
-                .strip_prefix(root)
-                .unwrap_or(&path)
-                .to_string_lossy()
-                .to_string(),
+            path: rel_path.clone(),
             name: child.file_name().to_string_lossy().to_string(),
             is_dir: metadata.is_dir(),
             depth,
+            git_status: status_map.get(&rel_path).cloned(),
         });
         if metadata.is_dir() && depth < max_depth {
-            walk_tree_inner(root, &path, depth + 1, max_depth, out)?;
+            walk_tree_inner(root, &path, depth + 1, max_depth, status_map, out)?;
         }
     }
     Ok(())

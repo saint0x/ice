@@ -60,6 +60,7 @@ pub async fn project_tree_read(
             input.path.as_deref(),
             input.depth.unwrap_or(2),
             &state.projects,
+            &state.git,
         )
         .await?)
 }
@@ -88,6 +89,44 @@ pub async fn file_write_text(
             &input.content,
             &state.projects,
         )
+        .await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn dir_create(input: CreateDirInput, state: State<'_, AppState>) -> Result<(), AppError> {
+    state
+        .fs
+        .create_dir(&input.project_id, &input.path, &state.projects)
+        .await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn entry_delete(
+    input: DeleteEntryInput,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    state
+        .fs
+        .delete_entry(
+            &input.project_id,
+            &input.path,
+            input.recursive.unwrap_or(false),
+            &state.projects,
+        )
+        .await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn entry_rename(
+    input: RenameEntryInput,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    state
+        .fs
+        .rename_entry(&input.project_id, &input.from, &input.to, &state.projects)
         .await?;
     Ok(())
 }
@@ -122,6 +161,35 @@ pub async fn git_status_read(
 }
 
 #[tauri::command]
+pub async fn git_stage_paths(
+    input: GitPathsInput,
+    state: State<'_, AppState>,
+) -> Result<crate::git::service::GitStatusSummary, AppError> {
+    let project = state.projects.require_project(&input.project_id).await?;
+    state.git.stage_paths(&project, &input.paths).await?;
+    Ok(state.git.read_status(&project).await?)
+}
+
+#[tauri::command]
+pub async fn git_unstage_paths(
+    input: GitPathsInput,
+    state: State<'_, AppState>,
+) -> Result<crate::git::service::GitStatusSummary, AppError> {
+    let project = state.projects.require_project(&input.project_id).await?;
+    state.git.unstage_paths(&project, &input.paths).await?;
+    Ok(state.git.read_status(&project).await?)
+}
+
+#[tauri::command]
+pub async fn git_commit(
+    input: GitCommitInput,
+    state: State<'_, AppState>,
+) -> Result<crate::git::service::GitStatusSummary, AppError> {
+    let project = state.projects.require_project(&input.project_id).await?;
+    Ok(state.git.commit(&project, &input.message).await?)
+}
+
+#[tauri::command]
 pub async fn browser_tab_create(
     input: BrowserTabCreateInput,
     state: State<'_, AppState>,
@@ -144,6 +212,30 @@ pub async fn browser_tab_navigate(
 }
 
 #[tauri::command]
+pub async fn browser_tab_back(
+    tab_id: String,
+    state: State<'_, AppState>,
+) -> Result<crate::browser::service::BrowserTabRecord, AppError> {
+    Ok(state.browser.go_back(&tab_id).await?)
+}
+
+#[tauri::command]
+pub async fn browser_tab_forward(
+    tab_id: String,
+    state: State<'_, AppState>,
+) -> Result<crate::browser::service::BrowserTabRecord, AppError> {
+    Ok(state.browser.go_forward(&tab_id).await?)
+}
+
+#[tauri::command]
+pub async fn browser_tab_reload(
+    tab_id: String,
+    state: State<'_, AppState>,
+) -> Result<crate::browser::service::BrowserTabRecord, AppError> {
+    Ok(state.browser.reload(&tab_id).await?)
+}
+
+#[tauri::command]
 pub async fn browser_tab_close(tab_id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     state.browser.close_tab(&tab_id).await?;
     Ok(())
@@ -155,6 +247,14 @@ pub async fn browser_tabs_list(
     state: State<'_, AppState>,
 ) -> Result<Vec<crate::browser::service::BrowserTabRecord>, AppError> {
     Ok(state.browser.list_tabs(project_id.as_deref()).await)
+}
+
+#[tauri::command]
+pub async fn browser_tab_history(
+    tab_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::browser::service::BrowserHistoryEntry>, AppError> {
+    Ok(state.browser.history(&tab_id).await?)
 }
 
 #[tauri::command]
@@ -207,6 +307,17 @@ pub async fn terminal_close(
 }
 
 #[tauri::command]
+pub async fn terminal_rename(
+    input: TerminalRenameInput,
+    state: State<'_, AppState>,
+) -> Result<crate::terminal::service::TerminalSessionRecord, AppError> {
+    Ok(state
+        .terminal
+        .rename(&input.session_id, &input.title)
+        .await?)
+}
+
+#[tauri::command]
 pub async fn terminal_list(
     project_id: Option<String>,
     state: State<'_, AppState>,
@@ -253,6 +364,14 @@ pub async fn codex_thread_create(
 }
 
 #[tauri::command]
+pub async fn codex_threads_list(
+    project_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::codex::service::CodexThreadBinding>, AppError> {
+    Ok(state.codex.list_threads(project_id.as_deref()).await)
+}
+
+#[tauri::command]
 pub async fn codex_turn_start(
     input: CodexTurnStartInput,
     state: State<'_, AppState>,
@@ -273,4 +392,12 @@ pub async fn codex_server_request_respond(
         .respond_to_server_request(input.request_id, input.result)
         .await?;
     Ok(())
+}
+
+#[tauri::command]
+pub async fn codex_approvals_list(
+    project_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::security::approvals::PendingApprovalRecord>, AppError> {
+    Ok(state.security.list_approvals(project_id.as_deref()).await)
 }

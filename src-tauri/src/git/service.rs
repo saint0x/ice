@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use anyhow::{anyhow, Result};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
@@ -12,6 +14,14 @@ pub struct GitService {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct GitChangeRecord {
+    pub path: String,
+    pub status: String,
+    pub staged: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GitStatusSummary {
     pub branch: Option<String>,
     pub ahead: usize,
@@ -20,6 +30,7 @@ pub struct GitStatusSummary {
     pub modified: usize,
     pub untracked: usize,
     pub conflicted: usize,
+    pub changes: Vec<GitChangeRecord>,
 }
 
 impl GitService {
@@ -35,6 +46,7 @@ impl GitService {
                 "status",
                 "--porcelain=2",
                 "--branch",
+                "--untracked-files=all",
             ])
             .output()
             .await?;
@@ -55,6 +67,79 @@ impl GitService {
     pub async fn try_branch_name(&self, project: &ProjectRecord) -> Result<Option<String>> {
         Ok(self.read_status(project).await?.branch)
     }
+
+    pub async fn path_status_map(
+        &self,
+        project: &ProjectRecord,
+    ) -> Result<HashMap<String, String>> {
+        let status = self.read_status(project).await?;
+        Ok(status
+            .changes
+            .into_iter()
+            .map(|change| (change.path, change.status))
+            .collect())
+    }
+
+    pub async fn stage_paths(&self, project: &ProjectRecord, paths: &[String]) -> Result<()> {
+        if paths.is_empty() {
+            return Ok(());
+        }
+        let mut command = Command::new("git");
+        command
+            .arg("-C")
+            .arg(&project.root_path)
+            .arg("add")
+            .arg("--");
+        for path in paths {
+            command.arg(path);
+        }
+        let output = command.output().await?;
+        if !output.status.success() {
+            return Err(anyhow!(
+                "{}",
+                String::from_utf8_lossy(&output.stderr).trim().to_string()
+            ));
+        }
+        Ok(())
+    }
+
+    pub async fn unstage_paths(&self, project: &ProjectRecord, paths: &[String]) -> Result<()> {
+        if paths.is_empty() {
+            return Ok(());
+        }
+        let mut command = Command::new("git");
+        command
+            .arg("-C")
+            .arg(&project.root_path)
+            .args(["restore", "--staged", "--"]);
+        for path in paths {
+            command.arg(path);
+        }
+        let output = command.output().await?;
+        if !output.status.success() {
+            return Err(anyhow!(
+                "{}",
+                String::from_utf8_lossy(&output.stderr).trim().to_string()
+            ));
+        }
+        Ok(())
+    }
+
+    pub async fn commit(&self, project: &ProjectRecord, message: &str) -> Result<GitStatusSummary> {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(&project.root_path)
+            .args(["commit", "-m", message])
+            .output()
+            .await?;
+        if !output.status.success() {
+            return Err(anyhow!(
+                "{}",
+                String::from_utf8_lossy(&output.stderr).trim().to_string()
+            ));
+        }
+        self.read_status(project).await
+    }
 }
 
 fn parse_status(raw: &str) -> GitStatusSummary {
@@ -66,6 +151,7 @@ fn parse_status(raw: &str) -> GitStatusSummary {
         modified: 0,
         untracked: 0,
         conflicted: 0,
+        changes: Vec::new(),
     };
 
     for line in raw.lines() {
@@ -86,7 +172,14 @@ fn parse_status(raw: &str) -> GitStatusSummary {
             continue;
         }
         if line.starts_with("1 ") || line.starts_with("2 ") {
-            let xy = line.split_whitespace().nth(1).unwrap_or("");
+            let mut parts = line.split_whitespace();
+            let kind = parts.next().unwrap_or_default();
+            let xy = parts.next().unwrap_or_default();
+            let path = line
+                .split_whitespace()
+                .last()
+                .unwrap_or_default()
+                .to_string();
             let x = xy.chars().next().unwrap_or('.');
             let y = xy.chars().nth(1).unwrap_or('.');
             if x != '.' {
@@ -95,10 +188,40 @@ fn parse_status(raw: &str) -> GitStatusSummary {
             if y != '.' {
                 summary.modified += 1;
             }
-        } else if line.starts_with("? ") {
+            let status = match (kind, x, y) {
+                (_, 'U', _) | (_, _, 'U') => {
+                    summary.conflicted += 1;
+                    "conflict"
+                }
+                ("2", _, _) => "renamed",
+                (_, 'A', _) | (_, _, 'A') => "added",
+                (_, 'D', _) | (_, _, 'D') => "deleted",
+                _ => "modified",
+            };
+            summary.changes.push(GitChangeRecord {
+                path,
+                status: status.to_string(),
+                staged: x != '.',
+            });
+        } else if let Some(path) = line.strip_prefix("? ") {
             summary.untracked += 1;
-        } else if line.starts_with("u ") {
+            summary.changes.push(GitChangeRecord {
+                path: path.to_string(),
+                status: "untracked".to_string(),
+                staged: false,
+            });
+        } else if let Some(rest) = line.strip_prefix("u ") {
             summary.conflicted += 1;
+            let path = rest
+                .split_whitespace()
+                .last()
+                .unwrap_or_default()
+                .to_string();
+            summary.changes.push(GitChangeRecord {
+                path,
+                status: "conflict".to_string(),
+                staged: false,
+            });
         }
     }
 

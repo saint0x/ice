@@ -40,6 +40,29 @@ pub struct WriteFileInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CreateDirInput {
+    pub project_id: String,
+    pub path: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteEntryInput {
+    pub project_id: String,
+    pub path: String,
+    pub recursive: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RenameEntryInput {
+    pub project_id: String,
+    pub from: String,
+    pub to: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SetWorkspaceLayoutInput {
     pub workspace_id: String,
     pub layout_json: serde_json::Value,
@@ -85,6 +108,27 @@ pub struct TerminalResizeInput {
     pub session_id: String,
     pub cols: u16,
     pub rows: u16,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalRenameInput {
+    pub session_id: String,
+    pub title: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitPathsInput {
+    pub project_id: String,
+    pub paths: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitCommitInput {
+    pub project_id: String,
+    pub message: String,
 }
 
 #[derive(Debug, Deserialize)]

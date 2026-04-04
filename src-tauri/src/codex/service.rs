@@ -16,11 +16,13 @@ use uuid::Uuid;
 use crate::app::events::CODEX_EVENT;
 use crate::app::paths::IcePaths;
 use crate::persistence::db::PersistenceService;
+use crate::security::approvals::{PendingApprovalRecord, SecurityService};
 
 pub struct CodexService {
     app: AppHandle,
     persistence: Arc<PersistenceService>,
     paths: IcePaths,
+    security: Arc<SecurityService>,
     state: Arc<Mutex<CodexRuntimeState>>,
     next_id: AtomicU64,
 }
@@ -64,7 +66,7 @@ pub struct CodexModel {
     pub is_default: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexThreadBinding {
     pub project_id: String,
@@ -76,7 +78,12 @@ pub struct CodexThreadBinding {
 }
 
 impl CodexService {
-    pub fn new(app: AppHandle, persistence: Arc<PersistenceService>, paths: IcePaths) -> Self {
+    pub fn new(
+        app: AppHandle,
+        persistence: Arc<PersistenceService>,
+        paths: IcePaths,
+        security: Arc<SecurityService>,
+    ) -> Self {
         let persisted_threads = persistence.load_codex_threads_sync().unwrap_or_default();
         let threads = persisted_threads
             .into_iter()
@@ -86,6 +93,7 @@ impl CodexService {
             app,
             persistence,
             paths,
+            security,
             state: Arc::new(Mutex::new(CodexRuntimeState {
                 process: None,
                 threads,
@@ -256,12 +264,27 @@ impl CodexService {
         Ok(result)
     }
 
+    pub async fn list_threads(&self, project_id: Option<&str>) -> Vec<CodexThreadBinding> {
+        self.state
+            .lock()
+            .threads
+            .values()
+            .filter(|thread| {
+                project_id
+                    .map(|candidate| thread.project_id == candidate)
+                    .unwrap_or(true)
+            })
+            .cloned()
+            .collect()
+    }
+
     pub async fn respond_to_server_request(&self, request_id: u64, result: Value) -> Result<()> {
         let process = self.ensure_process().await?;
         self.state
             .lock()
             .pending_server_requests
             .remove(&request_id);
+        self.security.resolve_approval(request_id).await?;
         let payload = json!({ "id": request_id, "result": result });
         let mut stdin = process.stdin.lock().await;
         stdin.write_all(payload.to_string().as_bytes()).await?;
@@ -378,20 +401,30 @@ impl CodexService {
     fn spawn_reader(&self, stdout: ChildStdout, stderr: ChildStderr, process: CodexProcess) {
         let app = self.app.clone();
         let state = self.state.clone();
+        let security = self.security.clone();
         tauri::async_runtime::spawn(async move {
             let mut lines = BufReader::new(stdout).lines();
             while let Ok(Some(line)) = lines.next_line().await {
                 if let Ok(value) = serde_json::from_str::<Value>(&line) {
                     if let Some(id) = value.get("id").and_then(|value| value.as_u64()) {
                         if value.get("method").is_some() {
-                            state.lock().pending_server_requests.insert(
-                                id,
-                                value
-                                    .get("method")
-                                    .and_then(|value| value.as_str())
-                                    .unwrap_or("unknown")
-                                    .to_string(),
-                            );
+                            let method = value
+                                .get("method")
+                                .and_then(|value| value.as_str())
+                                .unwrap_or("unknown")
+                                .to_string();
+                            let approval = {
+                                let mut runtime = state.lock();
+                                runtime.pending_server_requests.insert(id, method.clone());
+                                build_pending_approval(id, &method, &value, &runtime.threads)
+                            };
+                            if let Some(approval) = approval {
+                                let _ = security.upsert_approval(approval.clone()).await;
+                                let _ = app.emit(
+                                    CODEX_EVENT,
+                                    json!({ "type": "approvalPending", "approval": approval }),
+                                );
+                            }
                             let _ = app.emit(
                                 CODEX_EVENT,
                                 json!({ "type": "serverRequest", "payload": value }),
@@ -426,4 +459,37 @@ impl CodexService {
             }
         });
     }
+}
+
+fn build_pending_approval(
+    request_id: u64,
+    method: &str,
+    payload: &Value,
+    threads: &HashMap<String, CodexThreadBinding>,
+) -> Option<PendingApprovalRecord> {
+    let params = payload.get("params")?;
+    let thread_id = params
+        .get("threadId")
+        .or_else(|| params.get("thread_id"))
+        .and_then(|value| value.as_str())
+        .map(ToOwned::to_owned);
+    let project_id = thread_id
+        .as_ref()
+        .and_then(|thread_id| threads.get(thread_id))
+        .map(|thread| thread.project_id.clone())
+        .unwrap_or_else(|| "global".to_string());
+    let description = params
+        .get("message")
+        .or_else(|| params.get("description"))
+        .and_then(|value| value.as_str())
+        .unwrap_or(method)
+        .to_string();
+    Some(PendingApprovalRecord {
+        request_id,
+        project_id,
+        thread_id,
+        action_type: method.to_string(),
+        description,
+        context_json: Some(params.clone()),
+    })
 }

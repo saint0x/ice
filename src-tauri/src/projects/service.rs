@@ -8,6 +8,7 @@ use crate::codex::service::CodexService;
 use crate::git::service::GitService;
 use crate::persistence::db::PersistenceService;
 use crate::projects::models::{ProjectRecord, ProjectSummary};
+use crate::security::approvals::SecurityService;
 use crate::terminal::service::TerminalService;
 
 pub struct ProjectService {
@@ -16,6 +17,7 @@ pub struct ProjectService {
     terminal: Arc<TerminalService>,
     browser: Arc<BrowserService>,
     codex: Arc<CodexService>,
+    security: Arc<SecurityService>,
 }
 
 impl ProjectService {
@@ -25,6 +27,7 @@ impl ProjectService {
         terminal: Arc<TerminalService>,
         browser: Arc<BrowserService>,
         codex: Arc<CodexService>,
+        security: Arc<SecurityService>,
     ) -> Self {
         Self {
             persistence,
@@ -32,6 +35,7 @@ impl ProjectService {
             terminal,
             browser,
             codex,
+            security,
         }
     }
 
@@ -71,6 +75,7 @@ impl ProjectService {
         self.browser.remove_project_tabs(&project_id).await?;
         self.terminal.remove_project_sessions(&project_id).await?;
         self.codex.remove_project_threads(&project_id).await?;
+        self.security.remove_project_approvals(&project_id).await?;
         let persistence = self.persistence.clone();
         tokio::task::spawn_blocking(move || persistence.delete_project_sync(&project_id)).await??;
         Ok(())

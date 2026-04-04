@@ -29,7 +29,7 @@ struct TerminalSessionHandle {
     child: Mutex<Box<dyn portable_pty::Child + Send>>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct TerminalSessionRecord {
     pub session_id: String,
@@ -231,6 +231,33 @@ impl TerminalService {
             serde_json::json!({ "type": "sessionClosed", "sessionId": session_id }),
         )?;
         Ok(())
+    }
+
+    pub async fn rename(&self, session_id: &str, title: &str) -> Result<TerminalSessionRecord> {
+        let mut updated = if let Some(handle) = self.sessions.lock().get(session_id).cloned() {
+            let mut record = handle.record.lock();
+            record.title = title.to_string();
+            record.clone()
+        } else {
+            let mut metadata = self.metadata.lock();
+            let record = metadata
+                .get_mut(session_id)
+                .ok_or_else(|| anyhow!("unknown terminal session"))?;
+            record.title = title.to_string();
+            record.clone()
+        };
+        if let Some(metadata) = self.metadata.lock().get_mut(session_id) {
+            metadata.title = updated.title.clone();
+            updated = metadata.clone();
+        }
+        self.persistence
+            .upsert_terminal_session(updated.clone())
+            .await?;
+        self.app.emit(
+            TERMINAL_EVENT,
+            serde_json::json!({ "type": "sessionRenamed", "session": updated.clone() }),
+        )?;
+        Ok(updated)
     }
 
     pub async fn list(&self, project_id: Option<&str>) -> Vec<TerminalSessionRecord> {

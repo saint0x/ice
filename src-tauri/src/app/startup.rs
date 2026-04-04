@@ -52,18 +52,20 @@ pub fn build_state(app: AppHandle) -> Result<AppState> {
     let git = Arc::new(GitService::new(app.clone()));
     let browser = Arc::new(BrowserService::new(app.clone(), persistence.clone()));
     let terminal = Arc::new(TerminalService::new(app.clone(), persistence.clone()));
+    let security = Arc::new(SecurityService::new(persistence.clone()));
     let codex = Arc::new(CodexService::new(
         app.clone(),
         persistence.clone(),
         paths.clone(),
+        security.clone(),
     ));
-    let security = Arc::new(SecurityService::new());
     let projects = Arc::new(ProjectService::new(
         persistence.clone(),
         git.clone(),
         terminal.clone(),
         browser.clone(),
         codex.clone(),
+        security.clone(),
     ));
 
     Ok(AppState {
