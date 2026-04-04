@@ -15,6 +15,8 @@ pub struct PendingApprovalRecord {
     pub project_id: String,
     pub thread_id: Option<String>,
     pub action_type: String,
+    pub category: String,
+    pub risk_level: String,
     pub description: String,
     pub context_json: Option<Value>,
 }
@@ -22,6 +24,90 @@ pub struct PendingApprovalRecord {
 pub struct SecurityService {
     persistence: Arc<PersistenceService>,
     approvals: RwLock<HashMap<u64, PendingApprovalRecord>>,
+}
+
+pub fn classify_approval(method: &str, payload: &Value) -> (String, String, String) {
+    let method_lower = method.to_ascii_lowercase();
+    let path_text = payload
+        .get("path")
+        .or_else(|| payload.get("target"))
+        .or_else(|| payload.get("command"))
+        .and_then(|value| value.as_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+
+    if method_lower.contains("exec")
+        || method_lower.contains("shell")
+        || method_lower.contains("command")
+    {
+        let risk = if path_text.contains("rm ")
+            || path_text.contains("sudo")
+            || path_text.contains("chmod")
+            || path_text.contains("chown")
+        {
+            "high"
+        } else {
+            "medium"
+        };
+        return (
+            "command".to_string(),
+            risk.to_string(),
+            "Run Command".to_string(),
+        );
+    }
+
+    if method_lower.contains("delete") || method_lower.contains("remove") {
+        return (
+            "filesystem".to_string(),
+            "high".to_string(),
+            "Delete Files".to_string(),
+        );
+    }
+
+    if method_lower.contains("write")
+        || method_lower.contains("edit")
+        || method_lower.contains("patch")
+        || method_lower.contains("create")
+    {
+        return (
+            "filesystem".to_string(),
+            "medium".to_string(),
+            "Edit Files".to_string(),
+        );
+    }
+
+    if method_lower.contains("browser")
+        || method_lower.contains("open_url")
+        || method_lower.contains("navigate")
+    {
+        return (
+            "browser".to_string(),
+            "low".to_string(),
+            "Open Browser".to_string(),
+        );
+    }
+
+    if method_lower.contains("git") {
+        let risk = if method_lower.contains("push")
+            || method_lower.contains("reset")
+            || method_lower.contains("checkout")
+        {
+            "high"
+        } else {
+            "medium"
+        };
+        return (
+            "git".to_string(),
+            risk.to_string(),
+            "Git Action".to_string(),
+        );
+    }
+
+    (
+        "unknown".to_string(),
+        "medium".to_string(),
+        "Approval Required".to_string(),
+    )
 }
 
 impl SecurityService {

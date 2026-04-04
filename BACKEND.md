@@ -39,8 +39,6 @@ Rules for this checklist:
 
 ### Codex / Agent Runtime
 
-- [ ] Add reconnect / restart handling for `codex app-server` with state recovery.
-- [ ] Add stronger approval classification so frontend approvals can render intent-specific UI.
 - [ ] Add schema/version capture against the installed Codex binary for stricter contract management.
 
 ### Security / Approvals
@@ -126,9 +124,12 @@ Rules for this checklist:
 - ✅ Codex integration uses `codex app-server` over `stdio` from the Rust backend in [service.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/codex/service.rs).
 - ✅ `CODEX_HOME` is forced to `~/.ice/codex`.
 - ✅ Implemented Codex commands include status, model list, auth read, login start, thread create, turn start, server-request response, and thread list.
+- ✅ Implemented Codex commands include status, model list, auth read, restart, login start, thread create, turn start, server-request response, and thread list.
 - ✅ Server requests are captured as pending approvals and emitted as backend events.
 - ✅ Codex notifications now update typed thread state for running, waiting approval, idle, error, and disconnected flows instead of only passing raw payloads through.
 - ✅ Codex thread persistence now includes last assistant message snippets and unread state for sidebar/chat previews.
+- ✅ Approval records now include classified category and risk level metadata so the frontend can render intent-specific approval UI.
+- ✅ The backend now supports explicit `codex app-server` restarts with thread state recovery to `disconnected` plus automatic dead-process detection.
 
 ### Security / Approvals
 

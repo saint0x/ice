@@ -17,7 +17,7 @@ use uuid::Uuid;
 use crate::app::events::CODEX_EVENT;
 use crate::app::paths::IcePaths;
 use crate::persistence::db::PersistenceService;
-use crate::security::approvals::{PendingApprovalRecord, SecurityService};
+use crate::security::approvals::{classify_approval, PendingApprovalRecord, SecurityService};
 
 pub struct CodexService {
     app: AppHandle,
@@ -291,17 +291,68 @@ impl CodexService {
 
     pub async fn respond_to_server_request(&self, request_id: u64, result: Value) -> Result<()> {
         let process = self.ensure_process().await?;
+        let resolved = self.security.resolve_approval(request_id).await?;
+        if let Some(thread) = mark_thread_after_approval_response(
+            &self.state,
+            resolved.as_ref().and_then(|a| a.thread_id.as_deref()),
+        ) {
+            self.persistence.upsert_codex_thread(thread.clone()).await?;
+            let _ = self.app.emit(
+                CODEX_EVENT,
+                json!({ "type": "threadUpdated", "thread": thread }),
+            );
+        }
         self.state
             .lock()
             .pending_server_requests
             .remove(&request_id);
-        self.security.resolve_approval(request_id).await?;
         let payload = json!({ "id": request_id, "result": result });
         let mut stdin = process.stdin.lock().await;
         stdin.write_all(payload.to_string().as_bytes()).await?;
         stdin.write_all(b"\n").await?;
         stdin.flush().await?;
         Ok(())
+    }
+
+    pub async fn restart_process(&self) -> Result<CodexStatus> {
+        let existing_process = {
+            let mut state = self.state.lock();
+            state.process.take()
+        };
+        if let Some(process) = existing_process {
+            let mut child = process.child.lock().await;
+            let _ = child.kill().await;
+            let _ = child.wait().await;
+        }
+
+        let disconnected_threads = {
+            let mut runtime = self.state.lock();
+            runtime.pending_server_requests.clear();
+            runtime
+                .threads
+                .values_mut()
+                .filter_map(|thread| {
+                    if matches!(
+                        thread.status.as_str(),
+                        "running" | "waitingApproval" | "disconnected"
+                    ) {
+                        thread.status = "disconnected".to_string();
+                        Some(thread.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>()
+        };
+        for thread in disconnected_threads {
+            self.persistence.upsert_codex_thread(thread.clone()).await?;
+            let _ = self.app.emit(
+                CODEX_EVENT,
+                json!({ "type": "threadUpdated", "thread": thread }),
+            );
+        }
+        self.ensure_process().await?;
+        Ok(self.status().await)
     }
 
     pub async fn thread_count(&self, project_id: &str) -> usize {
@@ -585,6 +636,18 @@ fn update_thread_for_approval_request(
     Some(thread.clone())
 }
 
+fn mark_thread_after_approval_response(
+    state: &Arc<Mutex<CodexRuntimeState>>,
+    thread_id: Option<&str>,
+) -> Option<CodexThreadBinding> {
+    let mut runtime = state.lock();
+    let thread = runtime.threads.get_mut(thread_id?)?;
+    if thread.status == "waitingApproval" {
+        thread.status = "running".to_string();
+    }
+    Some(thread.clone())
+}
+
 fn apply_notification_to_threads(
     state: &Arc<Mutex<CodexRuntimeState>>,
     payload: &Value,
@@ -716,14 +779,16 @@ fn build_pending_approval(
         .get("message")
         .or_else(|| params.get("description"))
         .and_then(|value| value.as_str())
-        .unwrap_or(method)
-        .to_string();
+        .map(ToOwned::to_owned);
+    let (category, risk_level, fallback_title) = classify_approval(method, params);
     Some(PendingApprovalRecord {
         request_id,
         project_id,
         thread_id,
         action_type: method.to_string(),
-        description,
+        category,
+        risk_level,
+        description: description.unwrap_or(fallback_title),
         context_json: Some(params.clone()),
     })
 }

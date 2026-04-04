@@ -100,6 +100,8 @@ impl PersistenceService {
               project_id TEXT NOT NULL,
               thread_id TEXT,
               action_type TEXT NOT NULL,
+              category TEXT NOT NULL DEFAULT 'unknown',
+              risk_level TEXT NOT NULL DEFAULT 'medium',
               description TEXT NOT NULL,
               context_json TEXT,
               created_at TEXT NOT NULL,
@@ -114,6 +116,14 @@ impl PersistenceService {
         add_column_if_missing(
             &conn,
             "ALTER TABLE codex_threads ADD COLUMN unread INTEGER NOT NULL DEFAULT 0",
+        )?;
+        add_column_if_missing(
+            &conn,
+            "ALTER TABLE codex_approvals ADD COLUMN category TEXT NOT NULL DEFAULT 'unknown'",
+        )?;
+        add_column_if_missing(
+            &conn,
+            "ALTER TABLE codex_approvals ADD COLUMN risk_level TEXT NOT NULL DEFAULT 'medium'",
         )?;
         Ok(())
     }
@@ -610,17 +620,17 @@ impl PersistenceService {
         let conn = self.connect()?;
         let mut stmt = conn.prepare(
             "
-            SELECT request_id, project_id, thread_id, action_type, description, context_json
+            SELECT request_id, project_id, thread_id, action_type, category, risk_level, description, context_json
             FROM codex_approvals
             ORDER BY created_at ASC
             ",
         )?;
         let rows = stmt.query_map([], |row| {
-            let raw_context: Option<String> = row.get(5)?;
+            let raw_context: Option<String> = row.get(7)?;
             let context_json = raw_context
                 .map(|text| {
                     serde_json::from_str(&text).map_err(|err| {
-                        rusqlite::Error::FromSqlConversionFailure(5, Type::Text, Box::new(err))
+                        rusqlite::Error::FromSqlConversionFailure(7, Type::Text, Box::new(err))
                     })
                 })
                 .transpose()?;
@@ -629,7 +639,9 @@ impl PersistenceService {
                 project_id: row.get(1)?,
                 thread_id: row.get(2)?,
                 action_type: row.get(3)?,
-                description: row.get(4)?,
+                category: row.get(4)?,
+                risk_level: row.get(5)?,
+                description: row.get(6)?,
                 context_json,
             })
         })?;
@@ -642,12 +654,14 @@ impl PersistenceService {
             let conn = this.connect()?;
             conn.execute(
                 "
-                INSERT INTO codex_approvals (request_id, project_id, thread_id, action_type, description, context_json, created_at, updated_at)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime('now'), datetime('now'))
+                INSERT INTO codex_approvals (request_id, project_id, thread_id, action_type, category, risk_level, description, context_json, created_at, updated_at)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, datetime('now'), datetime('now'))
                 ON CONFLICT(request_id) DO UPDATE SET
                   project_id = excluded.project_id,
                   thread_id = excluded.thread_id,
                   action_type = excluded.action_type,
+                  category = excluded.category,
+                  risk_level = excluded.risk_level,
                   description = excluded.description,
                   context_json = excluded.context_json,
                   updated_at = excluded.updated_at
@@ -657,6 +671,8 @@ impl PersistenceService {
                     approval.project_id,
                     approval.thread_id,
                     approval.action_type,
+                    approval.category,
+                    approval.risk_level,
                     approval.description,
                     approval.context_json.map(|value| value.to_string())
                 ],
@@ -857,6 +873,8 @@ mod tests {
             project_id: "project-a".to_string(),
             thread_id: Some("thread-1".to_string()),
             action_type: "approval/request".to_string(),
+            category: "filesystem".to_string(),
+            risk_level: "medium".to_string(),
             description: "Allow file edit".to_string(),
             context_json: Some(json!({"path":"src/main.rs"})),
         };

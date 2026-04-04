@@ -51,7 +51,7 @@ Rules for this checklist:
 
 - [ ] Replace the demo thread store with backend thread and approval state.
 - [ ] Render real streaming turn output in [CodexSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/CodexSurface.tsx).
-- [ ] Add approval prompts bound to backend pending approvals.
+- [ ] Add approval prompts bound to backend pending approvals, using approval `category` and `riskLevel` for intent-specific UI.
 - [ ] Add thread creation and prompt submission wired to backend Codex commands.
 
 ### Multi-Project UX
@@ -102,6 +102,7 @@ Rules for this checklist:
 - ✅ The backend file-read/write contract now supports optimistic save conflict detection through a version token.
 - ✅ The backend file-read/write contract now exposes encoding and BOM metadata so the frontend can preserve legacy text files correctly on save.
 - ✅ The backend Codex thread payload now includes normalized status, unread state, and last assistant message summaries for sidebar/chat rendering.
+- ✅ The backend now exposes classified approval metadata and a `codex_restart` command for recovery UI.
 
 ### Visual / Product Direction
 

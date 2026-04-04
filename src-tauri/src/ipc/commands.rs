@@ -602,6 +602,13 @@ pub async fn codex_auth_read(state: State<'_, AppState>) -> Result<serde_json::V
 }
 
 #[tauri::command]
+pub async fn codex_restart(
+    state: State<'_, AppState>,
+) -> Result<crate::codex::service::CodexStatus, AppError> {
+    Ok(state.codex.restart_process().await?)
+}
+
+#[tauri::command]
 pub async fn codex_login_start(
     input: CodexLoginStartInput,
     state: State<'_, AppState>,
