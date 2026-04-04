@@ -1,0 +1,502 @@
+/* ── Base dimensions (constant across themes) ── */
+:root {
+  /* Spacing */
+  --sp-1: 2px;
+  --sp-2: 4px;
+  --sp-3: 6px;
+  --sp-4: 8px;
+  --sp-5: 12px;
+  --sp-6: 16px;
+  --sp-7: 20px;
+  --sp-8: 24px;
+  --sp-9: 32px;
+
+  /* Dimensions */
+  --title-bar-height: 38px;
+  --sidebar-width: 240px;
+  --sidebar-min-width: 180px;
+  --sidebar-max-width: 400px;
+  --sidebar-row-height: 28px;
+  --sidebar-row-px: 8px;
+  --sidebar-row-gap: 4px;
+  --sidebar-card-padding: 4px;
+  --sidebar-card-gap: 4px;
+  --tab-height: 32px;
+  --toolbar-height: 34px;
+  --dock-default-height: 240px;
+  --dock-min-height: 100px;
+  --chat-panel-width: 360px;
+  --chat-panel-min-width: 280px;
+  --chat-panel-max-width: 520px;
+  --resize-handle: 6px;
+  --split-handle: 4px;
+  --tree-indent: 16px;
+  --icon-sm: 14px;
+  --icon-md: 16px;
+  --icon-lg: 20px;
+
+  /* Glass radii */
+  --radius-button: 12px;
+  --radius-input: 14px;
+  --radius-tab: 12px;
+  --radius-panel: 18px;
+  --radius-modal: 24px;
+
+  /* Typography */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', 'Helvetica Neue', sans-serif;
+  --font-mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-lg: 14px;
+  --line-height-tight: 1.2;
+  --line-height-normal: 1.4;
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.5);
+
+  /* Transitions */
+  --transition-fast: 80ms ease;
+  --transition-normal: 150ms ease;
+}
+
+/* ══════════════════════════════════════════
+   GLASS DARK (default)
+   ══════════════════════════════════════════ */
+[data-theme="dark"], :root {
+  --bg-window: #121212;
+  --bg-surface: #151515;
+  --bg-elevated: #1a1a1a;
+  --bg-panel: #121212;
+  --bg-title-bar: #151515;
+  --bg-status-bar: #101010;
+  --bg-tab-bar: #101010;
+  --bg-tab-active: #191919;
+  --bg-tab-inactive: #101010;
+  --bg-editor: #151515;
+  --bg-element: #202020;
+  --bg-element-hover: #292929;
+  --bg-element-active: #323232;
+  --bg-element-selected: #3b3834;
+  --bg-ghost-hover: #252525;
+  --bg-ghost-selected: #3b3834;
+
+  --border-color: #2d2d2d;
+  --border-variant: #242424;
+  --border-focused: #a9a39c;
+  --border-selected: #5b5650;
+
+  --text-primary: #e6e0d8;
+  --text-muted: #8b847d;
+  --text-placeholder: #67615b;
+  --text-disabled: #67615b;
+  --text-accent: #d2cbc1;
+
+  --icon-color: #e6e0d8;
+  --icon-muted: #8b847d;
+
+  --color-error: #b86a5b;
+  --color-warning: #af956a;
+  --color-success: #8c9b74;
+  --color-info: #8ea9a5;
+
+  --editor-line-number: #5d5853;
+  --editor-active-line-number: #b9b0a5;
+  --editor-active-line: #1b1b1b;
+
+  /* Sidebar row states (Glass: text opacity) */
+  --sidebar-row-hover: rgba(230, 224, 216, 0.09);
+  --sidebar-row-selected: rgba(230, 224, 216, 0.14);
+
+  /* Syntax (Tokyo Night warm) */
+  --syn-keyword: #b39ddb;
+  --syn-function: #7c9bf7;
+  --syn-string: #8c9b74;
+  --syn-type: #8ea9a5;
+  --syn-constant: #af956a;
+  --syn-tag: #b86a5b;
+  --syn-attribute: #af956a;
+  --syn-comment: #67615b;
+
+  /* Git */
+  --git-modified: #af956a;
+  --git-added: #8c9b74;
+  --git-deleted: #b86a5b;
+  --git-untracked: #8b847d;
+  --git-conflict: #b86a5b;
+  --git-renamed: #8ea9a5;
+
+  color-scheme: dark;
+}
+
+/* ══════════════════════════════════════════
+   GLASS LIGHT
+   ══════════════════════════════════════════ */
+[data-theme="light"] {
+  --bg-window: #f2f0eb;
+  --bg-surface: #f4f2ee;
+  --bg-elevated: #fbfaf7;
+  --bg-panel: #efebe5;
+  --bg-title-bar: #f4f2ee;
+  --bg-status-bar: #efebe5;
+  --bg-tab-bar: #efebe5;
+  --bg-tab-active: #fbfaf7;
+  --bg-tab-inactive: #efebe5;
+  --bg-editor: #f7f5f1;
+  --bg-element: #e8e3dc;
+  --bg-element-hover: #e0dbd3;
+  --bg-element-active: #d7d0c7;
+  --bg-element-selected: #d2cbc1;
+  --bg-ghost-hover: #e5dfd6;
+  --bg-ghost-selected: #d2cbc1;
+
+  --border-color: #d7d0c7;
+  --border-variant: #e5dfd6;
+  --border-focused: #726b63;
+  --border-selected: #a9a39c;
+
+  --text-primary: #292826;
+  --text-muted: #726b63;
+  --text-placeholder: #a9a39c;
+  --text-disabled: #a9a39c;
+  --text-accent: #3d3a37;
+
+  --icon-color: #292826;
+  --icon-muted: #726b63;
+
+  --color-error: #9e4a3a;
+  --color-warning: #8a7244;
+  --color-success: #5e7242;
+  --color-info: #4a7a76;
+
+  --editor-line-number: #a9a39c;
+  --editor-active-line-number: #5b5650;
+  --editor-active-line: #f0ede8;
+
+  --sidebar-row-hover: rgba(41, 40, 38, 0.06);
+  --sidebar-row-selected: rgba(41, 40, 38, 0.10);
+
+  --syn-keyword: #7e57c2;
+  --syn-function: #4a6ed4;
+  --syn-string: #5e7242;
+  --syn-type: #4a7a76;
+  --syn-constant: #8a7244;
+  --syn-tag: #9e4a3a;
+  --syn-attribute: #8a7244;
+  --syn-comment: #a9a39c;
+
+  --git-modified: #8a7244;
+  --git-added: #5e7242;
+  --git-deleted: #9e4a3a;
+  --git-untracked: #726b63;
+  --git-conflict: #9e4a3a;
+  --git-renamed: #4a7a76;
+
+  color-scheme: light;
+}
+
+/* ══════════════════════════════════════════
+   GLASS DARK BLUR
+   ══════════════════════════════════════════ */
+[data-theme="dark-blur"] {
+  --bg-window: #171716d8;
+  --bg-surface: #171716cc;
+  --bg-elevated: #21201fcc;
+  --bg-panel: transparent;
+  --bg-title-bar: #171716d8;
+  --bg-status-bar: transparent;
+  --bg-tab-bar: transparent;
+  --bg-tab-active: #25232188;
+  --bg-tab-inactive: transparent;
+  --bg-editor: transparent;
+  --bg-element: #2a292866;
+  --bg-element-hover: #33312f88;
+  --bg-element-active: #3d3b3988;
+  --bg-element-selected: #6f69615d;
+  --bg-ghost-hover: #26252499;
+  --bg-ghost-selected: #6f69615d;
+
+  --border-color: #a9a39c22;
+  --border-variant: transparent;
+  --border-focused: #a9a39c;
+  --border-selected: #5b5650;
+
+  --text-primary: #e8e2da;
+  --text-muted: #948d86;
+  --text-placeholder: #67615b;
+  --text-disabled: #67615b;
+  --text-accent: #d2cbc1;
+
+  --icon-color: #e8e2da;
+  --icon-muted: #948d86;
+
+  --color-error: #b86a5b;
+  --color-warning: #af956a;
+  --color-success: #8c9b74;
+  --color-info: #8ea9a5;
+
+  --editor-line-number: #5d5853;
+  --editor-active-line-number: #b9b0a5;
+  --editor-active-line: #1b1b1b44;
+
+  --sidebar-row-hover: rgba(232, 226, 218, 0.09);
+  --sidebar-row-selected: rgba(232, 226, 218, 0.14);
+
+  --syn-keyword: #b39ddb;
+  --syn-function: #7c9bf7;
+  --syn-string: #8c9b74;
+  --syn-type: #8ea9a5;
+  --syn-constant: #af956a;
+  --syn-tag: #b86a5b;
+  --syn-attribute: #af956a;
+  --syn-comment: #67615b;
+
+  --git-modified: #af956a;
+  --git-added: #8c9b74;
+  --git-deleted: #b86a5b;
+  --git-untracked: #948d86;
+  --git-conflict: #b86a5b;
+  --git-renamed: #8ea9a5;
+
+  color-scheme: dark;
+}
+
+/* ══════════════════════════════════════════
+   GLASS LIGHT BLUR
+   ══════════════════════════════════════════ */
+[data-theme="light-blur"] {
+  --bg-window: #f2f0ebd8;
+  --bg-surface: #f2f0ebcc;
+  --bg-elevated: #fbfaf7cc;
+  --bg-panel: transparent;
+  --bg-title-bar: #f2f0ebd8;
+  --bg-status-bar: transparent;
+  --bg-tab-bar: transparent;
+  --bg-tab-active: #fbfaf788;
+  --bg-tab-inactive: transparent;
+  --bg-editor: transparent;
+  --bg-element: #e8e3dc66;
+  --bg-element-hover: #e0dbd388;
+  --bg-element-active: #d7d0c788;
+  --bg-element-selected: #d2cbc15d;
+  --bg-ghost-hover: #e5dfd699;
+  --bg-ghost-selected: #d2cbc15d;
+
+  --border-color: #8d847922;
+  --border-variant: transparent;
+  --border-focused: #726b63;
+  --border-selected: #a9a39c;
+
+  --text-primary: #2b2926;
+  --text-muted: #726b63;
+  --text-placeholder: #a9a39c;
+  --text-disabled: #a9a39c;
+  --text-accent: #3d3a37;
+
+  --icon-color: #2b2926;
+  --icon-muted: #726b63;
+
+  --color-error: #9e4a3a;
+  --color-warning: #8a7244;
+  --color-success: #5e7242;
+  --color-info: #4a7a76;
+
+  --editor-line-number: #a9a39c;
+  --editor-active-line-number: #5b5650;
+  --editor-active-line: #f0ede844;
+
+  --sidebar-row-hover: rgba(43, 41, 38, 0.06);
+  --sidebar-row-selected: rgba(43, 41, 38, 0.10);
+
+  --syn-keyword: #7e57c2;
+  --syn-function: #4a6ed4;
+  --syn-string: #5e7242;
+  --syn-type: #4a7a76;
+  --syn-constant: #8a7244;
+  --syn-tag: #9e4a3a;
+  --syn-attribute: #8a7244;
+  --syn-comment: #a9a39c;
+
+  --git-modified: #8a7244;
+  --git-added: #5e7242;
+  --git-deleted: #9e4a3a;
+  --git-untracked: #726b63;
+  --git-conflict: #9e4a3a;
+  --git-renamed: #4a7a76;
+
+  color-scheme: light;
+}
+
+/* ══════════════════════════════════════════
+   ADDITIONAL THEMES
+   ══════════════════════════════════════════ */
+
+/* Solarized Dark */
+[data-theme="solarized-dark"] {
+  --bg-window: #002b36;
+  --bg-surface: #073642;
+  --bg-elevated: #0a4050;
+  --bg-panel: #002b36;
+  --bg-title-bar: #073642;
+  --bg-status-bar: #002b36;
+  --bg-tab-bar: #002b36;
+  --bg-tab-active: #073642;
+  --bg-tab-inactive: #002b36;
+  --bg-editor: #002b36;
+  --bg-element: #0a4050;
+  --bg-element-hover: #0d4e60;
+  --bg-element-active: #115c70;
+  --bg-element-selected: #1a6a80;
+  --bg-ghost-hover: #073642;
+  --bg-ghost-selected: #1a6a80;
+  --border-color: #2c4a52;
+  --border-variant: #1e3a42;
+  --border-focused: #268bd2;
+  --border-selected: #2aa198;
+  --text-primary: #93a1a1;
+  --text-muted: #657b83;
+  --text-placeholder: #586e75;
+  --text-disabled: #586e75;
+  --text-accent: #eee8d5;
+  --icon-color: #93a1a1;
+  --icon-muted: #657b83;
+  --color-error: #dc322f;
+  --color-warning: #b58900;
+  --color-success: #859900;
+  --color-info: #268bd2;
+  --editor-line-number: #586e75;
+  --editor-active-line-number: #93a1a1;
+  --editor-active-line: #073642;
+  --sidebar-row-hover: rgba(147, 161, 161, 0.09);
+  --sidebar-row-selected: rgba(147, 161, 161, 0.14);
+  --syn-keyword: #859900;
+  --syn-function: #268bd2;
+  --syn-string: #2aa198;
+  --syn-type: #b58900;
+  --syn-constant: #cb4b16;
+  --syn-tag: #dc322f;
+  --syn-attribute: #b58900;
+  --syn-comment: #586e75;
+  --git-modified: #b58900;
+  --git-added: #859900;
+  --git-deleted: #dc322f;
+  --git-untracked: #657b83;
+  --git-conflict: #dc322f;
+  --git-renamed: #268bd2;
+  color-scheme: dark;
+}
+
+/* Nord */
+[data-theme="nord"] {
+  --bg-window: #2e3440;
+  --bg-surface: #3b4252;
+  --bg-elevated: #434c5e;
+  --bg-panel: #2e3440;
+  --bg-title-bar: #3b4252;
+  --bg-status-bar: #2e3440;
+  --bg-tab-bar: #2e3440;
+  --bg-tab-active: #3b4252;
+  --bg-tab-inactive: #2e3440;
+  --bg-editor: #2e3440;
+  --bg-element: #434c5e;
+  --bg-element-hover: #4c566a;
+  --bg-element-active: #556078;
+  --bg-element-selected: #4c566a;
+  --bg-ghost-hover: #3b4252;
+  --bg-ghost-selected: #4c566a;
+  --border-color: #4c566a;
+  --border-variant: #434c5e;
+  --border-focused: #88c0d0;
+  --border-selected: #5e81ac;
+  --text-primary: #d8dee9;
+  --text-muted: #a0a8b7;
+  --text-placeholder: #616e88;
+  --text-disabled: #616e88;
+  --text-accent: #eceff4;
+  --icon-color: #d8dee9;
+  --icon-muted: #a0a8b7;
+  --color-error: #bf616a;
+  --color-warning: #ebcb8b;
+  --color-success: #a3be8c;
+  --color-info: #88c0d0;
+  --editor-line-number: #616e88;
+  --editor-active-line-number: #d8dee9;
+  --editor-active-line: #3b4252;
+  --sidebar-row-hover: rgba(216, 222, 233, 0.09);
+  --sidebar-row-selected: rgba(216, 222, 233, 0.14);
+  --syn-keyword: #81a1c1;
+  --syn-function: #88c0d0;
+  --syn-string: #a3be8c;
+  --syn-type: #8fbcbb;
+  --syn-constant: #d08770;
+  --syn-tag: #bf616a;
+  --syn-attribute: #ebcb8b;
+  --syn-comment: #616e88;
+  --git-modified: #ebcb8b;
+  --git-added: #a3be8c;
+  --git-deleted: #bf616a;
+  --git-untracked: #a0a8b7;
+  --git-conflict: #bf616a;
+  --git-renamed: #88c0d0;
+  color-scheme: dark;
+}
+
+/* Rosé Pine */
+[data-theme="rose-pine"] {
+  --bg-window: #191724;
+  --bg-surface: #1f1d2e;
+  --bg-elevated: #26233a;
+  --bg-panel: #191724;
+  --bg-title-bar: #1f1d2e;
+  --bg-status-bar: #191724;
+  --bg-tab-bar: #191724;
+  --bg-tab-active: #26233a;
+  --bg-tab-inactive: #191724;
+  --bg-editor: #191724;
+  --bg-element: #26233a;
+  --bg-element-hover: #2a2740;
+  --bg-element-active: #312e48;
+  --bg-element-selected: #393552;
+  --bg-ghost-hover: #26233a;
+  --bg-ghost-selected: #393552;
+  --border-color: #393552;
+  --border-variant: #2a2740;
+  --border-focused: #c4a7e7;
+  --border-selected: #524f67;
+  --text-primary: #e0def4;
+  --text-muted: #908caa;
+  --text-placeholder: #6e6a86;
+  --text-disabled: #6e6a86;
+  --text-accent: #e0def4;
+  --icon-color: #e0def4;
+  --icon-muted: #908caa;
+  --color-error: #eb6f92;
+  --color-warning: #f6c177;
+  --color-success: #31748f;
+  --color-info: #9ccfd8;
+  --editor-line-number: #6e6a86;
+  --editor-active-line-number: #e0def4;
+  --editor-active-line: #26233a;
+  --sidebar-row-hover: rgba(224, 222, 244, 0.09);
+  --sidebar-row-selected: rgba(224, 222, 244, 0.14);
+  --syn-keyword: #c4a7e7;
+  --syn-function: #ebbcba;
+  --syn-string: #f6c177;
+  --syn-type: #9ccfd8;
+  --syn-constant: #eb6f92;
+  --syn-tag: #eb6f92;
+  --syn-attribute: #ebbcba;
+  --syn-comment: #6e6a86;
+  --git-modified: #f6c177;
+  --git-added: #31748f;
+  --git-deleted: #eb6f92;
+  --git-untracked: #908caa;
+  --git-conflict: #eb6f92;
+  --git-renamed: #9ccfd8;
+  color-scheme: dark;
+}

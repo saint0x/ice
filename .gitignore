@@ -1,0 +1,35 @@
+# Dependencies
+frontend/node_modules/
+
+# Build output
+frontend/dist/
+dist/
+src-tauri/target/
+
+# Test artifacts
+.fozzy/
+tests/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Tauri
+src-tauri/WixTools/
+src-tauri/icons/
+
+# TypeScript
+*.tsbuildinfo

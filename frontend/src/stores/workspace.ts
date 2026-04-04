@@ -1,0 +1,179 @@
+import { create } from 'zustand'
+import type { PaneLayout, PaneNode, PaneSplit, PaneId, TabId, Tab, ContentType, ProjectId, SplitDirection } from '@/types'
+
+let _paneCounter = 0
+let _tabCounter = 0
+const nextPaneId = (): PaneId => `pane-${++_paneCounter}`
+const nextTabId = (): TabId => `tab-${++_tabCounter}`
+
+interface WorkspaceState {
+  layout: PaneLayout
+  tabs: Map<TabId, Tab>
+  activePaneId: PaneId
+  sidebarOpen: boolean
+  sidebarWidth: number
+  bottomDockOpen: boolean
+  bottomDockHeight: number
+  chatPanelOpen: boolean
+  chatPanelWidth: number
+
+  openTab: (paneId: PaneId, type: ContentType, title: string, projectId: ProjectId, meta?: Record<string, unknown>) => TabId
+  closeTab: (paneId: PaneId, tabId: TabId) => void
+  activateTab: (paneId: PaneId, tabId: TabId) => void
+  setActivePane: (paneId: PaneId) => void
+  splitPane: (paneId: PaneId, direction: SplitDirection) => void
+  setSidebarOpen: (open: boolean) => void
+  setSidebarWidth: (width: number) => void
+  setBottomDockOpen: (open: boolean) => void
+  setBottomDockHeight: (height: number) => void
+  setChatPanelOpen: (open: boolean) => void
+  setChatPanelWidth: (width: number) => void
+  updateSplitRatio: (splitId: string, ratio: number) => void
+}
+
+const initialPaneId = nextPaneId()
+const welcomeTabId = nextTabId()
+
+const initialTab: Tab = {
+  id: welcomeTabId,
+  projectId: 'proj-1',
+  type: 'editor',
+  title: 'Welcome',
+}
+
+const initialLayout: PaneNode = {
+  id: initialPaneId,
+  type: 'leaf',
+  tabs: [welcomeTabId],
+  activeTabId: welcomeTabId,
+}
+
+function findAndUpdatePane(layout: PaneLayout, paneId: PaneId, updater: (pane: PaneNode) => PaneNode): PaneLayout {
+  if (layout.type === 'leaf') {
+    return layout.id === paneId ? updater(layout) : layout
+  }
+  return {
+    ...layout,
+    children: layout.children.map((child) => findAndUpdatePane(child, paneId, updater)),
+  }
+}
+
+function findAndReplace(layout: PaneLayout, paneId: PaneId, replacer: (pane: PaneNode) => PaneLayout): PaneLayout {
+  if (layout.type === 'leaf') {
+    return layout.id === paneId ? replacer(layout) : layout
+  }
+  return {
+    ...layout,
+    children: layout.children.map((child) => findAndReplace(child, paneId, replacer)),
+  }
+}
+
+function collectPaneIds(layout: PaneLayout): PaneId[] {
+  if (layout.type === 'leaf') return [layout.id]
+  return layout.children.flatMap(collectPaneIds)
+}
+
+function simplifyLayout(layout: PaneLayout): PaneLayout {
+  if (layout.type === 'leaf') return layout
+  const children = layout.children.map(simplifyLayout)
+  if (children.length === 1 && children[0]) return children[0]
+  return { ...layout, children }
+}
+
+function removeEmptyPanes(layout: PaneLayout): PaneLayout | null {
+  if (layout.type === 'leaf') {
+    return layout.tabs.length === 0 ? null : layout
+  }
+  const children = layout.children
+    .map(removeEmptyPanes)
+    .filter((c): c is PaneLayout => c !== null)
+  if (children.length === 0) return null
+  if (children.length === 1 && children[0]) return children[0]
+  return { ...layout, children }
+}
+
+export const useWorkspaceStore = create<WorkspaceState>((set) => ({
+  layout: initialLayout,
+  tabs: new Map([[welcomeTabId, initialTab]]),
+  activePaneId: initialPaneId,
+  sidebarOpen: true,
+  sidebarWidth: 240,
+  bottomDockOpen: true,
+  bottomDockHeight: 240,
+  chatPanelOpen: false,
+  chatPanelWidth: 360,
+
+  openTab: (paneId, type, title, projectId, meta) => {
+    const tabId = nextTabId()
+    const tab: Tab = { id: tabId, projectId, type, title, meta }
+    set((s) => {
+      const tabs = new Map(s.tabs)
+      tabs.set(tabId, tab)
+      const layout = findAndUpdatePane(s.layout, paneId, (pane) => ({
+        ...pane,
+        tabs: [...pane.tabs, tabId],
+        activeTabId: tabId,
+      }))
+      return { tabs, layout, activePaneId: paneId }
+    })
+    return tabId
+  },
+
+  closeTab: (paneId, tabId) =>
+    set((s) => {
+      const tabs = new Map(s.tabs)
+      tabs.delete(tabId)
+      let layout = findAndUpdatePane(s.layout, paneId, (pane) => {
+        const newTabs = pane.tabs.filter((t) => t !== tabId)
+        const activeTabId = pane.activeTabId === tabId ? (newTabs[newTabs.length - 1] ?? null) : pane.activeTabId
+        return { ...pane, tabs: newTabs, activeTabId }
+      })
+      const cleaned = removeEmptyPanes(layout)
+      if (cleaned) layout = simplifyLayout(cleaned)
+      else {
+        const fallback = nextPaneId()
+        layout = { id: fallback, type: 'leaf', tabs: [], activeTabId: null }
+      }
+      const paneIds = collectPaneIds(layout)
+      const activePaneId = paneIds.includes(s.activePaneId) ? s.activePaneId : paneIds[0]
+      return { tabs, layout, activePaneId }
+    }),
+
+  activateTab: (paneId, tabId) =>
+    set((s) => ({
+      layout: findAndUpdatePane(s.layout, paneId, (pane) => ({ ...pane, activeTabId: tabId })),
+      activePaneId: paneId,
+    })),
+
+  setActivePane: (paneId) => set({ activePaneId: paneId }),
+
+  splitPane: (paneId, direction) =>
+    set((s) => {
+      const newPaneId = nextPaneId()
+      const layout = findAndReplace(s.layout, paneId, (pane): PaneSplit => ({
+        id: `split-${pane.id}-${newPaneId}`,
+        type: 'split',
+        direction,
+        children: [pane, { id: newPaneId, type: 'leaf', tabs: [], activeTabId: null }],
+        ratio: 0.5,
+      }))
+      return { layout }
+    }),
+
+  setSidebarOpen: (open) => set({ sidebarOpen: open }),
+  setSidebarWidth: (width) => set({ sidebarWidth: Math.max(180, Math.min(400, width)) }),
+  setBottomDockOpen: (open) => set({ bottomDockOpen: open }),
+  setBottomDockHeight: (height) => set({ bottomDockHeight: Math.max(100, Math.min(600, height)) }),
+  setChatPanelOpen: (open) => set({ chatPanelOpen: open }),
+  setChatPanelWidth: (width) => set({ chatPanelWidth: Math.max(280, Math.min(520, width)) }),
+
+  updateSplitRatio: (splitId, ratio) =>
+    set((s) => {
+      function update(layout: PaneLayout): PaneLayout {
+        if (layout.type === 'leaf') return layout
+        if (layout.id === splitId) return { ...layout, ratio: Math.max(0.15, Math.min(0.85, ratio)) }
+        return { ...layout, children: layout.children.map(update) }
+      }
+      return { layout: update(s.layout) }
+    }),
+}))

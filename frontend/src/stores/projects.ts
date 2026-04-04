@@ -1,0 +1,93 @@
+import { create } from 'zustand'
+import type { Project, ProjectId, SidebarSection } from '@/types'
+
+interface ProjectsState {
+  projects: Map<ProjectId, Project>
+  projectOrder: ProjectId[]
+  activeProjectId: ProjectId | null
+
+  addProject: (project: Project) => void
+  removeProject: (id: ProjectId) => void
+  setActiveProject: (id: ProjectId) => void
+  reorderProjects: (order: ProjectId[]) => void
+  toggleSection: (projectId: ProjectId, section: SidebarSection) => void
+  toggleProjectCollapsed: (id: ProjectId) => void
+  updateProject: (id: ProjectId, patch: Partial<Project>) => void
+}
+
+const DEMO_PROJECTS: Project[] = [
+  {
+    id: 'proj-1',
+    name: 'ice',
+    path: '/Users/deepsaint/Desktop/ice',
+    color: '#7c9bf7',
+    branch: 'main',
+    collapsed: false,
+    expandedSections: new Set(['files'] as SidebarSection[]),
+  },
+  {
+    id: 'proj-2',
+    name: 'glass',
+    path: '/Users/deepsaint/Desktop/Glass',
+    color: '#66bb6a',
+    branch: 'dev',
+    collapsed: false,
+    expandedSections: new Set(['files'] as SidebarSection[]),
+  },
+]
+
+export const useProjectsStore = create<ProjectsState>((set) => ({
+  projects: new Map(DEMO_PROJECTS.map((p) => [p.id, p])),
+  projectOrder: DEMO_PROJECTS.map((p) => p.id),
+  activeProjectId: DEMO_PROJECTS[0]?.id ?? null,
+
+  addProject: (project) =>
+    set((s) => {
+      const projects = new Map(s.projects)
+      projects.set(project.id, project)
+      return { projects, projectOrder: [...s.projectOrder, project.id] }
+    }),
+
+  removeProject: (id) =>
+    set((s) => {
+      const projects = new Map(s.projects)
+      projects.delete(id)
+      const projectOrder = s.projectOrder.filter((pid) => pid !== id)
+      const activeProjectId = s.activeProjectId === id ? projectOrder[0] ?? null : s.activeProjectId
+      return { projects, projectOrder, activeProjectId }
+    }),
+
+  setActiveProject: (id) => set({ activeProjectId: id }),
+
+  reorderProjects: (order) => set({ projectOrder: order }),
+
+  toggleProjectCollapsed: (id) =>
+    set((s) => {
+      const projects = new Map(s.projects)
+      const project = projects.get(id)
+      if (!project) return s
+      projects.set(id, { ...project, collapsed: !project.collapsed })
+      return { projects }
+    }),
+
+  toggleSection: (projectId, section) =>
+    set((s) => {
+      const projects = new Map(s.projects)
+      const project = projects.get(projectId)
+      if (!project) return s
+      const expanded = new Set(project.expandedSections)
+      if (expanded.has(section)) expanded.delete(section)
+      else expanded.add(section)
+      projects.set(projectId, { ...project, expandedSections: expanded })
+      return { projects }
+    }),
+
+  updateProject: (id, patch) =>
+    set((s) => {
+      const projects = new Map(s.projects)
+      const project = projects.get(id)
+      if (!project) return s
+      projects.set(id, { ...project, ...patch })
+      return { projects }
+    }),
+}))

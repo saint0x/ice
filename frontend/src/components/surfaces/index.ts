@@ -1,0 +1,5 @@
+export { EditorSurface } from './EditorSurface'
+export { BrowserSurface } from './BrowserSurface'
+export { TerminalSurface } from './TerminalSurface'
+export { GitSurface } from './GitSurface'
+export { CodexSurface } from './CodexSurface'

@@ -1,0 +1,32 @@
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+  min-width: var(--sidebar-min-width);
+  max-width: var(--sidebar-max-width);
+}
+
+.content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--sidebar-card-padding);
+}
+
+.resizeHandle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--resize-handle);
+  cursor: ew-resize;
+  z-index: 10;
+}
+
+.resizeHandle:hover {
+  background: var(--border-focused);
+  opacity: 0.2;
+}

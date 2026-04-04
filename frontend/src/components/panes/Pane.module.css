@@ -1,0 +1,141 @@
+.pane {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: var(--bg-surface);
+  overflow: hidden;
+}
+
+.pane.active {
+  outline: 1px solid var(--border-color);
+  outline-offset: -1px;
+}
+
+.tabBar {
+  display: flex;
+  align-items: center;
+  height: var(--tab-height);
+  background: var(--bg-window);
+  border-bottom: 1px solid var(--border-variant);
+  flex-shrink: 0;
+  padding-right: var(--sp-2);
+}
+
+.tabs {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  gap: 1px;
+  padding-left: var(--sp-2);
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: 28px;
+  padding: 0 var(--sp-3);
+  padding-right: var(--sp-2);
+  border-radius: var(--radius-tab) var(--radius-tab) 0 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.tab:hover {
+  background: var(--bg-ghost-hover);
+  color: var(--text-muted);
+}
+
+.tab.activeTab {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.tabTitle {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dirty {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-accent);
+  flex-shrink: 0;
+}
+
+.tabClose {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  color: var(--text-disabled);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.tab:hover .tabClose {
+  opacity: 1;
+}
+
+.tabClose:hover {
+  background: var(--bg-element-active);
+  color: var(--text-primary);
+}
+
+.splitBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-button);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.splitBtn:hover {
+  background: var(--bg-ghost-hover);
+  color: var(--text-muted);
+}
+
+.content {
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: var(--sp-2);
+}
+
+.emptyText {
+  color: var(--text-disabled);
+  font-size: var(--text-sm);
+}
+
+.emptyHint {
+  color: var(--text-disabled);
+  font-size: var(--text-xs);
+  opacity: 0.6;
+}

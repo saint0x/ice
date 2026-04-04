@@ -1,0 +1,173 @@
+/* Glass DockButtonBar card */
+.card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-variant);
+  border-radius: var(--radius-panel);
+  overflow: hidden;
+  margin-bottom: var(--sidebar-card-gap);
+  padding: var(--sidebar-card-padding);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sidebar-card-gap);
+}
+
+.card.active {
+  border-color: var(--border-color);
+}
+
+/* ── Project picker row ── */
+.projectRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sidebar-row-gap);
+  width: 100%;
+  height: var(--sidebar-row-height);
+  padding: 0 var(--sidebar-row-px);
+  border-radius: var(--radius-tab);
+  text-align: left;
+  transition: background var(--transition-fast);
+}
+
+.projectRow:hover {
+  background: var(--sidebar-row-hover);
+}
+
+.projectIcon {
+  flex-shrink: 0;
+  color: var(--icon-muted);
+}
+
+.projectName {
+  flex: 1;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branchPill {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: var(--radius-button);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  max-width: 9.5rem;
+  flex-shrink: 0;
+}
+
+.branchLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collapseIcon {
+  flex-shrink: 0;
+  color: var(--icon-muted);
+}
+
+/* ── Divider ── */
+.divider {
+  height: 1px;
+  background: var(--border-variant);
+  margin: 0 var(--sidebar-row-px);
+}
+
+/* ── Section rows (Glass SidebarRow) ── */
+.sectionRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sidebar-row-gap);
+  width: 100%;
+  height: var(--sidebar-row-height);
+  padding: 0 var(--sidebar-row-px);
+  border-radius: var(--radius-tab);
+  text-align: left;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.sectionRow:hover {
+  background: var(--sidebar-row-hover);
+  color: var(--text-primary);
+}
+
+.sectionRow.selected {
+  background: var(--sidebar-row-selected);
+  color: var(--text-primary);
+}
+
+.sectionLabel {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  font-size: 10px;
+  font-weight: var(--weight-medium);
+  color: var(--text-muted);
+  background: var(--bg-element);
+  padding: 0 5px;
+  border-radius: 8px;
+  min-width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* ── Quick action buttons (Glass supplementary row) ── */
+.actionRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--sidebar-row-height);
+  gap: var(--sidebar-card-gap);
+}
+
+.actionBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-button);
+  color: var(--icon-muted);
+  position: relative;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.actionBtn:hover {
+  background: var(--sidebar-row-hover);
+  color: var(--icon-color);
+}
+
+.actionDot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--color-info);
+}
+
+/* ── Section content ── */
+.sectionContent {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.placeholder {
+  padding: var(--sp-3) var(--sidebar-row-px);
+  font-size: var(--text-xs);
+  color: var(--text-disabled);
+}
