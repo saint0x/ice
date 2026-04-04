@@ -164,6 +164,8 @@ pub struct TerminalCreateInput {
     pub title: Option<String>,
     pub cols: Option<u16>,
     pub rows: Option<u16>,
+    pub startup_command: Option<String>,
+    pub env_overrides: Option<std::collections::HashMap<String, String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -186,6 +188,12 @@ pub struct TerminalResizeInput {
 pub struct TerminalRenameInput {
     pub session_id: String,
     pub title: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalScrollbackInput {
+    pub session_id: String,
 }
 
 #[derive(Debug, Deserialize)]

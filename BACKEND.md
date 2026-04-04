@@ -31,11 +31,8 @@ Rules for this checklist:
 
 ### Terminal
 
-- [ ] Add terminal output buffering and scrollback persistence strategy.
-- [ ] Add per-session environment overrides and startup command support.
-- [ ] Add restore semantics that distinguish persisted metadata from respawnable sessions.
-- [ ] Add stronger PTY lifecycle management for app shutdown and crash recovery.
-- [ ] Add shell exit codes and richer session diagnostics into emitted events.
+- [ ] Add terminal event schema docs for the frontend, including `sessionCreated`, `data`, `sessionExited`, `sessionReadError`, and `sessionClosed`.
+- [ ] Decide whether richer terminal-native UI protocol support should stay behind the current PTY contract or move to a dedicated Ghostty/libghostty bridge later.
 
 ### Codex / Agent Runtime
 
@@ -56,7 +53,7 @@ Rules for this checklist:
 
 ### Testing / Release
 
-- [ ] Expand Fozzy scenarios further into git mutation, terminal lifecycle, browser navigation, and Codex recovery flows.
+- [ ] Expand Fozzy scenarios further into git mutation, browser navigation, and Codex recovery flows.
 - [ ] Add host-backed Fozzy coverage for the new git and filesystem mutation commands.
 - [ ] Add startup smoke tests that assert canonical storage under `~/.ice`.
 - [ ] Add release packaging checks for Tauri bundles once the frontend wiring is complete.
@@ -112,6 +109,8 @@ Rules for this checklist:
 - ✅ Terminal sessions emit stream events through `app://terminal`.
 - ✅ Terminal resize, write, close, list, and rename commands are implemented.
 - ✅ Terminal project cleanup removes both live handles and persisted metadata.
+- ✅ Terminal sessions now persist bounded scrollback, startup commands, environment overrides, restore state, and exit diagnostics in [service.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/terminal/service.rs) and [db.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/persistence/db.rs).
+- ✅ Terminal sessions can now be respawned from persisted metadata, and app shutdown / crash recovery marks live sessions as restorable instead of leaving ghost running state.
 
 ### Codex / Agent Runtime
 
@@ -159,3 +158,4 @@ Rules for this checklist:
 - ✅ Persistence tests cover workspace, browser tab/history, terminal session, Codex thread, approval, and config storage in [db.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/persistence/db.rs).
 - ✅ Fozzy coverage exists with [backend.production_gate.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.production_gate.fozzy.json) and [backend.topology.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.topology.fozzy.json).
 - ✅ Feature-focused Fozzy scenarios now exist for approval policy and FS/editor contracts in [backend.approval_policy.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.approval_policy.fozzy.json) and [backend.fs_editor.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.fs_editor.fozzy.json).
+- ✅ Feature-focused Fozzy coverage now also exists for terminal lifecycle and persistence contracts in [backend.terminal_lifecycle.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.terminal_lifecycle.fozzy.json).

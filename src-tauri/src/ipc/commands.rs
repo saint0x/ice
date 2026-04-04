@@ -529,6 +529,8 @@ pub async fn terminal_create(
             input.title,
             input.cols.unwrap_or(120),
             input.rows.unwrap_or(32),
+            input.startup_command,
+            input.env_overrides,
         )
         .await?)
 }
@@ -580,6 +582,22 @@ pub async fn terminal_list(
     state: State<'_, AppState>,
 ) -> Result<Vec<crate::terminal::service::TerminalSessionRecord>, AppError> {
     Ok(state.terminal.list(project_id.as_deref()).await)
+}
+
+#[tauri::command]
+pub async fn terminal_scrollback_read(
+    input: TerminalScrollbackInput,
+    state: State<'_, AppState>,
+) -> Result<crate::terminal::service::TerminalScrollbackRecord, AppError> {
+    Ok(state.terminal.scrollback(&input.session_id).await?)
+}
+
+#[tauri::command]
+pub async fn terminal_respawn(
+    session_id: String,
+    state: State<'_, AppState>,
+) -> Result<crate::terminal::service::TerminalSessionRecord, AppError> {
+    Ok(state.terminal.respawn(&session_id).await?)
 }
 
 #[tauri::command]

@@ -1,6 +1,7 @@
 use anyhow::Result;
 use rusqlite::{params, types::Type, Connection, OptionalExtension};
 use serde_json::Value;
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use crate::browser::service::{BrowserHistoryEntry, BrowserTabRecord};
@@ -83,11 +84,24 @@ impl PersistenceService {
               project_id TEXT NOT NULL,
               cwd TEXT NOT NULL,
               shell TEXT NOT NULL,
+              shell_path TEXT NOT NULL DEFAULT '',
               title TEXT NOT NULL,
               cols INTEGER NOT NULL,
               rows INTEGER NOT NULL,
               is_running INTEGER NOT NULL,
+              startup_command TEXT,
+              env_json TEXT,
+              restored_from_persistence INTEGER NOT NULL DEFAULT 0,
+              last_exit_code INTEGER,
+              last_exit_signal TEXT,
+              last_exit_reason TEXT,
+              scrollback_bytes INTEGER NOT NULL DEFAULT 0,
               created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS terminal_scrollback (
+              session_id TEXT PRIMARY KEY,
+              content TEXT NOT NULL,
               updated_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS app_config (
@@ -149,6 +163,38 @@ impl PersistenceService {
         add_column_if_missing(
             &conn,
             "ALTER TABLE codex_approvals ADD COLUMN policy_reason TEXT",
+        )?;
+        add_column_if_missing(
+            &conn,
+            "ALTER TABLE terminal_sessions ADD COLUMN shell_path TEXT NOT NULL DEFAULT ''",
+        )?;
+        add_column_if_missing(
+            &conn,
+            "ALTER TABLE terminal_sessions ADD COLUMN startup_command TEXT",
+        )?;
+        add_column_if_missing(
+            &conn,
+            "ALTER TABLE terminal_sessions ADD COLUMN env_json TEXT",
+        )?;
+        add_column_if_missing(
+            &conn,
+            "ALTER TABLE terminal_sessions ADD COLUMN restored_from_persistence INTEGER NOT NULL DEFAULT 0",
+        )?;
+        add_column_if_missing(
+            &conn,
+            "ALTER TABLE terminal_sessions ADD COLUMN last_exit_code INTEGER",
+        )?;
+        add_column_if_missing(
+            &conn,
+            "ALTER TABLE terminal_sessions ADD COLUMN last_exit_signal TEXT",
+        )?;
+        add_column_if_missing(
+            &conn,
+            "ALTER TABLE terminal_sessions ADD COLUMN last_exit_reason TEXT",
+        )?;
+        add_column_if_missing(
+            &conn,
+            "ALTER TABLE terminal_sessions ADD COLUMN scrollback_bytes INTEGER NOT NULL DEFAULT 0",
         )?;
         Ok(())
     }
@@ -521,54 +567,151 @@ impl PersistenceService {
         let conn = self.connect()?;
         let mut stmt = conn.prepare(
             "
-            SELECT session_id, project_id, cwd, shell, title, cols, rows, is_running
+            SELECT
+              session_id,
+              project_id,
+              cwd,
+              shell,
+              COALESCE(NULLIF(shell_path, ''), shell),
+              title,
+              cols,
+              rows,
+              is_running,
+              startup_command,
+              env_json,
+              restored_from_persistence,
+              last_exit_code,
+              last_exit_signal,
+              last_exit_reason,
+              scrollback_bytes
             FROM terminal_sessions
             ORDER BY updated_at DESC
             ",
         )?;
         let rows = stmt.query_map([], |row| {
+            let env_json: Option<String> = row.get(10)?;
             Ok(TerminalSessionRecord {
                 session_id: row.get(0)?,
                 project_id: row.get(1)?,
                 cwd: row.get(2)?,
                 shell: row.get(3)?,
-                title: row.get(4)?,
-                cols: row.get(5)?,
-                rows: row.get(6)?,
-                is_running: row.get::<_, i64>(7)? != 0,
+                shell_path: row.get(4)?,
+                title: row.get(5)?,
+                cols: row.get(6)?,
+                rows: row.get(7)?,
+                is_running: row.get::<_, i64>(8)? != 0,
+                startup_command: row.get(9)?,
+                env_overrides: env_json
+                    .map(|value| serde_json::from_str(&value))
+                    .transpose()
+                    .map_err(|error| {
+                        rusqlite::Error::FromSqlConversionFailure(10, Type::Text, Box::new(error))
+                    })?,
+                restored_from_persistence: row.get::<_, i64>(11)? != 0,
+                last_exit_code: row.get(12)?,
+                last_exit_signal: row.get(13)?,
+                last_exit_reason: row.get(14)?,
+                scrollback_bytes: row.get::<_, i64>(15)? as usize,
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
+    pub fn upsert_terminal_session_sync(&self, session: &TerminalSessionRecord) -> Result<()> {
+        let conn = self.connect()?;
+        conn.execute(
+            "
+            INSERT INTO terminal_sessions (
+              session_id, project_id, cwd, shell, shell_path, title, cols, rows, is_running,
+              startup_command, env_json, restored_from_persistence, last_exit_code,
+              last_exit_signal, last_exit_reason, scrollback_bytes, created_at, updated_at
+            )
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, datetime('now'), datetime('now'))
+            ON CONFLICT(session_id) DO UPDATE SET
+              project_id = excluded.project_id,
+              cwd = excluded.cwd,
+              shell = excluded.shell,
+              shell_path = excluded.shell_path,
+              title = excluded.title,
+              cols = excluded.cols,
+              rows = excluded.rows,
+              is_running = excluded.is_running,
+              startup_command = excluded.startup_command,
+              env_json = excluded.env_json,
+              restored_from_persistence = excluded.restored_from_persistence,
+              last_exit_code = excluded.last_exit_code,
+              last_exit_signal = excluded.last_exit_signal,
+              last_exit_reason = excluded.last_exit_reason,
+              scrollback_bytes = excluded.scrollback_bytes,
+              updated_at = excluded.updated_at
+            ",
+            params![
+                session.session_id,
+                session.project_id,
+                session.cwd,
+                session.shell,
+                session.shell_path,
+                session.title,
+                session.cols,
+                session.rows,
+                session.is_running as i64,
+                session.startup_command,
+                session
+                    .env_overrides
+                    .as_ref()
+                    .map(serde_json::to_string)
+                    .transpose()?,
+                session.restored_from_persistence as i64,
+                session.last_exit_code,
+                session.last_exit_signal,
+                session.last_exit_reason,
+                session.scrollback_bytes as i64
+            ],
+        )?;
+        Ok(())
+    }
+
     pub async fn upsert_terminal_session(&self, session: TerminalSessionRecord) -> Result<()> {
+        let this = self.clone();
+        tokio::task::spawn_blocking(move || -> Result<()> {
+            this.upsert_terminal_session_sync(&session)
+        })
+        .await??;
+        Ok(())
+    }
+
+    pub fn load_terminal_scrollback_sync(&self) -> Result<HashMap<String, String>> {
+        let conn = self.connect()?;
+        let mut stmt = conn.prepare(
+            "
+            SELECT session_id, content
+            FROM terminal_scrollback
+            ORDER BY updated_at DESC
+            ",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+        Ok(rows.collect::<rusqlite::Result<HashMap<_, _>>>()?)
+    }
+
+    pub async fn upsert_terminal_scrollback(
+        &self,
+        session_id: String,
+        content: String,
+    ) -> Result<()> {
         let this = self.clone();
         tokio::task::spawn_blocking(move || -> Result<()> {
             let conn = this.connect()?;
             conn.execute(
                 "
-                INSERT INTO terminal_sessions (session_id, project_id, cwd, shell, title, cols, rows, is_running, created_at, updated_at)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, datetime('now'), datetime('now'))
+                INSERT INTO terminal_scrollback (session_id, content, updated_at)
+                VALUES (?1, ?2, datetime('now'))
                 ON CONFLICT(session_id) DO UPDATE SET
-                  project_id = excluded.project_id,
-                  cwd = excluded.cwd,
-                  shell = excluded.shell,
-                  title = excluded.title,
-                  cols = excluded.cols,
-                  rows = excluded.rows,
-                  is_running = excluded.is_running,
+                  content = excluded.content,
                   updated_at = excluded.updated_at
                 ",
-                params![
-                    session.session_id,
-                    session.project_id,
-                    session.cwd,
-                    session.shell,
-                    session.title,
-                    session.cols,
-                    session.rows,
-                    session.is_running as i64
-                ],
+                params![session_id, content],
             )?;
             Ok(())
         })
@@ -590,12 +733,43 @@ impl PersistenceService {
         Ok(())
     }
 
+    pub async fn delete_terminal_scrollback(&self, session_id: String) -> Result<()> {
+        let this = self.clone();
+        tokio::task::spawn_blocking(move || -> Result<()> {
+            let conn = this.connect()?;
+            conn.execute(
+                "DELETE FROM terminal_scrollback WHERE session_id = ?1",
+                params![session_id],
+            )?;
+            Ok(())
+        })
+        .await??;
+        Ok(())
+    }
+
     pub async fn delete_terminal_sessions_for_project(&self, project_id: String) -> Result<()> {
         let this = self.clone();
         tokio::task::spawn_blocking(move || -> Result<()> {
             let conn = this.connect()?;
             conn.execute(
                 "DELETE FROM terminal_sessions WHERE project_id = ?1",
+                params![project_id],
+            )?;
+            Ok(())
+        })
+        .await??;
+        Ok(())
+    }
+
+    pub async fn delete_terminal_scrollback_for_project(&self, project_id: String) -> Result<()> {
+        let this = self.clone();
+        tokio::task::spawn_blocking(move || -> Result<()> {
+            let conn = this.connect()?;
+            conn.execute(
+                "
+                DELETE FROM terminal_scrollback
+                WHERE session_id IN (SELECT session_id FROM terminal_sessions WHERE project_id = ?1)
+                ",
                 params![project_id],
             )?;
             Ok(())
@@ -877,6 +1051,7 @@ mod tests {
         WorkspacePaneNode, WorkspaceSessionState, WorkspaceSplitNode, WorkspaceTabRecord,
     };
     use serde_json::json;
+    use std::collections::HashMap;
     use tempfile::tempdir;
 
     #[tokio::test]
@@ -971,17 +1146,37 @@ mod tests {
             project_id: "project-a".to_string(),
             cwd: "/tmp/project-a".to_string(),
             shell: "zsh".to_string(),
+            shell_path: "/bin/zsh".to_string(),
             title: "Terminal".to_string(),
             cols: 120,
             rows: 40,
             is_running: false,
+            startup_command: Some("pnpm dev".to_string()),
+            env_overrides: Some(HashMap::from([(
+                "NODE_ENV".to_string(),
+                "development".to_string(),
+            )])),
+            restored_from_persistence: true,
+            last_exit_code: Some(0),
+            last_exit_signal: None,
+            last_exit_reason: Some("process_exit".to_string()),
+            scrollback_bytes: 11,
         };
         db.upsert_terminal_session(session.clone())
             .await
             .expect("terminal write");
+        db.upsert_terminal_scrollback("term-1".to_string(), "hello world".to_string())
+            .await
+            .expect("terminal scrollback write");
         assert_eq!(
             db.load_terminal_sessions_sync().expect("terminal read"),
             vec![session]
+        );
+        assert_eq!(
+            db.load_terminal_scrollback_sync()
+                .expect("terminal scrollback read")
+                .get("term-1"),
+            Some(&"hello world".to_string())
         );
 
         let thread = CodexThreadBinding {

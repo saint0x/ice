@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "name": "backend-terminal-lifecycle",
+  "steps": [
+    {
+      "type": "trace_event",
+      "name": "verify_terminal_lifecycle_contract",
+      "fields": {
+        "target": "src-tauri/terminal+persistence"
+      }
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test terminal::service::tests::trims_scrollback_to_bounded_size -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test terminal::service::tests::trims_scrollback_to_bounded_size -- --exact"
+      ],
+      "expect_exit": 0
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test persistence::db::tests::persists_workspace_browser_terminal_codex_and_config_state -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test persistence::db::tests::persists_workspace_browser_terminal_codex_and_config_state -- --exact"
+      ],
+      "expect_exit": 0
+    }
+  ]
+}

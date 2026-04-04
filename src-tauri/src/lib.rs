@@ -12,13 +12,14 @@ mod terminal;
 mod workspace;
 
 use app::startup::build_state;
+use app::state::AppState;
 use ipc::commands;
-use tauri::Manager;
+use tauri::{Manager, RunEvent};
 
 pub fn run() {
     diagnostics::init_tracing();
 
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .setup(|app| {
             let state = build_state(app.handle().clone())?;
             app.manage(state);
@@ -75,6 +76,8 @@ pub fn run() {
             commands::terminal_close,
             commands::terminal_rename,
             commands::terminal_list,
+            commands::terminal_scrollback_read,
+            commands::terminal_respawn,
             commands::codex_status,
             commands::codex_models_list,
             commands::codex_auth_read,
@@ -89,6 +92,14 @@ pub fn run() {
             commands::codex_approvals_list,
             commands::approval_audit_list
         ])
-        .run(tauri::generate_context!())
-        .expect("failed to run tauri app");
+        .build(tauri::generate_context!())
+        .expect("failed to build tauri app");
+
+    app.run(|app_handle, event| {
+        if matches!(event, RunEvent::ExitRequested { .. } | RunEvent::Exit) {
+            if let Some(state) = app_handle.try_state::<AppState>() {
+                let _ = tauri::async_runtime::block_on(state.terminal.shutdown());
+            }
+        }
+    });
 }

@@ -45,6 +45,8 @@ Rules for this checklist:
 
 - [ ] Replace the demo xterm banner with live PTY data from backend terminal events in [TerminalSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/TerminalSurface.tsx).
 - [ ] Wire terminal create / rename / close / resize / write flows to backend IPC.
+- [ ] Bind terminal tabs to backend `terminal_scrollback_read` plus live `app://terminal` events so restored sessions render persisted output before new PTY data arrives.
+- [ ] Use backend `terminal_respawn` for restored stopped sessions instead of inventing new local terminal ids.
 - [ ] Keep the bottom dock session model synced to backend session persistence.
 
 ### Codex / Agent UX
