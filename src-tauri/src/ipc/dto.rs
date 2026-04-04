@@ -24,6 +24,12 @@ pub struct AddProjectInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ReorderProjectsInput {
+    pub project_ids: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ReadTreeInput {
     pub project_id: String,
     pub path: Option<String>,

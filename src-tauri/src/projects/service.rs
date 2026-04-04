@@ -66,6 +66,7 @@ impl ProjectService {
         let cloned = record.clone();
         let _ = db;
         tokio::task::spawn_blocking(move || persistence.insert_project_sync(&cloned)).await??;
+        self.append_project_order(record.id.clone()).await?;
 
         Ok(record)
     }
@@ -77,8 +78,34 @@ impl ProjectService {
         self.codex.remove_project_threads(&project_id).await?;
         self.security.remove_project_approvals(&project_id).await?;
         let persistence = self.persistence.clone();
-        tokio::task::spawn_blocking(move || persistence.delete_project_sync(&project_id)).await??;
+        let delete_project_id = project_id.clone();
+        tokio::task::spawn_blocking(move || persistence.delete_project_sync(&delete_project_id))
+            .await??;
+        self.remove_project_order(&project_id).await?;
         Ok(())
+    }
+
+    pub async fn reorder_projects(&self, project_ids: Vec<String>) -> Result<()> {
+        let existing = self
+            .list_project_records_unsorted()
+            .await?
+            .into_iter()
+            .map(|project| project.id)
+            .collect::<Vec<_>>();
+        for project_id in &project_ids {
+            if !existing.iter().any(|existing_id| existing_id == project_id) {
+                return Err(anyhow!("unknown project {project_id}"));
+            }
+        }
+        let mut order = project_ids;
+        for project_id in existing {
+            if !order.iter().any(|candidate| candidate == &project_id) {
+                order.push(project_id);
+            }
+        }
+        self.persistence
+            .config_set("projects.order".to_string(), serde_json::json!(order))
+            .await
     }
 
     pub async fn list_projects(&self) -> Result<Vec<ProjectSummary>> {
@@ -117,8 +144,47 @@ impl ProjectService {
     }
 
     async fn list_project_records(&self) -> Result<Vec<ProjectRecord>> {
+        let records = self.list_project_records_unsorted().await?;
+        let stored_order = self
+            .persistence
+            .config_get("projects.order")
+            .await?
+            .and_then(|value| serde_json::from_value::<Vec<String>>(value).ok())
+            .unwrap_or_default();
+        Ok(order_projects(records, &stored_order))
+    }
+
+    async fn list_project_records_unsorted(&self) -> Result<Vec<ProjectRecord>> {
         let persistence = self.persistence.clone();
         tokio::task::spawn_blocking(move || persistence.load_projects_sync()).await?
+    }
+
+    async fn append_project_order(&self, project_id: String) -> Result<()> {
+        let mut order = self
+            .persistence
+            .config_get("projects.order")
+            .await?
+            .and_then(|value| serde_json::from_value::<Vec<String>>(value).ok())
+            .unwrap_or_default();
+        if !order.iter().any(|candidate| candidate == &project_id) {
+            order.push(project_id);
+        }
+        self.persistence
+            .config_set("projects.order".to_string(), serde_json::json!(order))
+            .await
+    }
+
+    async fn remove_project_order(&self, project_id: &str) -> Result<()> {
+        let mut order = self
+            .persistence
+            .config_get("projects.order")
+            .await?
+            .and_then(|value| serde_json::from_value::<Vec<String>>(value).ok())
+            .unwrap_or_default();
+        order.retain(|candidate| candidate != project_id);
+        self.persistence
+            .config_set("projects.order".to_string(), serde_json::json!(order))
+            .await
     }
 }
 
@@ -126,4 +192,20 @@ fn color_from_name(name: &str) -> String {
     let palette = ["blue", "green", "amber", "red", "teal", "indigo"];
     let idx = name.bytes().fold(0usize, |acc, value| acc + value as usize) % palette.len();
     palette[idx].to_string()
+}
+
+fn order_projects(mut records: Vec<ProjectRecord>, stored_order: &[String]) -> Vec<ProjectRecord> {
+    let mut ranking = stored_order
+        .iter()
+        .enumerate()
+        .map(|(index, project_id)| (project_id.clone(), index))
+        .collect::<std::collections::HashMap<_, _>>();
+    let fallback_rank = ranking.len();
+    records.sort_by_key(|project| {
+        (
+            ranking.remove(&project.id).unwrap_or(fallback_rank),
+            project.last_opened_at.clone(),
+        )
+    });
+    records
 }

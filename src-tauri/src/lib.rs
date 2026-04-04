@@ -31,6 +31,7 @@ pub fn run() {
             commands::project_add,
             commands::project_remove,
             commands::project_list,
+            commands::project_reorder,
             commands::project_tree_read,
             commands::file_read_text,
             commands::file_write_text,

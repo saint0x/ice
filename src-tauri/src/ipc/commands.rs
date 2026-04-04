@@ -58,6 +58,15 @@ pub async fn project_list(
 }
 
 #[tauri::command]
+pub async fn project_reorder(
+    input: ReorderProjectsInput,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    state.projects.reorder_projects(input.project_ids).await?;
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn project_tree_read(
     input: ReadTreeInput,
     state: State<'_, AppState>,
