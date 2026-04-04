@@ -100,6 +100,7 @@ Rules for this checklist:
 - ✅ Renderer-facing browser sync commands now exist for pinning, tab metadata updates, and open-external requests without hard-coding a specific browser engine into the backend contract.
 - ✅ Browser renderer bridge commands now exist for renderer attach/detach, renderer session lookup, find-in-page requests/results, and download requests without coupling the rest of the backend to a specific native browser implementation.
 - ✅ Project-level browser restore policy now exists as backend state, with canonical per-project get/set commands under the project service.
+- ✅ The current frontend now uses the browser renderer bridge for a pane-hosted renderer host, attaching/detaching sessions and syncing renderer state back through backend browser IPC.
 
 ### Terminal
 

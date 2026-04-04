@@ -1,7 +1,17 @@
-import { memo, useState } from 'react'
-import { ArrowLeft, ArrowRight, RotateCw, Lock, Globe } from 'lucide-react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowLeft, ArrowRight, RotateCw, Lock, Globe, ExternalLink } from 'lucide-react'
 import type { Tab } from '@/types'
-import { browserTabBack, browserTabForward, browserTabNavigate, browserTabReload, toBrowserTab } from '@/lib/backend'
+import {
+  browserRendererAttach,
+  browserRendererDetach,
+  browserTabBack,
+  browserTabForward,
+  browserTabNavigate,
+  browserTabOpenExternal,
+  browserTabReload,
+  browserTabRendererStateSet,
+  toBrowserTab,
+} from '@/lib/backend'
 import { useBrowserStore } from '@/stores/browser'
 import styles from './BrowserSurface.module.css'
 
@@ -14,9 +24,21 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
   const browserTab = useBrowserStore((s) => browserTabId ? s.tabs.get(browserTabId) : undefined)
   const upsertBrowserTab = useBrowserStore((s) => s.upsertTab)
   const [draftUrl, setDraftUrl] = useState<string | null>(null)
+  const iframeRef = useRef<HTMLIFrameElement>(null)
 
-  const secure = browserTab?.isSecure ?? false
+  const rendererId = useMemo(() => (
+    browserTabId ? `renderer-${browserTabId}` : undefined
+  ), [browserTabId])
+
   const url = draftUrl ?? browserTab?.url ?? (tab.meta?.url as string) ?? 'https://example.com'
+
+  useEffect(() => {
+    if (!browserTabId || !rendererId) return
+    void browserRendererAttach(browserTabId, rendererId, tab.id)
+    return () => {
+      void browserRendererDetach(browserTabId)
+    }
+  }, [browserTabId, rendererId, tab.id])
 
   return (
     <div className={styles.surface}>
@@ -54,9 +76,21 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
           >
             <RotateCw size={13} />
           </button>
+          <button
+            className={styles.navBtn}
+            aria-label="Open in external browser"
+            onClick={() => {
+              if (!browserTabId) return
+              void browserTabOpenExternal(browserTabId)
+            }}
+          >
+            <ExternalLink size={13} />
+          </button>
         </div>
         <div className={styles.addressBar}>
-          {secure ? <Lock size={11} className={styles.lockIcon} /> : <Globe size={11} className={styles.lockIcon} />}
+          {(browserTab?.isSecure ?? false)
+            ? <Lock size={11} className={styles.lockIcon} />
+            : <Globe size={11} className={styles.lockIcon} />}
           <input
             className={styles.addressInput}
             value={url}
@@ -75,14 +109,47 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
         </div>
       </div>
       <div className={styles.viewport}>
-        <div className={styles.placeholder}>
-          <Globe size={32} className={styles.placeholderIcon} />
-          <span className={styles.placeholderUrl}>{browserTab?.url ?? url}</span>
-          <span className={styles.placeholderHint}>
-            {browserTab?.isLoading ? 'Loading...' : 'Browser rendering via Tauri webview'}
+        <iframe
+          ref={iframeRef}
+          key={browserTabId ?? tab.id}
+          className={styles.frame}
+          src={browserTab?.url ?? url}
+          title={browserTab?.title ?? tab.title}
+          sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-downloads"
+          referrerPolicy="strict-origin-when-cross-origin"
+          onLoad={() => {
+            if (!browserTabId) return
+            const currentUrl = iframeRef.current?.src ?? browserTab?.url ?? url
+            const isSecure =
+              currentUrl.startsWith('https://') ||
+              currentUrl.startsWith('about:') ||
+              currentUrl.startsWith('tauri://')
+            const securityOrigin = safeBrowserOrigin(currentUrl)
+            void browserTabRendererStateSet({
+              tabId: browserTabId,
+              url: currentUrl,
+              title: browserTab?.title ?? tab.title,
+              isLoading: false,
+              securityOrigin,
+              isSecure,
+            }).then((next) => upsertBrowserTab(toBrowserTab(next))).catch(() => {})
+          }}
+        />
+        <div className={styles.overlay}>
+          <Globe size={12} className={styles.overlayIcon} />
+          <span className={styles.overlayText}>
+            {browserTab?.isLoading ? 'Loading...' : browserTab?.url ?? url}
           </span>
         </div>
       </div>
     </div>
   )
 })
+
+function safeBrowserOrigin(url: string): string | null {
+  try {
+    return new URL(url).origin
+  } catch {
+    return null
+  }
+}

@@ -329,6 +329,34 @@ export async function browserTabClose(tabId: string) {
   return invoke<void>('browser_tab_close', { tabId })
 }
 
+export async function browserRendererAttach(tabId: string, rendererId: string, paneId?: string) {
+  return invoke('browser_renderer_attach', {
+    input: { tabId, rendererId, paneId },
+  })
+}
+
+export async function browserRendererDetach(tabId: string) {
+  return invoke<void>('browser_renderer_detach', { tabId })
+}
+
+export async function browserTabRendererStateSet(input: {
+  tabId: string
+  url?: string
+  title?: string
+  isLoading?: boolean
+  faviconUrl?: string | null
+  securityOrigin?: string | null
+  isSecure?: boolean
+  canGoBack?: boolean
+  canGoForward?: boolean
+}) {
+  return invoke<BrowserTabDto>('browser_tab_renderer_state_set', { input })
+}
+
+export async function browserTabOpenExternal(tabId: string) {
+  return invoke('browser_tab_open_external', { tabId })
+}
+
 export function listenGitEvents(handler: (payload: GitEventPayload) => void): Promise<UnlistenFn> {
   return listen<GitEventPayload>('app://git', (event: Event<GitEventPayload>) => {
     if (event.payload) handler(event.payload)
