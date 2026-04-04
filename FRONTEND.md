@@ -22,7 +22,7 @@ Rules for this checklist:
 ### Filesystem / Editor
 
 - [ ] Hydrate the sidebar file tree from the backend tree API.
-- [ ] Translate backend tree rows into the nested structure expected by [FileTree.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/sidebar/FileTree.tsx).
+- [ ] Use `project_tree_read_nested` as the default sidebar tree loader so [FileTree.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/sidebar/FileTree.tsx) can consume backend-shaped `children` hierarchies directly.
 - [ ] Open real editor tabs from `file_read` / `file_read_text` and push edits through backend writes.
 - [ ] Add dirty-state tracking, save affordances, and stale-version conflict UI using the backend file `versionToken`.
 - [ ] Wire the Search quick action in [ProjectSection.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/sidebar/ProjectSection.tsx) to `file_search_paths` and `file_search_text`.

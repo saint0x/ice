@@ -40,6 +40,7 @@ pub fn run() {
             commands::project_reorder,
             commands::project_snapshot,
             commands::project_tree_read,
+            commands::project_tree_read_nested,
             commands::project_watch_start,
             commands::project_watch_stop,
             commands::file_read,

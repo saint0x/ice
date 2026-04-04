@@ -137,6 +137,28 @@ pub async fn project_tree_read(
 }
 
 #[tauri::command]
+pub async fn project_tree_read_nested(
+    input: ReadTreeInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::fs::service::FsTreeNode>, AppError> {
+    Ok(state
+        .fs
+        .read_tree_nested(
+            &input.project_id,
+            input.path.as_deref(),
+            TreeReadOptions {
+                max_depth: input.depth.unwrap_or(2),
+                include_hidden: input.include_hidden.unwrap_or(false),
+                respect_gitignore: input.respect_gitignore.unwrap_or(true),
+                max_entries: input.max_entries.unwrap_or(5_000),
+            },
+            &state.projects,
+            &state.git,
+        )
+        .await?)
+}
+
+#[tauri::command]
 pub async fn project_snapshot(
     input: ProjectSnapshotInput,
     state: State<'_, AppState>,

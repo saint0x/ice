@@ -13,8 +13,6 @@ Rules for this checklist:
 
 ### Filesystem / IDE
 
-- [ ] Add nested tree snapshot support so the frontend does not have to reconstruct deep directory structure from flat rows.
-
 ### Git
 
 ### Browser
@@ -70,6 +68,7 @@ Rules for this checklist:
 
 - ✅ Project-root-scoped path resolution prevents escapes outside the project root in [service.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/fs/service.rs).
 - ✅ Tree reads, text file reads, and text writes exist.
+- ✅ Nested tree snapshots now exist through `project_tree_read_nested`, so the frontend can consume backend-shaped `children` hierarchies instead of reconstructing them from flat rows.
 - ✅ Directory creation, entry deletion, and entry rename commands are implemented.
 - ✅ File tree rows can include git status annotations from the native git service.
 - ✅ File watch support exists and emits `app://fs` events for live project updates.
@@ -158,6 +157,7 @@ Rules for this checklist:
 - ✅ Persistence tests cover workspace, browser tab/history, terminal session, Codex thread, approval, and config storage in [db.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/persistence/db.rs).
 - ✅ Fozzy coverage exists with [backend.production_gate.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.production_gate.fozzy.json) and [backend.topology.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.topology.fozzy.json).
 - ✅ Feature-focused Fozzy scenarios now exist for approval policy and FS/editor contracts in [backend.approval_policy.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.approval_policy.fozzy.json) and [backend.fs_editor.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.fs_editor.fozzy.json).
+- ✅ Feature-focused Fozzy coverage now also exists for nested filesystem tree contracts in [backend.fs_tree.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.fs_tree.fozzy.json).
 - ✅ Feature-focused Fozzy coverage now also exists for terminal lifecycle and persistence contracts in [backend.terminal_lifecycle.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.terminal_lifecycle.fozzy.json).
 - ✅ Feature-focused Fozzy coverage now also exists for git mutation and commit-readiness contracts in [backend.git_mutation.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.git_mutation.fozzy.json).
 - ✅ Feature-focused Fozzy coverage now also exists for structured git event contracts in [backend.git_events.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.git_events.fozzy.json).

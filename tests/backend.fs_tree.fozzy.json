@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "name": "backend-fs-tree",
+  "steps": [
+    {
+      "type": "trace_event",
+      "name": "verify_fs_tree_contract",
+      "fields": {
+        "target": "src-tauri/fs-tree"
+      }
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test fs::service::tests::nests_flat_tree_entries_into_directory_hierarchy -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test fs::service::tests::nests_flat_tree_entries_into_directory_hierarchy -- --exact"
+      ],
+      "expect_exit": 0
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test fs::service::tests::tree_walk_respects_gitignore_and_hidden_defaults -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test fs::service::tests::tree_walk_respects_gitignore_and_hidden_defaults -- --exact"
+      ],
+      "expect_exit": 0
+    }
+  ]
+}

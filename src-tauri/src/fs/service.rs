@@ -37,6 +37,18 @@ pub struct FsEntry {
     pub is_hidden: bool,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FsTreeNode {
+    pub path: String,
+    pub name: String,
+    pub is_dir: bool,
+    pub depth: usize,
+    pub git_status: Option<String>,
+    pub is_hidden: bool,
+    pub children: Vec<FsTreeNode>,
+}
+
 #[derive(Debug, Clone)]
 pub struct TreeReadOptions {
     pub max_depth: usize,
@@ -137,6 +149,20 @@ impl FsService {
             serde_json::json!({ "type": "treeRead", "projectId": project_id, "count": entries.len() }),
         )?;
         Ok(entries)
+    }
+
+    pub async fn read_tree_nested(
+        &self,
+        project_id: &str,
+        relative_path: Option<&str>,
+        options: TreeReadOptions,
+        projects: &ProjectService,
+        git: &GitService,
+    ) -> Result<Vec<FsTreeNode>> {
+        let entries = self
+            .read_tree(project_id, relative_path, options, projects, git)
+            .await?;
+        Ok(nest_tree_entries(entries))
     }
 
     pub async fn read_file(
@@ -504,6 +530,45 @@ fn walk_tree(
     Ok(out)
 }
 
+fn nest_tree_entries(entries: Vec<FsEntry>) -> Vec<FsTreeNode> {
+    fn build_nodes(
+        entries: &[FsEntry],
+        index: &mut usize,
+        expected_depth: usize,
+    ) -> Vec<FsTreeNode> {
+        let mut out = Vec::new();
+        while *index < entries.len() {
+            let entry = &entries[*index];
+            if entry.depth < expected_depth {
+                break;
+            }
+            if entry.depth > expected_depth {
+                *index += 1;
+                continue;
+            }
+
+            let mut node = FsTreeNode {
+                path: entry.path.clone(),
+                name: entry.name.clone(),
+                is_dir: entry.is_dir,
+                depth: entry.depth,
+                git_status: entry.git_status.clone(),
+                is_hidden: entry.is_hidden,
+                children: Vec::new(),
+            };
+            *index += 1;
+            if node.is_dir {
+                node.children = build_nodes(entries, index, expected_depth + 1);
+            }
+            out.push(node);
+        }
+        out
+    }
+
+    let mut index = 0;
+    build_nodes(&entries, &mut index, 0)
+}
+
 fn describe_event_kind(kind: &EventKind) -> &'static str {
     match kind {
         EventKind::Create(_) => "create",
@@ -743,8 +808,8 @@ fn is_binary_bytes(bytes: &[u8]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        decode_text_bytes, encode_text_content, file_version, is_binary_bytes,
-        parse_rg_match_record, search_paths_under_root, walk_tree, TreeReadOptions,
+        decode_text_bytes, encode_text_content, file_version, is_binary_bytes, nest_tree_entries,
+        parse_rg_match_record, search_paths_under_root, walk_tree, FsEntry, TreeReadOptions,
     };
     use std::collections::HashMap;
     use std::fs;
@@ -829,5 +894,41 @@ mod tests {
         let encoded = encode_text_content("hi", Some("utf-16le"), true).expect("encode utf16le");
         assert_eq!(&encoded[..2], &[0xFF, 0xFE]);
         assert!(encoded.len() > 2);
+    }
+
+    #[test]
+    fn nests_flat_tree_entries_into_directory_hierarchy() {
+        let tree = nest_tree_entries(vec![
+            FsEntry {
+                path: "src".to_string(),
+                name: "src".to_string(),
+                is_dir: true,
+                depth: 0,
+                git_status: None,
+                is_hidden: false,
+            },
+            FsEntry {
+                path: "src/lib.rs".to_string(),
+                name: "lib.rs".to_string(),
+                is_dir: false,
+                depth: 1,
+                git_status: Some("modified".to_string()),
+                is_hidden: false,
+            },
+            FsEntry {
+                path: "README.md".to_string(),
+                name: "README.md".to_string(),
+                is_dir: false,
+                depth: 0,
+                git_status: None,
+                is_hidden: false,
+            },
+        ]);
+
+        assert_eq!(tree.len(), 2);
+        assert_eq!(tree[0].path, "src");
+        assert_eq!(tree[0].children.len(), 1);
+        assert_eq!(tree[0].children[0].path, "src/lib.rs");
+        assert_eq!(tree[1].path, "README.md");
     }
 }
