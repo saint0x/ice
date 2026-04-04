@@ -21,8 +21,12 @@ export const ChatPanel = memo(function ChatPanel() {
   const setActiveThread = useCodexStore((s) => s.setActiveThread)
   const addThread = useCodexStore((s) => s.addThread)
   const approvals = useCodexStore((s) => s.approvals.filter((approval) => approval.projectId === activeProjectId))
+  const resolveApproval = useCodexStore((s) => s.resolveApproval)
+  const updateThread = useCodexStore((s) => s.updateThread)
 
   const [input, setInput] = useState('')
+  const [approvalBusyId, setApprovalBusyId] = useState<string | null>(null)
+  const [surfaceError, setSurfaceError] = useState<string | null>(null)
   const resizeRef = useRef<{ startX: number; startW: number } | null>(null)
 
   const threads = useMemo(() => {
@@ -48,9 +52,27 @@ export const ChatPanel = memo(function ChatPanel() {
       threadId = mapped.id
     }
     if (threadId) {
+      updateThread(threadId, { status: 'running', unread: false })
       await codexTurnStart(activeProjectId, threadId, prompt)
     }
-  }, [activeProjectId, activeThreadId, addThread, input, setActiveThread])
+  }, [activeProjectId, activeThreadId, addThread, input, setActiveThread, updateThread])
+
+  const handleApproval = useCallback(async (approvalId: string, mode: 'approve' | 'deny') => {
+    setApprovalBusyId(approvalId)
+    setSurfaceError(null)
+    try {
+      if (mode === 'approve') {
+        await codexServerRequestRespond(Number(approvalId))
+      } else {
+        await codexServerRequestDeny(Number(approvalId))
+      }
+      resolveApproval(approvalId)
+    } catch (error) {
+      setSurfaceError(error instanceof Error ? error.message : 'Approval action failed')
+    } finally {
+      setApprovalBusyId(null)
+    }
+  }, [resolveApproval])
 
   const onResizeStart = useCallback(
     (e: React.MouseEvent) => {
@@ -91,6 +113,12 @@ export const ChatPanel = memo(function ChatPanel() {
       {activeThread ? (
         <>
           <div className={styles.messages}>
+            {surfaceError && (
+              <div className={styles.errorBanner}>
+                <ShieldAlert size={13} />
+                <span>{surfaceError}</span>
+              </div>
+            )}
             <div className={styles.agentRow}>
               <div className={styles.agentAvatar}>
                 <Bot size={14} />
@@ -111,12 +139,17 @@ export const ChatPanel = memo(function ChatPanel() {
                   <div className={styles.agentBubble}>
                     {approval.description}
                   </div>
+                  <div className={styles.approvalMeta}>
+                    {approval.category && <span className={styles.metaBadge}>{approval.category}</span>}
+                    {approval.riskLevel && <span className={styles.metaBadge}>{approval.riskLevel}</span>}
+                    {approval.policyAction && <span className={styles.metaBadge}>{approval.policyAction}</span>}
+                  </div>
                   <div className={styles.artifacts}>
-                    <button className={styles.artifact} onClick={() => void codexServerRequestRespond(Number(approval.id))}>
+                    <button className={styles.artifact} onClick={() => void handleApproval(approval.id, 'approve')} disabled={approvalBusyId === approval.id}>
                       <Check size={12} />
-                      <span>Approve</span>
+                      <span>{approvalBusyId === approval.id ? 'Working...' : 'Approve'}</span>
                     </button>
-                    <button className={styles.artifact} onClick={() => void codexServerRequestDeny(Number(approval.id))}>
+                    <button className={styles.artifact} onClick={() => void handleApproval(approval.id, 'deny')} disabled={approvalBusyId === approval.id}>
                       <Ban size={12} />
                       <span>Deny</span>
                     </button>
@@ -165,10 +198,15 @@ export const ChatPanel = memo(function ChatPanel() {
           <div className={styles.threadListInner}>
             {threads.length > 0 ? (
               threads.map((t) => (
-                <button key={t.id} className={styles.threadRow}>
+                <button
+                  key={t.id}
+                  className={`${styles.threadRow} ${t.id === activeThreadId ? styles.threadRowActive : ''}`}
+                  onClick={() => activeProjectId && setActiveThread(activeProjectId, t.id)}
+                >
                   <MessageSquare size={12} />
                   <span className={styles.threadTitle}>{t.title}</span>
                   {t.status === 'running' && <Loader2 size={10} className={styles.spinner} />}
+                  {t.unread && <span className={styles.threadUnread} />}
                 </button>
               ))
             ) : (

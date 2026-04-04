@@ -41,6 +41,7 @@ Rules for this checklist:
 - [ ] Publish a typed shared contract for project, tree, git, browser, terminal, Codex, and approval payloads.
 - [ ] Keep pressure on frontend integration to remove remaining local-only helper mutations so backend state stays canonical across startup and runtime.
 - [ ] Finish wiring the richer git backend surface into the frontend beyond the first production mutation pass, especially branch/sync controls and whole-tree diff exploration.
+- [ ] Expose canonical Codex per-thread turn/message history so frontend chat surfaces can stop rendering summary-only thread views.
 
 ### Testing / Release
 
@@ -107,6 +108,7 @@ Rules for this checklist:
 - ✅ The current frontend now also uses the production file IO backend for editor reads and saves, including binary-file detection and optimistic version-token save enforcement.
 - ✅ The current frontend no longer seeds fake startup projects, git state, terminal sessions, Codex threads, or workspace tabs before backend hydration.
 - ✅ The current frontend now uses backend git mutation and readiness commands for stage, unstage, restore, commit, and per-file diff inspection in the Git surface.
+- ✅ The current frontend Codex surfaces now execute approvals, clear unread state, switch active threads correctly, and present runtime status without inventing message history the backend does not expose.
 
 ### Terminal
 

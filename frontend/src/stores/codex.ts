@@ -13,6 +13,7 @@ interface CodexState {
   updateThread: (threadId: ThreadId, patch: Partial<CodexThread>) => void
   addApproval: (approval: CodexApproval) => void
   resolveApproval: (id: string) => void
+  clearUnread: (threadId: ThreadId) => void
 }
 
 export const useCodexStore = create<CodexState>((set) => ({
@@ -51,7 +52,12 @@ export const useCodexStore = create<CodexState>((set) => ({
     set((s) => {
       const activeThreadId = new Map(s.activeThreadId)
       activeThreadId.set(projectId, threadId)
-      return { activeThreadId }
+      const threads = new Map(s.threads)
+      const thread = threads.get(threadId)
+      if (thread) {
+        threads.set(threadId, { ...thread, unread: false })
+      }
+      return { activeThreadId, threads }
     }),
 
   updateThread: (threadId, patch) =>
@@ -68,4 +74,13 @@ export const useCodexStore = create<CodexState>((set) => ({
 
   resolveApproval: (id) =>
     set((s) => ({ approvals: s.approvals.filter((a) => a.id !== id) })),
+
+  clearUnread: (threadId) =>
+    set((s) => {
+      const threads = new Map(s.threads)
+      const thread = threads.get(threadId)
+      if (!thread) return s
+      threads.set(threadId, { ...thread, unread: false })
+      return { threads }
+    }),
 }))

@@ -87,6 +87,18 @@
   gap: var(--sp-5);
 }
 
+.errorBanner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-error) 10%, var(--bg-panel));
+  border: 1px solid color-mix(in srgb, var(--color-error) 25%, transparent);
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+}
+
 /* User messages — right aligned */
 .userRow {
   display: flex;
@@ -148,10 +160,7 @@
 /* Artifacts (file changes) */
 .artifacts {
   display: flex;
-  flex-direction: column;
-  gap: 1px;
-  border-radius: var(--radius-tab);
-  overflow: hidden;
+  gap: 8px;
   margin-top: var(--sp-1);
 }
 
@@ -165,10 +174,15 @@
   color: var(--text-muted);
   cursor: pointer;
   transition: background var(--transition-fast);
+  border-radius: 8px;
 }
 
 .artifact:hover {
   background: var(--bg-element-hover);
+}
+
+.artifact:disabled {
+  opacity: 0.55;
 }
 
 .artifactAction {
@@ -227,11 +241,40 @@
   color: var(--text-primary);
 }
 
+.threadRowActive {
+  background: var(--sidebar-row-selected);
+  color: var(--text-primary);
+}
+
 .threadTitle {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.threadUnread {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-info);
+  flex-shrink: 0;
+}
+
+.approvalMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.metaBadge {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--bg-element);
+  color: var(--text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
 }
 
 .emptyState {
