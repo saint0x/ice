@@ -25,7 +25,6 @@ Rules for this checklist:
 - [ ] Add discard / restore workflows with explicit safety rules and approval gating.
 - [ ] Add diff payload endpoints for whole-tree staged and unstaged views in addition to per-file diff reads.
 - [ ] Add commit metadata validation and better error surfaces for missing author config and hooks.
-- [ ] Add git refresh events or watchers so sidebar counts and git surfaces stay hot.
 
 ### Browser
 
@@ -109,6 +108,7 @@ Rules for this checklist:
 - ✅ Native git stage, unstage, and commit commands are implemented.
 - ✅ Native git branch list, checkout, fetch, pull, and push commands are implemented behind typed IPC commands.
 - ✅ Pull uses `--ff-only` by default to avoid hidden merge commits from the desktop shell.
+- ✅ Filesystem watch activity now triggers debounced native git status refresh events so git surfaces can stay hot without blind frontend polling.
 
 ### Browser
 

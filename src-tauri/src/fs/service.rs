@@ -5,6 +5,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 
 use crate::app::events::FS_EVENT;
@@ -14,6 +15,7 @@ use crate::projects::service::ProjectService;
 pub struct FsService {
     app: AppHandle,
     watchers: Arc<Mutex<HashMap<String, ProjectWatcher>>>,
+    last_git_refresh: Arc<Mutex<HashMap<String, Instant>>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -36,6 +38,7 @@ impl FsService {
         Self {
             app,
             watchers: Arc::new(Mutex::new(HashMap::new())),
+            last_git_refresh: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -168,7 +171,10 @@ impl FsService {
         let project_id = project_id.to_string();
         let emit_project_id = project_id.clone();
         let app = self.app.clone();
+        let git_app = self.app.clone();
         let watch_root = root.clone();
+        let git_root = root.clone();
+        let last_git_refresh = self.last_git_refresh.clone();
         let mut watcher =
             notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
                 if let Ok(event) = event {
@@ -179,6 +185,7 @@ impl FsService {
                         .map(|path| path.to_string_lossy().to_string())
                         .collect::<Vec<_>>();
                     let kind = describe_event_kind(&event.kind);
+                    let refresh_git = should_refresh_git(&event.kind, &paths);
                     let _ = app.emit(
                         FS_EVENT,
                         serde_json::json!({
@@ -188,6 +195,31 @@ impl FsService {
                             "paths": paths
                         }),
                     );
+                    if refresh_git {
+                        let should_emit = {
+                            let mut refreshes = last_git_refresh.lock();
+                            let now = Instant::now();
+                            match refreshes.get(&emit_project_id) {
+                                Some(last_seen)
+                                    if now.duration_since(*last_seen)
+                                        < Duration::from_millis(250) =>
+                                {
+                                    false
+                                }
+                                _ => {
+                                    refreshes.insert(emit_project_id.clone(), now);
+                                    true
+                                }
+                            }
+                        };
+                        if should_emit {
+                            GitService::schedule_status_refresh(
+                                git_app.clone(),
+                                emit_project_id.clone(),
+                                git_root.to_string_lossy().to_string(),
+                            );
+                        }
+                    }
                 }
             })?;
         watcher.configure(Config::default())?;
@@ -277,4 +309,11 @@ fn describe_event_kind(kind: &EventKind) -> &'static str {
         EventKind::Other => "other",
         EventKind::Access(_) => "access",
     }
+}
+
+fn should_refresh_git(kind: &EventKind, paths: &[String]) -> bool {
+    if matches!(kind, EventKind::Access(_)) || paths.is_empty() {
+        return false;
+    }
+    paths.iter().any(|path| path != ".git")
 }

@@ -324,6 +324,21 @@ impl GitService {
             diff: String::from_utf8_lossy(&output.stdout).to_string(),
         })
     }
+
+    pub fn schedule_status_refresh(app: AppHandle, project_id: String, root_path: String) {
+        tokio::spawn(async move {
+            if let Ok(summary) = read_status_for_root(&root_path).await {
+                let _ = app.emit(
+                    GIT_EVENT,
+                    serde_json::json!({
+                        "type": "statusRead",
+                        "projectId": project_id,
+                        "summary": summary
+                    }),
+                );
+            }
+        });
+    }
 }
 
 fn parse_status(raw: &str) -> GitStatusSummary {
@@ -410,6 +425,27 @@ fn parse_status(raw: &str) -> GitStatusSummary {
     }
 
     summary
+}
+
+async fn read_status_for_root(root_path: &str) -> Result<GitStatusSummary> {
+    let output = Command::new("git")
+        .args([
+            "-C",
+            root_path,
+            "status",
+            "--porcelain=2",
+            "--branch",
+            "--untracked-files=all",
+        ])
+        .output()
+        .await?;
+    if !output.status.success() {
+        return Err(anyhow!(
+            "{}",
+            String::from_utf8_lossy(&output.stderr).trim().to_string()
+        ));
+    }
+    Ok(parse_status(&String::from_utf8_lossy(&output.stdout)))
 }
 
 fn parse_branch_line(line: &str) -> Option<GitBranchRecord> {

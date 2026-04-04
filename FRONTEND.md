@@ -15,6 +15,7 @@ Rules for this checklist:
 
 - [ ] Replace all demo Zustand seed data in [projects.ts](/Users/deepsaint/Desktop/ice/frontend/src/stores/projects.ts), [files.ts](/Users/deepsaint/Desktop/ice/frontend/src/stores/files.ts), [git.ts](/Users/deepsaint/Desktop/ice/frontend/src/stores/git.ts), [terminal.ts](/Users/deepsaint/Desktop/ice/frontend/src/stores/terminal.ts), and [codex.ts](/Users/deepsaint/Desktop/ice/frontend/src/stores/codex.ts) with Tauri IPC loaders.
 - [ ] Subscribe to backend events for filesystem, git, browser, terminal, and Codex updates instead of relying on local-only mutations.
+: `app://fs` now emits watch events and `app://git` now emits debounced status refreshes after filesystem mutations.
 - [ ] Replace the local workspace session seed in [workspace.ts](/Users/deepsaint/Desktop/ice/frontend/src/stores/workspace.ts) with `workspace_session_get` / `workspace_session_set`.
 - [ ] Persist and hydrate workspace layout from the backend rather than purely local in-memory state.
 
