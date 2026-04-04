@@ -50,6 +50,7 @@ pub fn run() {
             commands::git_stage_paths,
             commands::git_unstage_paths,
             commands::git_commit,
+            commands::git_diff_read,
             commands::browser_tab_create,
             commands::browser_tab_navigate,
             commands::browser_tab_back,

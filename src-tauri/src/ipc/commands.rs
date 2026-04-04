@@ -295,6 +295,18 @@ pub async fn git_commit(
 }
 
 #[tauri::command]
+pub async fn git_diff_read(
+    input: GitDiffInput,
+    state: State<'_, AppState>,
+) -> Result<crate::git::service::GitDiffRecord, AppError> {
+    let project = state.projects.require_project(&input.project_id).await?;
+    Ok(state
+        .git
+        .read_diff(&project, &input.path, input.staged.unwrap_or(false))
+        .await?)
+}
+
+#[tauri::command]
 pub async fn browser_tab_create(
     input: BrowserTabCreateInput,
     state: State<'_, AppState>,

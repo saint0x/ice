@@ -22,6 +22,14 @@ pub struct GitChangeRecord {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct GitDiffRecord {
+    pub path: String,
+    pub staged: bool,
+    pub diff: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GitStatusSummary {
     pub branch: Option<String>,
     pub ahead: usize,
@@ -139,6 +147,33 @@ impl GitService {
             ));
         }
         self.read_status(project).await
+    }
+
+    pub async fn read_diff(
+        &self,
+        project: &ProjectRecord,
+        path: &str,
+        staged: bool,
+    ) -> Result<GitDiffRecord> {
+        let mut command = Command::new("git");
+        command.arg("-C").arg(&project.root_path).arg("diff");
+        if staged {
+            command.arg("--cached");
+        }
+        command.args(["--no-ext-diff", "--"]);
+        command.arg(path);
+        let output = command.output().await?;
+        if !output.status.success() {
+            return Err(anyhow!(
+                "{}",
+                String::from_utf8_lossy(&output.stderr).trim().to_string()
+            ));
+        }
+        Ok(GitDiffRecord {
+            path: path.to_string(),
+            staged,
+            diff: String::from_utf8_lossy(&output.stdout).to_string(),
+        })
     }
 }
 
