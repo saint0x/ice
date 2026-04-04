@@ -15,6 +15,7 @@ pub struct AppBootstrapDto {
     pub db_path: String,
     pub projects: Vec<crate::projects::models::ProjectSummary>,
     pub workspace_layout: Option<serde_json::Value>,
+    pub workspace_chrome: crate::workspace::service::WorkspaceChromeState,
 }
 
 #[derive(Debug, Serialize)]
@@ -107,6 +108,13 @@ pub struct RenameEntryInput {
 pub struct SetWorkspaceLayoutInput {
     pub workspace_id: String,
     pub layout_json: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetWorkspaceChromeInput {
+    pub workspace_id: String,
+    pub chrome_state: crate::workspace::service::WorkspaceChromeState,
 }
 
 #[derive(Debug, Deserialize)]
