@@ -103,6 +103,7 @@ Rules for this checklist:
 - ✅ The backend file-read/write contract now exposes encoding and BOM metadata so the frontend can preserve legacy text files correctly on save.
 - ✅ The backend Codex thread payload now includes normalized status, unread state, and last assistant message summaries for sidebar/chat rendering.
 - ✅ The backend now exposes classified approval metadata and a `codex_restart` command for recovery UI.
+- ✅ The backend now exposes Codex runtime contract info so diagnostics or settings UI can show the installed CLI/app-server capabilities.
 
 ### Visual / Product Direction
 

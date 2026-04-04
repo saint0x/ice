@@ -39,8 +39,6 @@ Rules for this checklist:
 
 ### Codex / Agent Runtime
 
-- [ ] Add schema/version capture against the installed Codex binary for stricter contract management.
-
 ### Security / Approvals
 
 - [ ] Define approval policy rules by action type instead of treating all server requests as the same class.
@@ -130,6 +128,7 @@ Rules for this checklist:
 - ✅ Codex thread persistence now includes last assistant message snippets and unread state for sidebar/chat previews.
 - ✅ Approval records now include classified category and risk level metadata so the frontend can render intent-specific approval UI.
 - ✅ The backend now supports explicit `codex app-server` restarts with thread state recovery to `disconnected` plus automatic dead-process detection.
+- ✅ The backend now captures installed Codex runtime contract details, including CLI version, app-server default transport, schema support, and JSON Schema fingerprinting.
 
 ### Security / Approvals
 

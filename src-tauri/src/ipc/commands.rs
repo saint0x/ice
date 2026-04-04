@@ -609,6 +609,13 @@ pub async fn codex_restart(
 }
 
 #[tauri::command]
+pub async fn codex_runtime_info(
+    state: State<'_, AppState>,
+) -> Result<crate::codex::service::CodexRuntimeInfo, AppError> {
+    Ok(state.codex.runtime_info().await?)
+}
+
+#[tauri::command]
 pub async fn codex_login_start(
     input: CodexLoginStartInput,
     state: State<'_, AppState>,

@@ -79,6 +79,7 @@ pub fn run() {
             commands::codex_models_list,
             commands::codex_auth_read,
             commands::codex_restart,
+            commands::codex_runtime_info,
             commands::codex_login_start,
             commands::codex_thread_create,
             commands::codex_threads_list,

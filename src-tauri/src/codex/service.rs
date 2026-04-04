@@ -6,8 +6,9 @@ use std::sync::Arc;
 
 use anyhow::{anyhow, Context, Result};
 use parking_lot::Mutex;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Emitter};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
@@ -57,6 +58,7 @@ pub struct CodexStatus {
     pub running: bool,
     pub available: bool,
     pub thread_count: usize,
+    pub runtime_info: Option<CodexRuntimeInfo>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -65,6 +67,19 @@ pub struct CodexModel {
     pub id: String,
     pub display_name: String,
     pub is_default: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexRuntimeInfo {
+    pub cli_version: Option<String>,
+    pub app_server_default_listen: Option<String>,
+    pub supports_generate_json_schema: bool,
+    pub supports_generate_ts: bool,
+    pub schema_sha256: Option<String>,
+    pub schema_bytes: Option<usize>,
+    pub schema_title: Option<String>,
+    pub schema_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -124,12 +139,34 @@ impl CodexService {
 
     pub async fn status(&self) -> CodexStatus {
         let available = self.codex_available().await;
+        let runtime_info = self.runtime_info_cached().await;
         let state = self.state.lock();
         CodexStatus {
             running: state.process.is_some(),
             available,
             thread_count: state.threads.len(),
+            runtime_info,
         }
+    }
+
+    pub async fn runtime_info(&self) -> Result<CodexRuntimeInfo> {
+        let info = inspect_codex_runtime_info().await?;
+        self.persistence
+            .config_set(
+                "codex.runtimeInfo".to_string(),
+                serde_json::to_value(&info)?,
+            )
+            .await?;
+        Ok(info)
+    }
+
+    pub async fn runtime_info_cached(&self) -> Option<CodexRuntimeInfo> {
+        self.persistence
+            .config_get("codex.runtimeInfo")
+            .await
+            .ok()
+            .flatten()
+            .and_then(|value| serde_json::from_value(value).ok())
     }
 
     pub async fn models_list(&self) -> Result<Vec<CodexModel>> {
@@ -791,4 +828,96 @@ fn build_pending_approval(
         description: description.unwrap_or(fallback_title),
         context_json: Some(params.clone()),
     })
+}
+
+async fn inspect_codex_runtime_info() -> Result<CodexRuntimeInfo> {
+    let cli_version = read_codex_version().await.ok();
+    let help_text = read_app_server_help().await?;
+    let app_server_default_listen = extract_default_listen(&help_text);
+    let supports_generate_json_schema = help_text.contains("generate-json-schema");
+    let supports_generate_ts = help_text.contains("generate-ts");
+
+    let (schema_sha256, schema_bytes, schema_title, schema_id) = if supports_generate_json_schema {
+        match read_app_server_schema().await {
+            Ok(schema_text) => {
+                let schema_value: Value = serde_json::from_str(&schema_text)?;
+                let mut hasher = Sha256::new();
+                hasher.update(schema_text.as_bytes());
+                let digest = format!("{:x}", hasher.finalize());
+                (
+                    Some(digest),
+                    Some(schema_text.len()),
+                    schema_value
+                        .get("title")
+                        .and_then(|value| value.as_str())
+                        .map(ToOwned::to_owned),
+                    schema_value
+                        .get("$id")
+                        .and_then(|value| value.as_str())
+                        .map(ToOwned::to_owned),
+                )
+            }
+            Err(_) => (None, None, None, None),
+        }
+    } else {
+        (None, None, None, None)
+    };
+
+    Ok(CodexRuntimeInfo {
+        cli_version,
+        app_server_default_listen,
+        supports_generate_json_schema,
+        supports_generate_ts,
+        schema_sha256,
+        schema_bytes,
+        schema_title,
+        schema_id,
+    })
+}
+
+async fn read_codex_version() -> Result<String> {
+    let output = Command::new("codex").arg("--version").output().await?;
+    if !output.status.success() {
+        return Err(anyhow!(
+            "{}",
+            String::from_utf8_lossy(&output.stderr).trim().to_string()
+        ));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+async fn read_app_server_help() -> Result<String> {
+    let output = Command::new("codex")
+        .args(["app-server", "--help"])
+        .output()
+        .await?;
+    if !output.status.success() {
+        return Err(anyhow!(
+            "{}",
+            String::from_utf8_lossy(&output.stderr).trim().to_string()
+        ));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+async fn read_app_server_schema() -> Result<String> {
+    let output = Command::new("codex")
+        .args(["app-server", "generate-json-schema"])
+        .output()
+        .await?;
+    if !output.status.success() {
+        return Err(anyhow!(
+            "{}",
+            String::from_utf8_lossy(&output.stderr).trim().to_string()
+        ));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+fn extract_default_listen(help_text: &str) -> Option<String> {
+    help_text
+        .lines()
+        .find(|line| line.contains("[default:"))
+        .and_then(|line| line.split("[default:").nth(1))
+        .map(|value| value.trim().trim_end_matches(']').to_string())
 }
