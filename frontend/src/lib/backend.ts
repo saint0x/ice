@@ -98,6 +98,23 @@ interface GitStatusSummaryDto {
   changes: GitChange[]
 }
 
+interface GitCommitReadinessDto {
+  authorName?: string | null
+  authorEmail?: string | null
+  authorConfigured: boolean
+  commitMessageValid: boolean
+  messageHint?: string | null
+  blockingReason?: string | null
+  hooksPath?: string | null
+  activeHooks: string[]
+}
+
+interface GitDiffRecordDto {
+  path: string
+  staged: boolean
+  diff: string
+}
+
 type WorkspaceChromePersistDto = WorkspaceChromeDto
 
 interface WorkspaceTabPersistDto {
@@ -218,6 +235,45 @@ export async function projectTreeReadNested(projectId: string) {
 
 export async function gitStatusRead(projectId: string) {
   return invoke<GitStatusSummaryDto>('git_status_read', { projectId })
+}
+
+export async function gitStagePaths(projectId: string, paths: string[]) {
+  return invoke<GitStatusSummaryDto>('git_stage_paths', {
+    input: { projectId, paths },
+  })
+}
+
+export async function gitUnstagePaths(projectId: string, paths: string[]) {
+  return invoke<GitStatusSummaryDto>('git_unstage_paths', {
+    input: { projectId, paths },
+  })
+}
+
+export async function gitRestorePaths(input: {
+  projectId: string
+  paths: string[]
+  staged?: boolean
+  worktree?: boolean
+}) {
+  return invoke<GitStatusSummaryDto>('git_restore_paths', { input })
+}
+
+export async function gitCommit(projectId: string, message: string) {
+  return invoke<GitStatusSummaryDto>('git_commit', {
+    input: { projectId, message },
+  })
+}
+
+export async function gitCommitReadiness(projectId: string, message?: string) {
+  return invoke<GitCommitReadinessDto>('git_commit_readiness', {
+    input: { projectId, message },
+  })
+}
+
+export async function gitDiffRead(projectId: string, path: string, staged?: boolean) {
+  return invoke<GitDiffRecordDto>('git_diff_read', {
+    input: { projectId, path, staged },
+  })
 }
 
 export async function fileRead(projectId: string, path: string) {

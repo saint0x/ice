@@ -40,6 +40,7 @@ Rules for this checklist:
 - [ ] Add richer editor conflict-resolution flows on top of the existing version-token backend guard so stale-save errors can be resolved intentionally in the UI.
 - [ ] Publish a typed shared contract for project, tree, git, browser, terminal, Codex, and approval payloads.
 - [ ] Keep pressure on frontend integration to remove remaining local-only helper mutations so backend state stays canonical across startup and runtime.
+- [ ] Finish wiring the richer git backend surface into the frontend beyond the first production mutation pass, especially branch/sync controls and whole-tree diff exploration.
 
 ### Testing / Release
 
@@ -105,6 +106,7 @@ Rules for this checklist:
 - ✅ The current frontend now uses the browser renderer bridge for a pane-hosted renderer host, attaching/detaching sessions and syncing renderer state back through backend browser IPC.
 - ✅ The current frontend now also uses the production file IO backend for editor reads and saves, including binary-file detection and optimistic version-token save enforcement.
 - ✅ The current frontend no longer seeds fake startup projects, git state, terminal sessions, Codex threads, or workspace tabs before backend hydration.
+- ✅ The current frontend now uses backend git mutation and readiness commands for stage, unstage, restore, commit, and per-file diff inspection in the Git surface.
 
 ### Terminal
 

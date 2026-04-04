@@ -15,9 +15,11 @@ Rules for this checklist:
 
 - [ ] Replace the iframe-backed browser renderer host with the final native browser container strategy if we outgrow the current pane-hosted renderer approach.
 - [ ] Add editor search, replace, and project-search UI on top of the now-live backend file read/write/search contracts.
+- [ ] Add native git branch/sync/diff-tree flows to the Git surface so the frontend fully uses the backend git mutation/readiness APIs.
 - [ ] Subscribe to backend events for filesystem, git, browser, terminal, and Codex updates instead of relying on local-only mutations.
 - [ ] Persist and hydrate workspace layout from the backend rather than purely local in-memory state.
 - [ ] Keep removing the last local-only helper logic in frontend stores and surfaces so startup and mutations come exclusively from backend truth.
+- [ ] Add branch switching, fetch/pull/push, and whole-tree diff views to [GitSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/GitSurface.tsx) on top of the now-live mutation hooks.
 
 ### Filesystem / Editor
 
@@ -111,6 +113,7 @@ Rules for this checklist:
 - ✅ The browser surface is now a pane-hosted iframe renderer host that attaches/detaches through the backend browser bridge and reports renderer state back through `browser_tab_renderer_state_set`.
 - ✅ The editor surface now reads real file contents from the backend, blocks binary-file text editing, saves through backend `file_write_text`, and honors backend version-token save guards.
 - ✅ Demo/default startup entities have been removed from project, git, terminal, Codex, and workspace stores so the shell now waits for canonical backend hydration instead of rendering fake placeholder state.
+- ✅ The Git surface now stages, unstages, restores, reads diffs, and commits through backend git IPC with commit-readiness feedback instead of placeholder-only controls.
 - ✅ Terminal sessions and scrollback now hydrate from backend `terminal_list` / `terminal_scrollback_read`, and the frontend listens to live `app://terminal` events through [useBackendIntegration.ts](/Users/deepsaint/Desktop/ice/frontend/src/hooks/useBackendIntegration.ts).
 - ✅ Terminal create, close, write, and respawn flows now route through backend IPC in [TerminalList.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/sidebar/TerminalList.tsx), [BottomDock.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/shell/BottomDock.tsx), and [TerminalSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/TerminalSurface.tsx).
 - ✅ Codex threads and approvals now hydrate from backend `codex_threads_list` / `codex_approvals_list`, and the frontend listens to live `app://codex` events through [useBackendIntegration.ts](/Users/deepsaint/Desktop/ice/frontend/src/hooks/useBackendIntegration.ts).
