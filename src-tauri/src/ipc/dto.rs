@@ -57,6 +57,9 @@ pub struct ReadTreeInput {
     pub project_id: String,
     pub path: Option<String>,
     pub depth: Option<usize>,
+    pub include_hidden: Option<bool>,
+    pub respect_gitignore: Option<bool>,
+    pub max_entries: Option<usize>,
 }
 
 #[derive(Debug, Deserialize)]

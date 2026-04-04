@@ -37,6 +37,7 @@ pub fn run() {
             commands::project_tree_read,
             commands::project_watch_start,
             commands::project_watch_stop,
+            commands::file_read,
             commands::file_read_text,
             commands::file_write_text,
             commands::dir_create,

@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Context, Result};
+use ignore::WalkBuilder;
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use parking_lot::Mutex;
 use serde::Serialize;
@@ -11,6 +12,10 @@ use tauri::{AppHandle, Emitter};
 use crate::app::events::FS_EVENT;
 use crate::git::service::GitService;
 use crate::projects::service::ProjectService;
+
+const DEFAULT_TREE_DEPTH: usize = 2;
+const DEFAULT_TREE_MAX_ENTRIES: usize = 5_000;
+const MAX_BINARY_SNIFF_BYTES: usize = 8 * 1024;
 
 pub struct FsService {
     app: AppHandle,
@@ -26,6 +31,25 @@ pub struct FsEntry {
     pub is_dir: bool,
     pub depth: usize,
     pub git_status: Option<String>,
+    pub is_hidden: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct TreeReadOptions {
+    pub max_depth: usize,
+    pub include_hidden: bool,
+    pub respect_gitignore: bool,
+    pub max_entries: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileReadResult {
+    pub path: String,
+    pub content: Option<String>,
+    pub is_binary: bool,
+    pub size_bytes: u64,
+    pub encoding: Option<String>,
 }
 
 struct ProjectWatcher {
@@ -46,7 +70,7 @@ impl FsService {
         &self,
         project_id: &str,
         relative_path: Option<&str>,
-        max_depth: usize,
+        options: TreeReadOptions,
         projects: &ProjectService,
         git: &GitService,
     ) -> Result<Vec<FsEntry>> {
@@ -58,7 +82,7 @@ impl FsService {
         };
         let status_map = git.path_status_map(&project).await.unwrap_or_default();
         let entries =
-            tokio::task::spawn_blocking(move || walk_tree(&root, &start, max_depth, &status_map))
+            tokio::task::spawn_blocking(move || walk_tree(&root, &start, &options, &status_map))
                 .await??;
         self.app.emit(
             FS_EVENT,
@@ -67,15 +91,52 @@ impl FsService {
         Ok(entries)
     }
 
+    pub async fn read_file(
+        &self,
+        project_id: &str,
+        path: &str,
+        projects: &ProjectService,
+    ) -> Result<FileReadResult> {
+        let root = projects.resolve_project_path(project_id).await?;
+        let full_path = resolve_under_root(&root, path)?;
+        let bytes = tokio::fs::read(&full_path).await?;
+        let size_bytes = bytes.len() as u64;
+        if is_binary_bytes(&bytes) {
+            return Ok(FileReadResult {
+                path: path.to_string(),
+                content: None,
+                is_binary: true,
+                size_bytes,
+                encoding: None,
+            });
+        }
+
+        let content = String::from_utf8(bytes)
+            .map_err(|_| anyhow!("file is not valid UTF-8 text and cannot be edited safely"))?;
+        Ok(FileReadResult {
+            path: path.to_string(),
+            content: Some(content),
+            is_binary: false,
+            size_bytes,
+            encoding: Some("utf-8".to_string()),
+        })
+    }
+
     pub async fn read_text_file(
         &self,
         project_id: &str,
         path: &str,
         projects: &ProjectService,
     ) -> Result<String> {
-        let root = projects.resolve_project_path(project_id).await?;
-        let full_path = resolve_under_root(&root, path)?;
-        Ok(tokio::fs::read_to_string(full_path).await?)
+        let result = self.read_file(project_id, path, projects).await?;
+        if result.is_binary {
+            return Err(anyhow!(
+                "binary files must be handled through file_read metadata"
+            ));
+        }
+        result
+            .content
+            .ok_or_else(|| anyhow!("text file content was unexpectedly empty"))
     }
 
     pub async fn write_text_file(
@@ -246,6 +307,17 @@ impl FsService {
     }
 }
 
+impl Default for TreeReadOptions {
+    fn default() -> Self {
+        Self {
+            max_depth: DEFAULT_TREE_DEPTH,
+            include_hidden: false,
+            respect_gitignore: true,
+            max_entries: DEFAULT_TREE_MAX_ENTRIES,
+        }
+    }
+}
+
 fn resolve_under_root(root: &Path, relative: &str) -> Result<PathBuf> {
     let full = root.join(relative);
     let normalized = full.components().collect::<PathBuf>();
@@ -258,46 +330,59 @@ fn resolve_under_root(root: &Path, relative: &str) -> Result<PathBuf> {
 fn walk_tree(
     root: &Path,
     start: &Path,
-    max_depth: usize,
+    options: &TreeReadOptions,
     status_map: &HashMap<String, String>,
 ) -> Result<Vec<FsEntry>> {
     let mut out = Vec::new();
-    walk_tree_inner(root, start, 0, max_depth, status_map, &mut out)?;
-    Ok(out)
-}
+    let mut builder = WalkBuilder::new(start);
+    builder
+        .add_custom_ignore_filename(".gitignore")
+        .hidden(!options.include_hidden)
+        .git_ignore(options.respect_gitignore)
+        .git_global(options.respect_gitignore)
+        .git_exclude(options.respect_gitignore)
+        .parents(options.respect_gitignore)
+        .max_depth(Some(options.max_depth + 1))
+        .follow_links(false);
 
-fn walk_tree_inner(
-    root: &Path,
-    dir: &Path,
-    depth: usize,
-    max_depth: usize,
-    status_map: &HashMap<String, String>,
-    out: &mut Vec<FsEntry>,
-) -> Result<()> {
-    let entries = std::fs::read_dir(dir)
-        .with_context(|| format!("failed to read directory {}", dir.display()))?;
-    let mut children = entries.filter_map(|entry| entry.ok()).collect::<Vec<_>>();
-    children.sort_by_key(|entry| entry.path());
-    for child in children {
-        let path = child.path();
-        let metadata = child.metadata()?;
+    for entry in builder.build() {
+        let entry = entry?;
+        let path = entry.path();
+        if path == start {
+            continue;
+        }
+        let metadata = entry
+            .metadata()
+            .with_context(|| format!("failed to read metadata for {}", path.display()))?;
         let rel_path = path
             .strip_prefix(root)
-            .unwrap_or(&path)
+            .unwrap_or(path)
             .to_string_lossy()
             .to_string();
+        if rel_path.is_empty() {
+            continue;
+        }
+
+        let depth = path
+            .strip_prefix(start)
+            .unwrap_or(path)
+            .components()
+            .count()
+            .saturating_sub(1);
         out.push(FsEntry {
             path: rel_path.clone(),
-            name: child.file_name().to_string_lossy().to_string(),
+            name: entry.file_name().to_string_lossy().to_string(),
             is_dir: metadata.is_dir(),
             depth,
             git_status: status_map.get(&rel_path).cloned(),
+            is_hidden: entry.file_name().to_string_lossy().starts_with('.'),
         });
-        if metadata.is_dir() && depth < max_depth {
-            walk_tree_inner(root, &path, depth + 1, max_depth, status_map, out)?;
+
+        if out.len() >= options.max_entries {
+            break;
         }
     }
-    Ok(())
+    Ok(out)
 }
 
 fn describe_event_kind(kind: &EventKind) -> &'static str {
@@ -316,4 +401,43 @@ fn should_refresh_git(kind: &EventKind, paths: &[String]) -> bool {
         return false;
     }
     paths.iter().any(|path| path != ".git")
+}
+
+fn is_binary_bytes(bytes: &[u8]) -> bool {
+    let sample = &bytes[..bytes.len().min(MAX_BINARY_SNIFF_BYTES)];
+    sample.iter().any(|byte| *byte == 0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_binary_bytes, walk_tree, TreeReadOptions};
+    use std::collections::HashMap;
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn detects_binary_content_by_null_bytes() {
+        assert!(is_binary_bytes(b"abc\0def"));
+        assert!(!is_binary_bytes(b"plain utf8 text"));
+    }
+
+    #[test]
+    fn tree_walk_respects_gitignore_and_hidden_defaults() {
+        let temp = tempdir().expect("temp dir");
+        let root = temp.path();
+        fs::write(root.join(".gitignore"), "ignored.txt\n").expect("write gitignore");
+        fs::write(root.join("visible.txt"), "visible").expect("write visible");
+        fs::write(root.join("ignored.txt"), "ignored").expect("write ignored");
+        fs::write(root.join(".hidden.txt"), "hidden").expect("write hidden");
+
+        let entries =
+            walk_tree(root, root, &TreeReadOptions::default(), &HashMap::new()).expect("walk tree");
+        let paths = entries
+            .into_iter()
+            .map(|entry| entry.path)
+            .collect::<Vec<_>>();
+        assert!(paths.contains(&"visible.txt".to_string()));
+        assert!(!paths.contains(&"ignored.txt".to_string()));
+        assert!(!paths.contains(&".hidden.txt".to_string()));
+    }
 }

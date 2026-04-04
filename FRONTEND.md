@@ -23,7 +23,7 @@ Rules for this checklist:
 
 - [ ] Hydrate the sidebar file tree from the backend tree API.
 - [ ] Translate backend tree rows into the nested structure expected by [FileTree.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/sidebar/FileTree.tsx).
-- [ ] Open real editor tabs from backend file reads and push edits through backend writes.
+- [ ] Open real editor tabs from `file_read` / `file_read_text` and push edits through backend writes.
 - [ ] Add dirty-state tracking, save affordances, and external-change conflict UI.
 - [ ] Add search UX for files and content once backend search exists.
 
@@ -97,6 +97,7 @@ Rules for this checklist:
 - ✅ The frontend types already model the right major concepts in [index.ts](/Users/deepsaint/Desktop/ice/frontend/src/types/index.ts): projects, tabs, pane layouts, file entries, git state, terminal sessions, Codex threads, and approvals.
 - ✅ Important state is already keyed by `projectId` across project, file, git, terminal, and Codex stores.
 - ✅ The backend now exposes a first-class workspace session payload through bootstrap and dedicated workspace session IPC commands, so the frontend no longer needs to invent pane/tab state locally.
+- ✅ The backend tree API now supports hidden-file and `.gitignore` controls, and the file-read API now distinguishes binary files from editable text.
 
 ### Visual / Product Direction
 

@@ -1,6 +1,7 @@
 use tauri::{AppHandle, State};
 
 use crate::app::state::AppState;
+use crate::fs::service::TreeReadOptions;
 use crate::ipc::dto::*;
 use crate::ipc::errors::AppError;
 
@@ -88,7 +89,12 @@ pub async fn project_tree_read(
         .read_tree(
             &input.project_id,
             input.path.as_deref(),
-            input.depth.unwrap_or(2),
+            TreeReadOptions {
+                max_depth: input.depth.unwrap_or(2),
+                include_hidden: input.include_hidden.unwrap_or(false),
+                respect_gitignore: input.respect_gitignore.unwrap_or(true),
+                max_entries: input.max_entries.unwrap_or(5_000),
+            },
             &state.projects,
             &state.git,
         )
@@ -113,7 +119,10 @@ pub async fn project_snapshot(
         .read_tree(
             &input.project_id,
             None,
-            input.tree_depth.unwrap_or(3),
+            TreeReadOptions {
+                max_depth: input.tree_depth.unwrap_or(3),
+                ..TreeReadOptions::default()
+            },
             &state.projects,
             &state.git,
         )
@@ -141,6 +150,17 @@ pub async fn file_read_text(
     Ok(state
         .fs
         .read_text_file(&input.project_id, &input.path, &state.projects)
+        .await?)
+}
+
+#[tauri::command]
+pub async fn file_read(
+    input: ReadFileInput,
+    state: State<'_, AppState>,
+) -> Result<crate::fs::service::FileReadResult, AppError> {
+    Ok(state
+        .fs
+        .read_file(&input.project_id, &input.path, &state.projects)
         .await?)
 }
 

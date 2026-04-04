@@ -13,12 +13,10 @@ Rules for this checklist:
 
 ### Filesystem / IDE
 
-- [ ] Add file watching so project trees, open editors, and git decorations update without manual refresh.
 - [ ] Add nested tree snapshot support so the frontend does not have to reconstruct deep directory structure from flat rows.
-- [ ] Add binary-file detection and safe read behavior for non-text files.
 - [ ] Add search primitives for filename and content search scoped by `projectId`.
 - [ ] Add save conflict handling for files changed externally after open.
-- [ ] Add ignore-aware traversal controls for `.gitignore`, hidden files, and large directory suppression.
+- [ ] Add richer editor read metadata for non-UTF-8 text encodings beyond the current UTF-8-safe read contract.
 
 ### Git
 
@@ -100,6 +98,9 @@ Rules for this checklist:
 - ✅ Tree reads, text file reads, and text writes exist.
 - ✅ Directory creation, entry deletion, and entry rename commands are implemented.
 - ✅ File tree rows can include git status annotations from the native git service.
+- ✅ File watch support exists and emits `app://fs` events for live project updates.
+- ✅ Tree reads now support ignore-aware traversal controls for `.gitignore`, hidden files, and entry-count suppression.
+- ✅ File reads now expose binary-safe metadata through [service.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/fs/service.rs), and text reads reject binary payloads instead of pretending they are editable text.
 
 ### Git
 
