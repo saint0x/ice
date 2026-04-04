@@ -42,7 +42,6 @@ Rules for this checklist:
 ### Security / Approvals
 
 - [ ] Define approval policy rules by action type instead of treating all server requests as the same class.
-- [ ] Add explicit audit logging for approvals and denials.
 - [ ] Add guardrails for destructive local actions initiated through agent flows.
 
 ### Persistence / State
@@ -134,6 +133,7 @@ Rules for this checklist:
 
 - ✅ Pending approval records are loaded from SQLite at startup through [approvals.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/security/approvals.rs).
 - ✅ Approval list, upsert, resolve, and project cleanup flows are implemented.
+- ✅ Approval audit records are now persisted for request, approve, and deny decisions, with IPC access for diagnostics and compliance surfaces.
 
 ### Projects / Multi-Project Support
 

@@ -328,7 +328,10 @@ impl CodexService {
 
     pub async fn respond_to_server_request(&self, request_id: u64, result: Value) -> Result<()> {
         let process = self.ensure_process().await?;
-        let resolved = self.security.resolve_approval(request_id).await?;
+        let resolved = self
+            .security
+            .resolve_approval(request_id, "approved")
+            .await?;
         if let Some(thread) = mark_thread_after_approval_response(
             &self.state,
             resolved.as_ref().and_then(|a| a.thread_id.as_deref()),
@@ -344,6 +347,43 @@ impl CodexService {
             .pending_server_requests
             .remove(&request_id);
         let payload = json!({ "id": request_id, "result": result });
+        let mut stdin = process.stdin.lock().await;
+        stdin.write_all(payload.to_string().as_bytes()).await?;
+        stdin.write_all(b"\n").await?;
+        stdin.flush().await?;
+        Ok(())
+    }
+
+    pub async fn deny_server_request(
+        &self,
+        request_id: u64,
+        message: Option<String>,
+    ) -> Result<()> {
+        let process = self.ensure_process().await?;
+        let resolved = self.security.resolve_approval(request_id, "denied").await?;
+        if let Some(thread) = mark_thread_after_denial(
+            &self.state,
+            resolved
+                .as_ref()
+                .and_then(|approval| approval.thread_id.as_deref()),
+        ) {
+            self.persistence.upsert_codex_thread(thread.clone()).await?;
+            let _ = self.app.emit(
+                CODEX_EVENT,
+                json!({ "type": "threadUpdated", "thread": thread }),
+            );
+        }
+        self.state
+            .lock()
+            .pending_server_requests
+            .remove(&request_id);
+        let payload = json!({
+            "id": request_id,
+            "error": {
+                "code": -32001,
+                "message": message.unwrap_or_else(|| "Approval denied by user".to_string())
+            }
+        });
         let mut stdin = process.stdin.lock().await;
         stdin.write_all(payload.to_string().as_bytes()).await?;
         stdin.write_all(b"\n").await?;
@@ -682,6 +722,16 @@ fn mark_thread_after_approval_response(
     if thread.status == "waitingApproval" {
         thread.status = "running".to_string();
     }
+    Some(thread.clone())
+}
+
+fn mark_thread_after_denial(
+    state: &Arc<Mutex<CodexRuntimeState>>,
+    thread_id: Option<&str>,
+) -> Option<CodexThreadBinding> {
+    let mut runtime = state.lock();
+    let thread = runtime.threads.get_mut(thread_id?)?;
+    thread.status = "idle".to_string();
     Some(thread.clone())
 }
 

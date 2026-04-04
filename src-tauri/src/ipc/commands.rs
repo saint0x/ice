@@ -666,9 +666,29 @@ pub async fn codex_server_request_respond(
 }
 
 #[tauri::command]
+pub async fn codex_server_request_deny(
+    input: CodexServerRequestDenyInput,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    state
+        .codex
+        .deny_server_request(input.request_id, input.message)
+        .await?;
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn codex_approvals_list(
     project_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Vec<crate::security::approvals::PendingApprovalRecord>, AppError> {
     Ok(state.security.list_approvals(project_id.as_deref()).await)
+}
+
+#[tauri::command]
+pub async fn approval_audit_list(
+    project_id: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::security::approvals::ApprovalAuditRecord>, AppError> {
+    Ok(state.security.list_audit_log(project_id.as_deref()).await?)
 }

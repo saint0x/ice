@@ -5,7 +5,9 @@ use anyhow::Result;
 use parking_lot::RwLock;
 use serde::Serialize;
 use serde_json::Value;
+use tauri::{AppHandle, Emitter};
 
+use crate::app::events::SECURITY_EVENT;
 use crate::persistence::db::PersistenceService;
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -21,7 +23,24 @@ pub struct PendingApprovalRecord {
     pub context_json: Option<Value>,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ApprovalAuditRecord {
+    pub audit_id: i64,
+    pub request_id: u64,
+    pub project_id: String,
+    pub thread_id: Option<String>,
+    pub action_type: String,
+    pub category: String,
+    pub risk_level: String,
+    pub decision: String,
+    pub description: String,
+    pub context_json: Option<Value>,
+    pub created_at: String,
+}
+
 pub struct SecurityService {
+    app: AppHandle,
     persistence: Arc<PersistenceService>,
     approvals: RwLock<HashMap<u64, PendingApprovalRecord>>,
 }
@@ -111,7 +130,7 @@ pub fn classify_approval(method: &str, payload: &Value) -> (String, String, Stri
 }
 
 impl SecurityService {
-    pub fn new(persistence: Arc<PersistenceService>) -> Self {
+    pub fn new(app: AppHandle, persistence: Arc<PersistenceService>) -> Self {
         let approvals = persistence
             .load_pending_approvals_sync()
             .unwrap_or_default()
@@ -119,6 +138,7 @@ impl SecurityService {
             .map(|approval| (approval.request_id, approval))
             .collect();
         Self {
+            app,
             persistence,
             approvals: RwLock::new(approvals),
         }
@@ -137,16 +157,33 @@ impl SecurityService {
             .collect()
     }
 
+    pub async fn list_audit_log(
+        &self,
+        project_id: Option<&str>,
+    ) -> Result<Vec<ApprovalAuditRecord>> {
+        self.persistence.load_approval_audit_log(project_id).await
+    }
+
     pub async fn upsert_approval(&self, approval: PendingApprovalRecord) -> Result<()> {
         self.approvals
             .write()
             .insert(approval.request_id, approval.clone());
-        self.persistence.upsert_pending_approval(approval).await
+        self.persistence
+            .upsert_pending_approval(approval.clone())
+            .await?;
+        self.record_audit(approval, "requested").await
     }
 
-    pub async fn resolve_approval(&self, request_id: u64) -> Result<Option<PendingApprovalRecord>> {
+    pub async fn resolve_approval(
+        &self,
+        request_id: u64,
+        decision: &str,
+    ) -> Result<Option<PendingApprovalRecord>> {
         let removed = self.approvals.write().remove(&request_id);
         self.persistence.delete_pending_approval(request_id).await?;
+        if let Some(approval) = removed.clone() {
+            self.record_audit(approval, decision).await?;
+        }
         Ok(removed)
     }
 
@@ -157,5 +194,17 @@ impl SecurityService {
         self.persistence
             .delete_pending_approvals_for_project(project_id.to_string())
             .await
+    }
+
+    async fn record_audit(&self, approval: PendingApprovalRecord, decision: &str) -> Result<()> {
+        let audit = self
+            .persistence
+            .append_approval_audit(approval, decision.to_string())
+            .await?;
+        let _ = self.app.emit(
+            SECURITY_EVENT,
+            serde_json::json!({ "type": "approvalAudit", "audit": audit }),
+        );
+        Ok(())
     }
 }

@@ -104,6 +104,7 @@ Rules for this checklist:
 - ✅ The backend Codex thread payload now includes normalized status, unread state, and last assistant message summaries for sidebar/chat rendering.
 - ✅ The backend now exposes classified approval metadata and a `codex_restart` command for recovery UI.
 - ✅ The backend now exposes Codex runtime contract info so diagnostics or settings UI can show the installed CLI/app-server capabilities.
+- ✅ The backend now exposes approval audit history plus an explicit deny path for approval UX and diagnostics surfaces.
 
 ### Visual / Product Direction
 

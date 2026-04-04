@@ -273,3 +273,10 @@ pub struct CodexServerRequestRespondInput {
     pub request_id: u64,
     pub result: serde_json::Value,
 }
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexServerRequestDenyInput {
+    pub request_id: u64,
+    pub message: Option<String>,
+}

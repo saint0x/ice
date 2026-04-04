@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use crate::browser::service::{BrowserHistoryEntry, BrowserTabRecord};
 use crate::codex::service::CodexThreadBinding;
 use crate::projects::models::ProjectRecord;
-use crate::security::approvals::PendingApprovalRecord;
+use crate::security::approvals::{ApprovalAuditRecord, PendingApprovalRecord};
 use crate::terminal::service::TerminalSessionRecord;
 use crate::workspace::service::WorkspaceSessionState;
 
@@ -106,6 +106,19 @@ impl PersistenceService {
               context_json TEXT,
               created_at TEXT NOT NULL,
               updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS approval_audit_log (
+              audit_id INTEGER PRIMARY KEY AUTOINCREMENT,
+              request_id INTEGER NOT NULL,
+              project_id TEXT NOT NULL,
+              thread_id TEXT,
+              action_type TEXT NOT NULL,
+              category TEXT NOT NULL,
+              risk_level TEXT NOT NULL,
+              decision TEXT NOT NULL,
+              description TEXT NOT NULL,
+              context_json TEXT,
+              created_at TEXT NOT NULL
             );
             ",
         )?;
@@ -710,6 +723,111 @@ impl PersistenceService {
         .await??;
         Ok(())
     }
+
+    pub async fn append_approval_audit(
+        &self,
+        approval: PendingApprovalRecord,
+        decision: String,
+    ) -> Result<ApprovalAuditRecord> {
+        let this = self.clone();
+        tokio::task::spawn_blocking(move || -> Result<ApprovalAuditRecord> {
+            let conn = this.connect()?;
+            let created_at = chrono::Utc::now().to_rfc3339();
+            conn.execute(
+                "
+                INSERT INTO approval_audit_log (
+                  request_id, project_id, thread_id, action_type, category, risk_level, decision, description, context_json, created_at
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                ",
+                params![
+                    approval.request_id,
+                    approval.project_id,
+                    approval.thread_id,
+                    approval.action_type,
+                    approval.category,
+                    approval.risk_level,
+                    decision,
+                    approval.description,
+                    approval.context_json.clone().map(|value| value.to_string()),
+                    created_at,
+                ],
+            )?;
+            Ok(ApprovalAuditRecord {
+                audit_id: conn.last_insert_rowid(),
+                request_id: approval.request_id,
+                project_id: approval.project_id,
+                thread_id: approval.thread_id,
+                action_type: approval.action_type,
+                category: approval.category,
+                risk_level: approval.risk_level,
+                decision,
+                description: approval.description,
+                context_json: approval.context_json,
+                created_at,
+            })
+        })
+        .await?
+    }
+
+    pub async fn load_approval_audit_log(
+        &self,
+        project_id: Option<&str>,
+    ) -> Result<Vec<ApprovalAuditRecord>> {
+        let this = self.clone();
+        let project_id = project_id.map(ToOwned::to_owned);
+        tokio::task::spawn_blocking(move || -> Result<Vec<ApprovalAuditRecord>> {
+            let conn = this.connect()?;
+            let mut stmt = if project_id.is_some() {
+                conn.prepare(
+                    "
+                    SELECT audit_id, request_id, project_id, thread_id, action_type, category, risk_level, decision, description, context_json, created_at
+                    FROM approval_audit_log
+                    WHERE project_id = ?1
+                    ORDER BY audit_id DESC
+                    ",
+                )?
+            } else {
+                conn.prepare(
+                    "
+                    SELECT audit_id, request_id, project_id, thread_id, action_type, category, risk_level, decision, description, context_json, created_at
+                    FROM approval_audit_log
+                    ORDER BY audit_id DESC
+                    ",
+                )?
+            };
+            let rows = if let Some(project_id) = project_id {
+                stmt.query_map(params![project_id], approval_audit_row)?
+            } else {
+                stmt.query_map([], approval_audit_row)?
+            };
+            Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+        })
+        .await?
+    }
+}
+
+fn approval_audit_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ApprovalAuditRecord> {
+    let raw_context: Option<String> = row.get(9)?;
+    let context_json = raw_context
+        .map(|text| {
+            serde_json::from_str(&text).map_err(|err| {
+                rusqlite::Error::FromSqlConversionFailure(9, Type::Text, Box::new(err))
+            })
+        })
+        .transpose()?;
+    Ok(ApprovalAuditRecord {
+        audit_id: row.get(0)?,
+        request_id: row.get(1)?,
+        project_id: row.get(2)?,
+        thread_id: row.get(3)?,
+        action_type: row.get(4)?,
+        category: row.get(5)?,
+        risk_level: row.get(6)?,
+        decision: row.get(7)?,
+        description: row.get(8)?,
+        context_json,
+        created_at: row.get(10)?,
+    })
 }
 
 fn add_column_if_missing(conn: &Connection, sql: &str) -> Result<()> {
@@ -883,7 +1001,19 @@ mod tests {
             .expect("approval write");
         assert_eq!(
             db.load_pending_approvals_sync().expect("approval read"),
-            vec![approval]
+            vec![approval.clone()]
+        );
+        let approval_audit = db
+            .append_approval_audit(approval.clone(), "approved".to_string())
+            .await
+            .expect("approval audit write");
+        assert_eq!(approval_audit.decision, "approved");
+        assert_eq!(
+            db.load_approval_audit_log(Some("project-a"))
+                .await
+                .expect("approval audit read")
+                .len(),
+            1
         );
 
         db.delete_browser_tabs_for_project("project-a".to_string())

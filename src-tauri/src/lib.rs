@@ -85,7 +85,9 @@ pub fn run() {
             commands::codex_threads_list,
             commands::codex_turn_start,
             commands::codex_server_request_respond,
-            commands::codex_approvals_list
+            commands::codex_server_request_deny,
+            commands::codex_approvals_list,
+            commands::approval_audit_list
         ])
         .run(tauri::generate_context!())
         .expect("failed to run tauri app");

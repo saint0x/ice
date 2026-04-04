@@ -3,3 +3,4 @@ pub const TERMINAL_EVENT: &str = "app://terminal";
 pub const GIT_EVENT: &str = "app://git";
 pub const FS_EVENT: &str = "app://fs";
 pub const BROWSER_EVENT: &str = "app://browser";
+pub const SECURITY_EVENT: &str = "app://security";
