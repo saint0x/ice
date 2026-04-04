@@ -157,6 +157,27 @@ pub struct BrowserTabNavigateInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct BrowserTabPinInput {
+    pub tab_id: String,
+    pub is_pinned: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserRendererStateInput {
+    pub tab_id: String,
+    pub url: Option<String>,
+    pub title: Option<String>,
+    pub is_loading: Option<bool>,
+    pub favicon_url: Option<Option<String>>,
+    pub security_origin: Option<Option<String>>,
+    pub is_secure: Option<bool>,
+    pub can_go_back: Option<bool>,
+    pub can_go_forward: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TerminalCreateInput {
     pub project_id: String,
     pub cwd: Option<String>,

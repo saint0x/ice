@@ -42,7 +42,9 @@ Rules for this checklist:
 - [ ] Replace the placeholder browser viewport in [BrowserSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/BrowserSurface.tsx) with the real Tauri-native browser rendering strategy.
 - [ ] Wire address bar and nav buttons to backend browser commands.
 - [ ] Render per-project browser tab lists instead of the current “No browser tabs” placeholder in [ProjectSection.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/sidebar/ProjectSection.tsx).
-- [ ] Add loading, title, favicon, and secure-origin indicators.
+- [ ] Hydrate browser tab chrome from backend `BrowserTabRecord` metadata instead of local placeholder fields.
+- [ ] Use `browser_tab_renderer_state_set` from the renderer host to keep loading, title, favicon, security-origin, and nav affordances in sync.
+- [ ] Use `browser_tab_pin_set` for pinned tabs and `browser_tab_open_external` for “open in external browser” affordances.
 
 ### Terminal
 

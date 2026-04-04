@@ -21,11 +21,9 @@ Rules for this checklist:
 
 ### Browser
 
-- [ ] Replace metadata-only browser state with the production rendering bridge the frontend will use for real in-pane browsing.
 - [ ] Decide and implement the final Tauri-native browser container strategy for pane-hosted browsing.
-- [ ] Add per-tab loading state, favicon state, TLS/security metadata, and title updates from the real renderer.
-- [ ] Add download events, find-in-page hooks, and open-in-external-browser actions.
-- [ ] Add browser persistence for pinned tabs and project-level startup restore policy.
+- [ ] Add download events and find-in-page hooks from the final browser renderer bridge.
+- [ ] Add project-level startup restore policy for browser tabs.
 
 ### Terminal
 
@@ -103,6 +101,8 @@ Rules for this checklist:
 - ✅ Browser tabs are project-scoped and persistent.
 - ✅ Browser navigation state supports navigate, back, forward, reload, close, list, and history retrieval in [service.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/browser/service.rs).
 - ✅ Browser events are emitted through `app://browser`.
+- ✅ Browser tab metadata now persists loading state, favicon URL, security origin, and secure-context state in [service.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/browser/service.rs) and [db.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/persistence/db.rs).
+- ✅ Renderer-facing browser sync commands now exist for pinning, tab metadata updates, and open-external requests without hard-coding a specific browser engine into the backend contract.
 
 ### Terminal
 
@@ -161,3 +161,4 @@ Rules for this checklist:
 - ✅ Feature-focused Fozzy scenarios now exist for approval policy and FS/editor contracts in [backend.approval_policy.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.approval_policy.fozzy.json) and [backend.fs_editor.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.fs_editor.fozzy.json).
 - ✅ Feature-focused Fozzy coverage now also exists for terminal lifecycle and persistence contracts in [backend.terminal_lifecycle.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.terminal_lifecycle.fozzy.json).
 - ✅ Feature-focused Fozzy coverage now also exists for git mutation and commit-readiness contracts in [backend.git_mutation.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.git_mutation.fozzy.json).
+- ✅ Feature-focused Fozzy coverage now also exists for browser metadata and renderer-sync contracts in [backend.browser_contract.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.browser_contract.fozzy.json).

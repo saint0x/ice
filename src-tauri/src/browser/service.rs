@@ -26,6 +26,10 @@ pub struct BrowserTabRecord {
     pub is_pinned: bool,
     pub can_go_back: bool,
     pub can_go_forward: bool,
+    pub is_loading: bool,
+    pub favicon_url: Option<String>,
+    pub security_origin: Option<String>,
+    pub is_secure: bool,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -37,11 +41,31 @@ pub struct BrowserHistoryEntry {
     pub title: String,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserExternalOpenRequest {
+    pub tab_id: String,
+    pub project_id: String,
+    pub url: String,
+}
+
 #[derive(Debug, Clone)]
 struct BrowserTabState {
     record: BrowserTabRecord,
     history: Vec<BrowserHistoryEntry>,
     current_index: usize,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct BrowserRendererUpdate {
+    pub url: Option<String>,
+    pub title: Option<String>,
+    pub is_loading: Option<bool>,
+    pub favicon_url: Option<Option<String>>,
+    pub security_origin: Option<Option<String>>,
+    pub is_secure: Option<bool>,
+    pub can_go_back: Option<bool>,
+    pub can_go_forward: Option<bool>,
 }
 
 impl BrowserService {
@@ -106,6 +130,10 @@ impl BrowserService {
             is_pinned: false,
             can_go_back: false,
             can_go_forward: false,
+            is_loading: url != "about:blank",
+            favicon_url: None,
+            security_origin: browser_security_origin(&url),
+            is_secure: is_secure_url(&url),
         };
         let state = BrowserTabState {
             record: record.clone(),
@@ -152,8 +180,11 @@ impl BrowserService {
                 title: title.clone(),
             });
             tab.current_index = position;
-            tab.record.url = url;
+            tab.record.url = url.clone();
             tab.record.title = title;
+            tab.record.is_loading = true;
+            tab.record.security_origin = browser_security_origin(&url);
+            tab.record.is_secure = is_secure_url(&url);
             refresh_record_navigation(tab);
             tab.clone()
         };
@@ -170,6 +201,86 @@ impl BrowserService {
         Ok(state.record)
     }
 
+    pub async fn set_pinned(&self, tab_id: &str, is_pinned: bool) -> Result<BrowserTabRecord> {
+        let updated = self
+            .update_tab(tab_id, |state| {
+                state.record.is_pinned = is_pinned;
+            })?
+            .ok_or_else(|| anyhow!("unknown browser tab"))?;
+        self.persistence.upsert_browser_tab(updated.clone()).await?;
+        let _ = self.app.emit(
+            BROWSER_EVENT,
+            serde_json::json!({ "type": "tabPinChanged", "tab": updated.clone() }),
+        );
+        Ok(updated)
+    }
+
+    pub async fn sync_renderer_state(
+        &self,
+        tab_id: &str,
+        update: BrowserRendererUpdate,
+    ) -> Result<BrowserTabRecord> {
+        let updated = self
+            .update_tab(tab_id, |state| {
+                if let Some(url) = update.url.clone() {
+                    state.record.url = url.clone();
+                    state.record.security_origin = browser_security_origin(&url);
+                    state.record.is_secure = is_secure_url(&url);
+                }
+                if let Some(title) = update.title.clone() {
+                    state.record.title = title.clone();
+                    if let Some(current) = state.history.get_mut(state.current_index) {
+                        current.title = title;
+                    }
+                }
+                if let Some(is_loading) = update.is_loading {
+                    state.record.is_loading = is_loading;
+                }
+                if let Some(favicon_url) = update.favicon_url.clone() {
+                    state.record.favicon_url = favicon_url;
+                }
+                if let Some(security_origin) = update.security_origin.clone() {
+                    state.record.security_origin = security_origin;
+                }
+                if let Some(is_secure) = update.is_secure {
+                    state.record.is_secure = is_secure;
+                }
+                if let Some(can_go_back) = update.can_go_back {
+                    state.record.can_go_back = can_go_back;
+                }
+                if let Some(can_go_forward) = update.can_go_forward {
+                    state.record.can_go_forward = can_go_forward;
+                }
+            })?
+            .ok_or_else(|| anyhow!("unknown browser tab"))?;
+        self.persistence.upsert_browser_tab(updated.clone()).await?;
+        let _ = self.app.emit(
+            BROWSER_EVENT,
+            serde_json::json!({ "type": "tabRendererStateChanged", "tab": updated.clone() }),
+        );
+        Ok(updated)
+    }
+
+    pub async fn request_open_external(&self, tab_id: &str) -> Result<BrowserExternalOpenRequest> {
+        let tab = self
+            .tabs
+            .read()
+            .get(tab_id)
+            .ok_or_else(|| anyhow!("unknown browser tab"))?
+            .record
+            .clone();
+        let request = BrowserExternalOpenRequest {
+            tab_id: tab.tab_id.clone(),
+            project_id: tab.project_id.clone(),
+            url: tab.url.clone(),
+        };
+        let _ = self.app.emit(
+            BROWSER_EVENT,
+            serde_json::json!({ "type": "openExternalRequested", "request": request.clone() }),
+        );
+        Ok(request)
+    }
+
     pub async fn go_back(&self, tab_id: &str) -> Result<BrowserTabRecord> {
         self.step_history(tab_id, -1).await
     }
@@ -180,12 +291,11 @@ impl BrowserService {
 
     pub async fn reload(&self, tab_id: &str) -> Result<BrowserTabRecord> {
         let record = self
-            .tabs
-            .read()
-            .get(tab_id)
-            .ok_or_else(|| anyhow!("unknown browser tab"))?
-            .record
-            .clone();
+            .update_tab(tab_id, |state| {
+                state.record.is_loading = true;
+            })?
+            .ok_or_else(|| anyhow!("unknown browser tab"))?;
+        self.persistence.upsert_browser_tab(record.clone()).await?;
         let _ = self.app.emit(
             BROWSER_EVENT,
             serde_json::json!({ "type": "tabReloaded", "tab": record.clone() }),
@@ -212,7 +322,8 @@ impl BrowserService {
     }
 
     pub async fn list_tabs(&self, project_id: Option<&str>) -> Vec<BrowserTabRecord> {
-        self.tabs
+        let mut tabs = self
+            .tabs
             .read()
             .values()
             .filter(|tab| {
@@ -221,7 +332,14 @@ impl BrowserService {
                     .unwrap_or(true)
             })
             .map(|tab| tab.record.clone())
-            .collect()
+            .collect::<Vec<_>>();
+        tabs.sort_by(|left, right| {
+            right
+                .is_pinned
+                .cmp(&left.is_pinned)
+                .then_with(|| left.title.cmp(&right.title))
+        });
+        tabs
     }
 
     pub async fn history(&self, tab_id: &str) -> Result<Vec<BrowserHistoryEntry>> {
@@ -258,8 +376,11 @@ impl BrowserService {
             }
             tab.current_index = target as usize;
             let current = tab.history[tab.current_index].clone();
-            tab.record.url = current.url;
+            tab.record.url = current.url.clone();
             tab.record.title = current.title;
+            tab.record.is_loading = false;
+            tab.record.security_origin = browser_security_origin(&current.url);
+            tab.record.is_secure = is_secure_url(&current.url);
             refresh_record_navigation(tab);
             tab.clone()
         };
@@ -271,6 +392,21 @@ impl BrowserService {
             serde_json::json!({ "type": "tabHistoryChanged", "tab": state.record.clone() }),
         );
         Ok(state.record)
+    }
+
+    fn update_tab<F>(&self, tab_id: &str, mut apply: F) -> Result<Option<BrowserTabRecord>>
+    where
+        F: FnMut(&mut BrowserTabState),
+    {
+        let updated = {
+            let mut tabs = self.tabs.write();
+            let Some(state) = tabs.get_mut(tab_id) else {
+                return Ok(None);
+            };
+            apply(state);
+            state.record.clone()
+        };
+        Ok(Some(updated))
     }
 }
 
@@ -284,7 +420,35 @@ fn infer_title_from_url(url: &str) -> String {
         .to_string()
 }
 
+fn browser_security_origin(url: &str) -> Option<String> {
+    let origin = url.split('/').take(3).collect::<Vec<_>>().join("/");
+    if origin.contains("://") {
+        Some(origin)
+    } else {
+        None
+    }
+}
+
+fn is_secure_url(url: &str) -> bool {
+    url.starts_with("https://") || url.starts_with("about:") || url.starts_with("tauri://")
+}
+
 fn refresh_record_navigation(state: &mut BrowserTabState) {
     state.record.can_go_back = state.current_index > 0;
     state.record.can_go_forward = state.current_index + 1 < state.history.len();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{browser_security_origin, is_secure_url};
+
+    #[test]
+    fn infers_secure_origin_from_https_url() {
+        assert_eq!(
+            browser_security_origin("https://example.com/docs/page"),
+            Some("https://example.com".to_string())
+        );
+        assert!(is_secure_url("https://example.com"));
+        assert!(!is_secure_url("http://example.com"));
+    }
 }

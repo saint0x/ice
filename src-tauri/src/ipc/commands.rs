@@ -511,6 +511,48 @@ pub async fn browser_tab_navigate(
 }
 
 #[tauri::command]
+pub async fn browser_tab_pin_set(
+    input: BrowserTabPinInput,
+    state: State<'_, AppState>,
+) -> Result<crate::browser::service::BrowserTabRecord, AppError> {
+    Ok(state
+        .browser
+        .set_pinned(&input.tab_id, input.is_pinned)
+        .await?)
+}
+
+#[tauri::command]
+pub async fn browser_tab_renderer_state_set(
+    input: BrowserRendererStateInput,
+    state: State<'_, AppState>,
+) -> Result<crate::browser::service::BrowserTabRecord, AppError> {
+    Ok(state
+        .browser
+        .sync_renderer_state(
+            &input.tab_id,
+            crate::browser::service::BrowserRendererUpdate {
+                url: input.url,
+                title: input.title,
+                is_loading: input.is_loading,
+                favicon_url: input.favicon_url,
+                security_origin: input.security_origin,
+                is_secure: input.is_secure,
+                can_go_back: input.can_go_back,
+                can_go_forward: input.can_go_forward,
+            },
+        )
+        .await?)
+}
+
+#[tauri::command]
+pub async fn browser_tab_open_external(
+    tab_id: String,
+    state: State<'_, AppState>,
+) -> Result<crate::browser::service::BrowserExternalOpenRequest, AppError> {
+    Ok(state.browser.request_open_external(&tab_id).await?)
+}
+
+#[tauri::command]
 pub async fn browser_tab_back(
     tab_id: String,
     state: State<'_, AppState>,

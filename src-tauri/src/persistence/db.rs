@@ -68,6 +68,10 @@ impl PersistenceService {
               url TEXT NOT NULL,
               title TEXT NOT NULL,
               is_pinned INTEGER NOT NULL,
+              is_loading INTEGER NOT NULL DEFAULT 0,
+              favicon_url TEXT,
+              security_origin TEXT,
+              is_secure INTEGER NOT NULL DEFAULT 0,
               created_at TEXT NOT NULL,
               updated_at TEXT NOT NULL
             );
@@ -195,6 +199,22 @@ impl PersistenceService {
         add_column_if_missing(
             &conn,
             "ALTER TABLE terminal_sessions ADD COLUMN scrollback_bytes INTEGER NOT NULL DEFAULT 0",
+        )?;
+        add_column_if_missing(
+            &conn,
+            "ALTER TABLE browser_tabs ADD COLUMN is_loading INTEGER NOT NULL DEFAULT 0",
+        )?;
+        add_column_if_missing(
+            &conn,
+            "ALTER TABLE browser_tabs ADD COLUMN favicon_url TEXT",
+        )?;
+        add_column_if_missing(
+            &conn,
+            "ALTER TABLE browser_tabs ADD COLUMN security_origin TEXT",
+        )?;
+        add_column_if_missing(
+            &conn,
+            "ALTER TABLE browser_tabs ADD COLUMN is_secure INTEGER NOT NULL DEFAULT 0",
         )?;
         Ok(())
     }
@@ -413,7 +433,7 @@ impl PersistenceService {
         let conn = self.connect()?;
         let mut stmt = conn.prepare(
             "
-            SELECT tab_id, project_id, url, title, is_pinned
+            SELECT tab_id, project_id, url, title, is_pinned, is_loading, favicon_url, security_origin, is_secure
             FROM browser_tabs
             ORDER BY updated_at DESC
             ",
@@ -427,6 +447,10 @@ impl PersistenceService {
                 is_pinned: row.get::<_, i64>(4)? != 0,
                 can_go_back: false,
                 can_go_forward: false,
+                is_loading: row.get::<_, i64>(5)? != 0,
+                favicon_url: row.get(6)?,
+                security_origin: row.get(7)?,
+                is_secure: row.get::<_, i64>(8)? != 0,
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
@@ -438,16 +462,30 @@ impl PersistenceService {
             let conn = this.connect()?;
             conn.execute(
                 "
-                INSERT INTO browser_tabs (tab_id, project_id, url, title, is_pinned, created_at, updated_at)
-                VALUES (?1, ?2, ?3, ?4, ?5, datetime('now'), datetime('now'))
+                INSERT INTO browser_tabs (tab_id, project_id, url, title, is_pinned, is_loading, favicon_url, security_origin, is_secure, created_at, updated_at)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, datetime('now'), datetime('now'))
                 ON CONFLICT(tab_id) DO UPDATE SET
                   project_id = excluded.project_id,
                   url = excluded.url,
                   title = excluded.title,
                   is_pinned = excluded.is_pinned,
+                  is_loading = excluded.is_loading,
+                  favicon_url = excluded.favicon_url,
+                  security_origin = excluded.security_origin,
+                  is_secure = excluded.is_secure,
                   updated_at = excluded.updated_at
                 ",
-                params![tab.tab_id, tab.project_id, tab.url, tab.title, tab.is_pinned as i64],
+                params![
+                    tab.tab_id,
+                    tab.project_id,
+                    tab.url,
+                    tab.title,
+                    tab.is_pinned as i64,
+                    tab.is_loading as i64,
+                    tab.favicon_url,
+                    tab.security_origin,
+                    tab.is_secure as i64
+                ],
             )?;
             Ok(())
         })
@@ -1117,6 +1155,10 @@ mod tests {
             is_pinned: true,
             can_go_back: false,
             can_go_forward: false,
+            is_loading: false,
+            favicon_url: Some("https://example.com/favicon.ico".to_string()),
+            security_origin: Some("https://example.com".to_string()),
+            is_secure: true,
         };
         db.upsert_browser_tab(tab.clone())
             .await
