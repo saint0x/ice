@@ -73,6 +73,20 @@ export interface GitState {
   behind: number
 }
 
+export interface BrowserTab {
+  id: string
+  projectId: ProjectId
+  title: string
+  url: string
+  isPinned: boolean
+  canGoBack: boolean
+  canGoForward: boolean
+  isLoading: boolean
+  faviconUrl?: string
+  securityOrigin?: string
+  isSecure: boolean
+}
+
 export interface TerminalSession {
   id: TerminalId
   projectId: ProjectId

@@ -1,9 +1,11 @@
 import { useEffect, useRef } from 'react'
 import {
   appBootstrap,
+  browserTabsList,
   codexApprovalsList,
   codexThreadsList,
   gitStatusRead,
+  listenBrowserEvents,
   listenCodexEvents,
   listenFsEvents,
   listenGitEvents,
@@ -13,6 +15,7 @@ import {
   projectWatchStop,
   terminalList,
   terminalScrollbackRead,
+  toBrowserTab,
   toCodexApproval,
   toCodexThread,
   toFileTree,
@@ -30,6 +33,7 @@ import { useGitStore } from '@/stores/git'
 import { useProjectsStore } from '@/stores/projects'
 import { useCodexStore } from '@/stores/codex'
 import { useTerminalStore } from '@/stores/terminal'
+import { useBrowserStore } from '@/stores/browser'
 import { useWorkspaceStore } from '@/stores/workspace'
 
 const TREE_REFRESH_EVENT_TYPES = new Set([
@@ -46,6 +50,9 @@ export function useBackendIntegration() {
   const updateProject = useProjectsStore((state) => state.updateProject)
   const hydrateTree = useFilesStore((state) => state.hydrateTree)
   const hydrateGitState = useGitStore((state) => state.hydrateGitState)
+  const hydrateBrowserTabs = useBrowserStore((state) => state.hydrateTabs)
+  const upsertBrowserTab = useBrowserStore((state) => state.upsertTab)
+  const closeBrowserTab = useBrowserStore((state) => state.closeTab)
   const hydrateSessions = useTerminalStore((state) => state.hydrateSessions)
   const upsertSession = useTerminalStore((state) => state.upsertSession)
   const setScrollback = useTerminalStore((state) => state.setScrollback)
@@ -74,6 +81,7 @@ export function useBackendIntegration() {
     let disposed = false
     let fsUnlisten: (() => void) | undefined
     let gitUnlisten: (() => void) | undefined
+    let browserUnlisten: (() => void) | undefined
     let terminalUnlisten: (() => void) | undefined
     let codexUnlisten: (() => void) | undefined
     const watchedProjects = new Set<string>()
@@ -93,17 +101,19 @@ export function useBackendIntegration() {
       hydrateProjects(projects)
       hydrateWorkspace(toWorkspaceInput(data.workspaceChrome, data.workspaceSession))
 
-      const [sessions, threads, approvals] = await Promise.all([
+      const [browserTabs, terminalSessions, codexThreads, pendingApprovals] = await Promise.all([
+        browserTabsList(),
         terminalList(),
         codexThreadsList(),
         codexApprovalsList(),
       ])
       if (disposed) return
-      hydrateSessions(sessions.map(toTerminalSession))
-      hydrateThreads(threads.map(toCodexThread))
-      hydrateApprovals(approvals.map(toCodexApproval))
+      hydrateBrowserTabs(browserTabs.map(toBrowserTab))
+      hydrateSessions(terminalSessions.map(toTerminalSession))
+      hydrateThreads(codexThreads.map(toCodexThread))
+      hydrateApprovals(pendingApprovals.map(toCodexApproval))
       await Promise.all(
-        sessions.map(async (session) => {
+        terminalSessions.map(async (session) => {
           const scrollback = await terminalScrollbackRead(session.sessionId)
           if (!disposed) {
             setScrollback(session.sessionId, scrollback.content)
@@ -144,6 +154,26 @@ export function useBackendIntegration() {
       updateProject(payload.projectId, { branch: payload.summary.branch ?? 'detached' })
     }).then((unlisten) => {
       gitUnlisten = unlisten
+    })
+
+    void listenBrowserEvents((payload) => {
+      if (
+        (payload.type === 'tabCreated' ||
+          payload.type === 'tabNavigated' ||
+          payload.type === 'tabPinChanged' ||
+          payload.type === 'tabRendererStateChanged' ||
+          payload.type === 'tabHistoryChanged' ||
+          payload.type === 'tabReloaded') &&
+        payload.tab
+      ) {
+        upsertBrowserTab(toBrowserTab(payload.tab))
+        return
+      }
+      if (payload.type === 'tabClosed' && payload.tabId) {
+        closeBrowserTab(payload.tabId)
+      }
+    }).then((unlisten) => {
+      browserUnlisten = unlisten
     })
 
     void listenTerminalEvents((payload) => {
@@ -193,13 +223,14 @@ export function useBackendIntegration() {
       disposed = true
       fsUnlisten?.()
       gitUnlisten?.()
+      browserUnlisten?.()
       terminalUnlisten?.()
       codexUnlisten?.()
       for (const projectId of watchedProjects) {
         void projectWatchStop(projectId)
       }
     }
-  }, [addApproval, addThread, appendScrollback, closeSession, hydrateApprovals, hydrateGitState, hydrateProjects, hydrateSessions, hydrateThreads, hydrateTree, hydrateWorkspace, resolveApproval, setScrollback, updateProject, updateThread, upsertSession])
+  }, [addApproval, addThread, appendScrollback, closeBrowserTab, closeSession, hydrateApprovals, hydrateBrowserTabs, hydrateGitState, hydrateProjects, hydrateSessions, hydrateThreads, hydrateTree, hydrateWorkspace, resolveApproval, setScrollback, updateProject, updateThread, upsertBrowserTab, upsertSession])
 
   useEffect(() => {
     if (!hydratedRef.current) return

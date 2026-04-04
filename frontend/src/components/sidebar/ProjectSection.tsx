@@ -11,6 +11,7 @@ import { useTerminalStore } from '@/stores/terminal'
 import { useCodexStore } from '@/stores/codex'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { FileTree } from './FileTree'
+import { BrowserList } from './BrowserList'
 import { GitSummary } from './GitSummary'
 import { TerminalList } from './TerminalList'
 import styles from './ProjectSection.module.css'
@@ -185,9 +186,7 @@ export const ProjectSection = memo(function ProjectSection({ project }: Props) {
                 {key === 'files' && <FileTree projectId={project.id} />}
                 {key === 'git' && <GitSummary projectId={project.id} />}
                 {key === 'terminal' && <TerminalList projectId={project.id} />}
-                {key === 'browser' && (
-                  <div className={styles.placeholder}>No browser tabs</div>
-                )}
+                {key === 'browser' && <BrowserList projectId={project.id} />}
               </div>
             )
           })}

@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type Event, type UnlistenFn } from '@tauri-apps/api/event'
 import type {
+  BrowserTab,
   CodexApproval,
   CodexThread,
   FileEntry,
@@ -174,6 +175,26 @@ interface CodexEventPayload {
   approval?: CodexApprovalDto
 }
 
+interface BrowserTabDto {
+  tabId: string
+  projectId: string
+  url: string
+  title: string
+  isPinned: boolean
+  canGoBack: boolean
+  canGoForward: boolean
+  isLoading: boolean
+  faviconUrl?: string | null
+  securityOrigin?: string | null
+  isSecure: boolean
+}
+
+interface BrowserEventPayload {
+  type: string
+  tab?: BrowserTabDto
+  tabId?: string
+}
+
 export async function appBootstrap() {
   return invoke<AppBootstrapDto>('app_bootstrap')
 }
@@ -276,6 +297,38 @@ export async function codexServerRequestDeny(requestId: number, message?: string
   })
 }
 
+export async function browserTabsList(projectId?: string) {
+  return invoke<BrowserTabDto[]>('browser_tabs_list', { projectId })
+}
+
+export async function browserTabCreate(projectId: string, url?: string, title?: string) {
+  return invoke<BrowserTabDto>('browser_tab_create', {
+    input: { projectId, url, title },
+  })
+}
+
+export async function browserTabNavigate(tabId: string, url: string, title?: string) {
+  return invoke<BrowserTabDto>('browser_tab_navigate', {
+    input: { tabId, url, title },
+  })
+}
+
+export async function browserTabBack(tabId: string) {
+  return invoke<BrowserTabDto>('browser_tab_back', { tabId })
+}
+
+export async function browserTabForward(tabId: string) {
+  return invoke<BrowserTabDto>('browser_tab_forward', { tabId })
+}
+
+export async function browserTabReload(tabId: string) {
+  return invoke<BrowserTabDto>('browser_tab_reload', { tabId })
+}
+
+export async function browserTabClose(tabId: string) {
+  return invoke<void>('browser_tab_close', { tabId })
+}
+
 export function listenGitEvents(handler: (payload: GitEventPayload) => void): Promise<UnlistenFn> {
   return listen<GitEventPayload>('app://git', (event: Event<GitEventPayload>) => {
     if (event.payload) handler(event.payload)
@@ -296,6 +349,12 @@ export function listenTerminalEvents(handler: (payload: TerminalEventPayload) =>
 
 export function listenCodexEvents(handler: (payload: CodexEventPayload) => void): Promise<UnlistenFn> {
   return listen<CodexEventPayload>('app://codex', (event: Event<CodexEventPayload>) => {
+    if (event.payload) handler(event.payload)
+  })
+}
+
+export function listenBrowserEvents(handler: (payload: BrowserEventPayload) => void): Promise<UnlistenFn> {
+  return listen<BrowserEventPayload>('app://browser', (event: Event<BrowserEventPayload>) => {
     if (event.payload) handler(event.payload)
   })
 }
@@ -374,6 +433,22 @@ export function toCodexApproval(dto: CodexApprovalDto): CodexApproval {
     policyReason: dto.policyReason ?? undefined,
     description: dto.description,
     context: dto.contextJson ? JSON.stringify(dto.contextJson) : undefined,
+  }
+}
+
+export function toBrowserTab(dto: BrowserTabDto): BrowserTab {
+  return {
+    id: dto.tabId,
+    projectId: dto.projectId,
+    title: dto.title,
+    url: dto.url,
+    isPinned: dto.isPinned,
+    canGoBack: dto.canGoBack,
+    canGoForward: dto.canGoForward,
+    isLoading: dto.isLoading,
+    faviconUrl: dto.faviconUrl ?? undefined,
+    securityOrigin: dto.securityOrigin ?? undefined,
+    isSecure: dto.isSecure,
   }
 }
 

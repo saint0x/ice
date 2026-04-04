@@ -13,9 +13,8 @@ Rules for this checklist:
 
 ### Backend Wiring
 
-- [ ] Replace any remaining browser-side placeholder state with backend-driven data.
+- [ ] Replace the remaining placeholder browser viewport with the final native renderer host.
 - [ ] Subscribe to backend events for filesystem, git, browser, terminal, and Codex updates instead of relying on local-only mutations.
-- [ ] Add browser event subscriptions on top of the now-live filesystem, git, terminal, and Codex listeners.
 - [ ] Persist and hydrate workspace layout from the backend rather than purely local in-memory state.
 
 ### Filesystem / Editor
@@ -37,9 +36,6 @@ Rules for this checklist:
 ### Browser
 
 - [ ] Replace the placeholder browser viewport in [BrowserSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/BrowserSurface.tsx) with the real Tauri-native browser rendering strategy.
-- [ ] Wire address bar and nav buttons to backend browser commands.
-- [ ] Render per-project browser tab lists instead of the current “No browser tabs” placeholder in [ProjectSection.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/sidebar/ProjectSection.tsx).
-- [ ] Hydrate browser tab chrome from backend `BrowserTabRecord` metadata instead of local placeholder fields.
 - [ ] Use `browser_tab_renderer_state_set` from the renderer host to keep loading, title, favicon, security-origin, and nav affordances in sync.
 - [ ] Use `browser_tab_pin_set` for pinned tabs and `browser_tab_open_external` for “open in external browser” affordances.
 - [ ] Use `browser_renderer_attach` / `browser_renderer_detach` when the pane-hosted native browser surface mounts and unmounts.
@@ -107,6 +103,8 @@ Rules for this checklist:
 - ✅ The frontend now persists workspace chrome/session changes back through `workspace_chrome_set` and `workspace_session_set`, replacing the old local-only workspace seed path in [workspace.ts](/Users/deepsaint/Desktop/ice/frontend/src/stores/workspace.ts).
 - ✅ The sidebar file tree now hydrates from `project_tree_read_nested`, so [FileTree.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/sidebar/FileTree.tsx) consumes backend-shaped `children` hierarchies directly.
 - ✅ The git store now hydrates from live backend status reads and `app://git` events instead of demo git rows.
+- ✅ Browser tabs now hydrate from backend `browser_tabs_list`, stay live from `app://browser`, and render per-project sidebar rows through [BrowserList.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/sidebar/BrowserList.tsx) plus [browser.ts](/Users/deepsaint/Desktop/ice/frontend/src/stores/browser.ts).
+- ✅ Title bar browser creation and browser-surface address/nav actions now route through backend browser IPC in [TitleBar.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/shell/TitleBar.tsx) and [BrowserSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/BrowserSurface.tsx).
 - ✅ Terminal sessions and scrollback now hydrate from backend `terminal_list` / `terminal_scrollback_read`, and the frontend listens to live `app://terminal` events through [useBackendIntegration.ts](/Users/deepsaint/Desktop/ice/frontend/src/hooks/useBackendIntegration.ts).
 - ✅ Terminal create, close, write, and respawn flows now route through backend IPC in [TerminalList.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/sidebar/TerminalList.tsx), [BottomDock.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/shell/BottomDock.tsx), and [TerminalSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/TerminalSurface.tsx).
 - ✅ Codex threads and approvals now hydrate from backend `codex_threads_list` / `codex_approvals_list`, and the frontend listens to live `app://codex` events through [useBackendIntegration.ts](/Users/deepsaint/Desktop/ice/frontend/src/hooks/useBackendIntegration.ts).

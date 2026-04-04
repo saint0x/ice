@@ -5,6 +5,8 @@ import {
 } from 'lucide-react'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useProjectsStore } from '@/stores/projects'
+import { browserTabCreate, toBrowserTab } from '@/lib/backend'
+import { useBrowserStore } from '@/stores/browser'
 import { useThemeStore, THEMES } from '@/stores/theme'
 import type { ThemeId } from '@/stores/theme'
 import styles from './TitleBar.module.css'
@@ -18,6 +20,8 @@ export const TitleBar = memo(function TitleBar() {
   const setChatPanelOpen = useWorkspaceStore((s) => s.setChatPanelOpen)
   const openTab = useWorkspaceStore((s) => s.openTab)
   const activePaneId = useWorkspaceStore((s) => s.activePaneId)
+  const upsertBrowserTab = useBrowserStore((s) => s.upsertTab)
+  const setActiveBrowserTab = useBrowserStore((s) => s.setActiveTab)
   const activeProjectId = useProjectsStore((s) => s.activeProjectId)
   const activeProject = useProjectsStore((s) => activeProjectId ? s.projects.get(activeProjectId) : undefined)
   const themeId = useThemeStore((s) => s.themeId)
@@ -49,8 +53,13 @@ export const TitleBar = memo(function TitleBar() {
 
   const onOpenBrowser = useCallback(() => {
     if (!activeProjectId || !activeProject) return
-    openTab(activePaneId, 'browser', 'New Tab', activeProjectId, { url: 'https://localhost:3000' })
-  }, [activeProjectId, activeProject, activePaneId, openTab])
+    void browserTabCreate(activeProjectId, 'https://localhost:3000').then((tab) => {
+      const mapped = toBrowserTab(tab)
+      upsertBrowserTab(mapped)
+      setActiveBrowserTab(activeProjectId, mapped.id)
+      openTab(activePaneId, 'browser', mapped.title, activeProjectId, { tabId: mapped.id, url: mapped.url })
+    })
+  }, [activePaneId, activeProject, activeProjectId, openTab, setActiveBrowserTab, upsertBrowserTab])
 
   const onOpenTerminal = useCallback(() => {
     if (!activeProjectId) return
