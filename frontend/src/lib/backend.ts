@@ -80,6 +80,17 @@ interface FsTreeNodeDto {
   children: FsTreeNodeDto[]
 }
 
+interface FileReadResultDto {
+  path: string
+  content?: string | null
+  isBinary: boolean
+  sizeBytes: number
+  encoding?: string | null
+  hasBom: boolean
+  modifiedAtMs?: number | null
+  versionToken?: string | null
+}
+
 interface GitStatusSummaryDto {
   branch?: string | null
   ahead: number
@@ -207,6 +218,23 @@ export async function projectTreeReadNested(projectId: string) {
 
 export async function gitStatusRead(projectId: string) {
   return invoke<GitStatusSummaryDto>('git_status_read', { projectId })
+}
+
+export async function fileRead(projectId: string, path: string) {
+  return invoke<FileReadResultDto>('file_read', {
+    input: { projectId, path },
+  })
+}
+
+export async function fileWriteText(input: {
+  projectId: string
+  path: string
+  content: string
+  expectedVersionToken?: string
+  encoding?: string
+  hasBom?: boolean
+}) {
+  return invoke<void>('file_write_text', { input })
 }
 
 export async function projectWatchStart(projectId: string) {

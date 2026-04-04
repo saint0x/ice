@@ -37,6 +37,7 @@ Rules for this checklist:
 ### Frontend Contract Support
 
 - [ ] Replace the remaining frontend browser viewport placeholder with the final native renderer host.
+- [ ] Add richer editor conflict-resolution flows on top of the existing version-token backend guard so stale-save errors can be resolved intentionally in the UI.
 - [ ] Publish a typed shared contract for project, tree, git, browser, terminal, Codex, and approval payloads.
 
 ### Testing / Release
@@ -101,6 +102,7 @@ Rules for this checklist:
 - ✅ Browser renderer bridge commands now exist for renderer attach/detach, renderer session lookup, find-in-page requests/results, and download requests without coupling the rest of the backend to a specific native browser implementation.
 - ✅ Project-level browser restore policy now exists as backend state, with canonical per-project get/set commands under the project service.
 - ✅ The current frontend now uses the browser renderer bridge for a pane-hosted renderer host, attaching/detaching sessions and syncing renderer state back through backend browser IPC.
+- ✅ The current frontend now also uses the production file IO backend for editor reads and saves, including binary-file detection and optimistic version-token save enforcement.
 
 ### Terminal
 

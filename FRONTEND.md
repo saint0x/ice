@@ -14,6 +14,7 @@ Rules for this checklist:
 ### Backend Wiring
 
 - [ ] Replace the iframe-backed browser renderer host with the final native browser container strategy if we outgrow the current pane-hosted renderer approach.
+- [ ] Add editor search, replace, and project-search UI on top of the now-live backend file read/write/search contracts.
 - [ ] Subscribe to backend events for filesystem, git, browser, terminal, and Codex updates instead of relying on local-only mutations.
 - [ ] Persist and hydrate workspace layout from the backend rather than purely local in-memory state.
 
@@ -37,6 +38,7 @@ Rules for this checklist:
 
 - [ ] Replace the placeholder browser viewport in [BrowserSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/BrowserSurface.tsx) with the real Tauri-native browser rendering strategy.
 - [ ] Improve renderer metadata capture beyond the current iframe-safe URL/loading/security sync, especially page title, favicon, downloads, and blocked-frame fallbacks.
+- [ ] Add conflict-resolution UX for backend save-token mismatches instead of showing the raw backend error banner.
 - [ ] Use `browser_tab_pin_set` for pinned tabs and `browser_tab_open_external` for “open in external browser” affordances.
 - [ ] Use `browser_renderer_attach` / `browser_renderer_detach` when the pane-hosted native browser surface mounts and unmounts.
 - [ ] Route in-page search through `browser_find_in_page` and feed renderer results back through `browser_find_in_page_report`.
@@ -106,6 +108,7 @@ Rules for this checklist:
 - ✅ Browser tabs now hydrate from backend `browser_tabs_list`, stay live from `app://browser`, and render per-project sidebar rows through [BrowserList.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/sidebar/BrowserList.tsx) plus [browser.ts](/Users/deepsaint/Desktop/ice/frontend/src/stores/browser.ts).
 - ✅ Title bar browser creation and browser-surface address/nav actions now route through backend browser IPC in [TitleBar.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/shell/TitleBar.tsx) and [BrowserSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/BrowserSurface.tsx).
 - ✅ The browser surface is now a pane-hosted iframe renderer host that attaches/detaches through the backend browser bridge and reports renderer state back through `browser_tab_renderer_state_set`.
+- ✅ The editor surface now reads real file contents from the backend, blocks binary-file text editing, saves through backend `file_write_text`, and honors backend version-token save guards.
 - ✅ Terminal sessions and scrollback now hydrate from backend `terminal_list` / `terminal_scrollback_read`, and the frontend listens to live `app://terminal` events through [useBackendIntegration.ts](/Users/deepsaint/Desktop/ice/frontend/src/hooks/useBackendIntegration.ts).
 - ✅ Terminal create, close, write, and respawn flows now route through backend IPC in [TerminalList.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/sidebar/TerminalList.tsx), [BottomDock.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/shell/BottomDock.tsx), and [TerminalSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/TerminalSurface.tsx).
 - ✅ Codex threads and approvals now hydrate from backend `codex_threads_list` / `codex_approvals_list`, and the frontend listens to live `app://codex` events through [useBackendIntegration.ts](/Users/deepsaint/Desktop/ice/frontend/src/hooks/useBackendIntegration.ts).

@@ -29,6 +29,7 @@ interface WorkspaceState {
     chatPanelWidth: number
   }) => void
   openTab: (paneId: PaneId, type: ContentType, title: string, projectId: ProjectId, meta?: Record<string, unknown>) => TabId
+  updateTab: (tabId: TabId, patch: Partial<Tab>) => void
   closeTab: (paneId: PaneId, tabId: TabId) => void
   activateTab: (paneId: PaneId, tabId: TabId) => void
   setActivePane: (paneId: PaneId) => void
@@ -159,6 +160,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     })
     return tabId
   },
+
+  updateTab: (tabId, patch) =>
+    set((state) => {
+      const current = state.tabs.get(tabId)
+      if (!current) return state
+      const tabs = new Map(state.tabs)
+      tabs.set(tabId, { ...current, ...patch })
+      return { tabs }
+    }),
 
   closeTab: (paneId, tabId) =>
     set((s) => {
