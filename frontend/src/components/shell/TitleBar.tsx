@@ -94,6 +94,10 @@ export const TitleBar = memo(function TitleBar() {
           <Terminal size={13} />
           <span>Terminal</span>
         </button>
+        <button className={styles.navBtn} onClick={() => setChatPanelOpen(!chatPanelOpen)} title="Thread">
+          <MessageSquare size={13} />
+          <span>Thread</span>
+        </button>
       </div>
 
       <div className={styles.center} data-tauri-drag-region>
