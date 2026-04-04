@@ -22,9 +22,8 @@ Rules for this checklist:
 
 ### Git
 
-- [ ] Add branch checkout / branch list / fetch / pull / push flows behind typed commands.
 - [ ] Add discard / restore workflows with explicit safety rules and approval gating.
-- [ ] Add diff payload endpoints for staged, unstaged, and per-file views.
+- [ ] Add diff payload endpoints for whole-tree staged and unstaged views in addition to per-file diff reads.
 - [ ] Add commit metadata validation and better error surfaces for missing author config and hooks.
 - [ ] Add git refresh events or watchers so sidebar counts and git surfaces stay hot.
 
@@ -108,6 +107,8 @@ Rules for this checklist:
 - ✅ Native git status reads use `git status --porcelain=2 --branch --untracked-files=all` in [service.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/git/service.rs).
 - ✅ Git status payloads now include branch, ahead/behind counts, staged/modified/untracked/conflicted counts, and per-file change rows.
 - ✅ Native git stage, unstage, and commit commands are implemented.
+- ✅ Native git branch list, checkout, fetch, pull, and push commands are implemented behind typed IPC commands.
+- ✅ Pull uses `--ff-only` by default to avoid hidden merge commits from the desktop shell.
 
 ### Browser
 

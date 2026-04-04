@@ -31,7 +31,7 @@ Rules for this checklist:
 - [ ] Replace the demo git store with live git status data.
 - [ ] Add stage / unstage / commit interactions in [GitSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/GitSurface.tsx).
 - [ ] Add file-level diff rendering and change selection flows.
-- [ ] Add branch / sync actions once backend endpoints are ready.
+- [ ] Wire branch list / checkout / fetch / pull / push actions to the now-available backend git commands.
 
 ### Browser
 

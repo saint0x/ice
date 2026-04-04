@@ -183,6 +183,39 @@ pub struct GitPathsInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct GitBranchCheckoutInput {
+    pub project_id: String,
+    pub branch_name: String,
+    pub create: Option<bool>,
+    pub start_point: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitFetchInput {
+    pub project_id: String,
+    pub remote: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitPullInput {
+    pub project_id: String,
+    pub remote: Option<String>,
+    pub branch: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitPushInput {
+    pub project_id: String,
+    pub remote: Option<String>,
+    pub branch: Option<String>,
+    pub set_upstream: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GitCommitInput {
     pub project_id: String,
     pub message: String,

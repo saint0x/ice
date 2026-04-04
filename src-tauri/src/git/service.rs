@@ -30,6 +30,18 @@ pub struct GitDiffRecord {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct GitBranchRecord {
+    pub name: String,
+    pub reference: String,
+    pub commit: String,
+    pub upstream: Option<String>,
+    pub tracking: Option<String>,
+    pub current: bool,
+    pub is_remote: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GitStatusSummary {
     pub branch: Option<String>,
     pub ahead: usize,
@@ -140,6 +152,143 @@ impl GitService {
             .args(["commit", "-m", message])
             .output()
             .await?;
+        if !output.status.success() {
+            return Err(anyhow!(
+                "{}",
+                String::from_utf8_lossy(&output.stderr).trim().to_string()
+            ));
+        }
+        self.read_status(project).await
+    }
+
+    pub async fn list_branches(&self, project: &ProjectRecord) -> Result<Vec<GitBranchRecord>> {
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(&project.root_path)
+            .args([
+                "for-each-ref",
+                "--format=%(refname:short)\t%(refname)\t%(objectname:short)\t%(upstream:short)\t%(upstream:trackshort)\t%(HEAD)",
+                "refs/heads",
+                "refs/remotes",
+            ])
+            .output()
+            .await?;
+        if !output.status.success() {
+            return Err(anyhow!(
+                "{}",
+                String::from_utf8_lossy(&output.stderr).trim().to_string()
+            ));
+        }
+
+        let mut branches = String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .filter_map(parse_branch_line)
+            .collect::<Vec<_>>();
+        branches.sort_by(|left, right| {
+            right
+                .current
+                .cmp(&left.current)
+                .then_with(|| left.is_remote.cmp(&right.is_remote))
+                .then_with(|| left.name.cmp(&right.name))
+        });
+        Ok(branches)
+    }
+
+    pub async fn checkout_branch(
+        &self,
+        project: &ProjectRecord,
+        branch_name: &str,
+        create: bool,
+        start_point: Option<&str>,
+    ) -> Result<GitStatusSummary> {
+        let mut command = Command::new("git");
+        command.arg("-C").arg(&project.root_path).arg("switch");
+        if create {
+            command.arg("-c");
+        }
+        command.arg(branch_name);
+        if let Some(start_point) = start_point {
+            command.arg(start_point);
+        }
+        let output = command.output().await?;
+        if !output.status.success() {
+            return Err(anyhow!(
+                "{}",
+                String::from_utf8_lossy(&output.stderr).trim().to_string()
+            ));
+        }
+        self.read_status(project).await
+    }
+
+    pub async fn fetch(
+        &self,
+        project: &ProjectRecord,
+        remote: Option<&str>,
+    ) -> Result<GitStatusSummary> {
+        let mut command = Command::new("git");
+        command
+            .arg("-C")
+            .arg(&project.root_path)
+            .args(["fetch", "--prune"]);
+        if let Some(remote) = remote {
+            command.arg(remote);
+        }
+        let output = command.output().await?;
+        if !output.status.success() {
+            return Err(anyhow!(
+                "{}",
+                String::from_utf8_lossy(&output.stderr).trim().to_string()
+            ));
+        }
+        self.read_status(project).await
+    }
+
+    pub async fn pull(
+        &self,
+        project: &ProjectRecord,
+        remote: Option<&str>,
+        branch: Option<&str>,
+    ) -> Result<GitStatusSummary> {
+        let mut command = Command::new("git");
+        command
+            .arg("-C")
+            .arg(&project.root_path)
+            .args(["pull", "--ff-only"]);
+        if let Some(remote) = remote {
+            command.arg(remote);
+        }
+        if let Some(branch) = branch {
+            command.arg(branch);
+        }
+        let output = command.output().await?;
+        if !output.status.success() {
+            return Err(anyhow!(
+                "{}",
+                String::from_utf8_lossy(&output.stderr).trim().to_string()
+            ));
+        }
+        self.read_status(project).await
+    }
+
+    pub async fn push(
+        &self,
+        project: &ProjectRecord,
+        remote: Option<&str>,
+        branch: Option<&str>,
+        set_upstream: bool,
+    ) -> Result<GitStatusSummary> {
+        let mut command = Command::new("git");
+        command.arg("-C").arg(&project.root_path).arg("push");
+        if set_upstream {
+            command.arg("-u");
+        }
+        if let Some(remote) = remote {
+            command.arg(remote);
+        }
+        if let Some(branch) = branch {
+            command.arg(branch);
+        }
+        let output = command.output().await?;
         if !output.status.success() {
             return Err(anyhow!(
                 "{}",
@@ -261,4 +410,30 @@ fn parse_status(raw: &str) -> GitStatusSummary {
     }
 
     summary
+}
+
+fn parse_branch_line(line: &str) -> Option<GitBranchRecord> {
+    let mut parts = line.split('\t');
+    let name = parts.next()?.to_string();
+    let reference = parts.next()?.to_string();
+    let commit = parts.next()?.to_string();
+    let upstream = normalize_optional(parts.next());
+    let tracking = normalize_optional(parts.next());
+    let head = parts.next().unwrap_or_default();
+    Some(GitBranchRecord {
+        name,
+        reference: reference.clone(),
+        commit,
+        upstream,
+        tracking,
+        current: head == "*",
+        is_remote: reference.starts_with("refs/remotes/"),
+    })
+}
+
+fn normalize_optional(value: Option<&str>) -> Option<String> {
+    match value.map(str::trim) {
+        Some("") | None => None,
+        Some(value) => Some(value.to_string()),
+    }
 }

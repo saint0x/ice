@@ -287,6 +287,15 @@ pub async fn git_status_read(
 }
 
 #[tauri::command]
+pub async fn git_branches_list(
+    project_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::git::service::GitBranchRecord>, AppError> {
+    let project = state.projects.require_project(&project_id).await?;
+    Ok(state.git.list_branches(&project).await?)
+}
+
+#[tauri::command]
 pub async fn git_stage_paths(
     input: GitPathsInput,
     state: State<'_, AppState>,
@@ -313,6 +322,61 @@ pub async fn git_commit(
 ) -> Result<crate::git::service::GitStatusSummary, AppError> {
     let project = state.projects.require_project(&input.project_id).await?;
     Ok(state.git.commit(&project, &input.message).await?)
+}
+
+#[tauri::command]
+pub async fn git_branch_checkout(
+    input: GitBranchCheckoutInput,
+    state: State<'_, AppState>,
+) -> Result<crate::git::service::GitStatusSummary, AppError> {
+    let project = state.projects.require_project(&input.project_id).await?;
+    Ok(state
+        .git
+        .checkout_branch(
+            &project,
+            &input.branch_name,
+            input.create.unwrap_or(false),
+            input.start_point.as_deref(),
+        )
+        .await?)
+}
+
+#[tauri::command]
+pub async fn git_fetch(
+    input: GitFetchInput,
+    state: State<'_, AppState>,
+) -> Result<crate::git::service::GitStatusSummary, AppError> {
+    let project = state.projects.require_project(&input.project_id).await?;
+    Ok(state.git.fetch(&project, input.remote.as_deref()).await?)
+}
+
+#[tauri::command]
+pub async fn git_pull(
+    input: GitPullInput,
+    state: State<'_, AppState>,
+) -> Result<crate::git::service::GitStatusSummary, AppError> {
+    let project = state.projects.require_project(&input.project_id).await?;
+    Ok(state
+        .git
+        .pull(&project, input.remote.as_deref(), input.branch.as_deref())
+        .await?)
+}
+
+#[tauri::command]
+pub async fn git_push(
+    input: GitPushInput,
+    state: State<'_, AppState>,
+) -> Result<crate::git::service::GitStatusSummary, AppError> {
+    let project = state.projects.require_project(&input.project_id).await?;
+    Ok(state
+        .git
+        .push(
+            &project,
+            input.remote.as_deref(),
+            input.branch.as_deref(),
+            input.set_upstream.unwrap_or(false),
+        )
+        .await?)
 }
 
 #[tauri::command]
