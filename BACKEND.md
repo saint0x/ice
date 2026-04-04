@@ -41,9 +41,6 @@ Rules for this checklist:
 
 ### Security / Approvals
 
-- [ ] Define approval policy rules by action type instead of treating all server requests as the same class.
-- [ ] Add guardrails for destructive local actions initiated through agent flows.
-
 ### Persistence / State
 
 - [ ] Add dedicated persistence for dock session contents beyond shell chrome dimensions and open/closed flags.
@@ -134,6 +131,8 @@ Rules for this checklist:
 - ✅ Pending approval records are loaded from SQLite at startup through [approvals.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/security/approvals.rs).
 - ✅ Approval list, upsert, resolve, and project cleanup flows are implemented.
 - ✅ Approval audit records are now persisted for request, approve, and deny decisions, with IPC access for diagnostics and compliance surfaces.
+- ✅ Approval policy is now classified by action type and risk, with destructive shell and git requests blocked automatically at the backend boundary.
+- ✅ Guardrails now block clearly destructive local agent actions before execution instead of relying only on generic prompt handling.
 
 ### Projects / Multi-Project Support
 

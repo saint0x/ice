@@ -105,6 +105,7 @@ Rules for this checklist:
 - ✅ The backend now exposes classified approval metadata and a `codex_restart` command for recovery UI.
 - ✅ The backend now exposes Codex runtime contract info so diagnostics or settings UI can show the installed CLI/app-server capabilities.
 - ✅ The backend now exposes approval audit history plus an explicit deny path for approval UX and diagnostics surfaces.
+- ✅ The backend now enforces destructive-action policy server-side, including auto-blocking clearly dangerous shell and git requests.
 
 ### Visual / Product Direction
 

@@ -19,6 +19,8 @@ pub struct PendingApprovalRecord {
     pub action_type: String,
     pub category: String,
     pub risk_level: String,
+    pub policy_action: String,
+    pub policy_reason: Option<String>,
     pub description: String,
     pub context_json: Option<Value>,
 }
@@ -33,6 +35,8 @@ pub struct ApprovalAuditRecord {
     pub action_type: String,
     pub category: String,
     pub risk_level: String,
+    pub policy_action: String,
+    pub policy_reason: Option<String>,
     pub decision: String,
     pub description: String,
     pub context_json: Option<Value>,
@@ -129,6 +133,64 @@ pub fn classify_approval(method: &str, payload: &Value) -> (String, String, Stri
     )
 }
 
+pub fn apply_approval_policy(
+    method: &str,
+    category: &str,
+    risk_level: &str,
+    payload: &Value,
+) -> (String, Option<String>) {
+    let method_lower = method.to_ascii_lowercase();
+    let command_text = payload
+        .get("command")
+        .or_else(|| payload.get("cmd"))
+        .or_else(|| payload.get("target"))
+        .and_then(|value| value.as_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+
+    let is_destructive_shell = command_text.contains("rm -rf")
+        || command_text.contains("mkfs")
+        || command_text.contains("dd if=")
+        || command_text.contains("shutdown")
+        || command_text.contains("reboot")
+        || command_text.contains("sudo rm")
+        || command_text.contains("git reset --hard")
+        || command_text.contains("git clean -fd")
+        || command_text.contains("git clean -fdx");
+
+    if category == "command" && is_destructive_shell {
+        return (
+            "block".to_string(),
+            Some("Blocked destructive shell command".to_string()),
+        );
+    }
+
+    if category == "git"
+        && (method_lower.contains("reset") || command_text.contains("git reset --hard"))
+    {
+        return (
+            "block".to_string(),
+            Some("Blocked destructive git reset".to_string()),
+        );
+    }
+
+    if category == "filesystem" && risk_level == "high" {
+        return (
+            "prompt".to_string(),
+            Some("High-risk filesystem mutation requires explicit approval".to_string()),
+        );
+    }
+
+    if risk_level == "high" {
+        return (
+            "prompt".to_string(),
+            Some("High-risk action requires explicit approval".to_string()),
+        );
+    }
+
+    ("prompt".to_string(), None)
+}
+
 impl SecurityService {
     pub fn new(app: AppHandle, persistence: Arc<PersistenceService>) -> Self {
         let approvals = persistence
@@ -172,6 +234,10 @@ impl SecurityService {
             .upsert_pending_approval(approval.clone())
             .await?;
         self.record_audit(approval, "requested").await
+    }
+
+    pub async fn record_policy_block(&self, approval: PendingApprovalRecord) -> Result<()> {
+        self.record_audit(approval, "blocked").await
     }
 
     pub async fn resolve_approval(

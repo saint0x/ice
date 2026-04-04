@@ -102,6 +102,8 @@ impl PersistenceService {
               action_type TEXT NOT NULL,
               category TEXT NOT NULL DEFAULT 'unknown',
               risk_level TEXT NOT NULL DEFAULT 'medium',
+              policy_action TEXT NOT NULL DEFAULT 'prompt',
+              policy_reason TEXT,
               description TEXT NOT NULL,
               context_json TEXT,
               created_at TEXT NOT NULL,
@@ -115,6 +117,8 @@ impl PersistenceService {
               action_type TEXT NOT NULL,
               category TEXT NOT NULL,
               risk_level TEXT NOT NULL,
+              policy_action TEXT NOT NULL,
+              policy_reason TEXT,
               decision TEXT NOT NULL,
               description TEXT NOT NULL,
               context_json TEXT,
@@ -137,6 +141,14 @@ impl PersistenceService {
         add_column_if_missing(
             &conn,
             "ALTER TABLE codex_approvals ADD COLUMN risk_level TEXT NOT NULL DEFAULT 'medium'",
+        )?;
+        add_column_if_missing(
+            &conn,
+            "ALTER TABLE codex_approvals ADD COLUMN policy_action TEXT NOT NULL DEFAULT 'prompt'",
+        )?;
+        add_column_if_missing(
+            &conn,
+            "ALTER TABLE codex_approvals ADD COLUMN policy_reason TEXT",
         )?;
         Ok(())
     }
@@ -633,17 +645,17 @@ impl PersistenceService {
         let conn = self.connect()?;
         let mut stmt = conn.prepare(
             "
-            SELECT request_id, project_id, thread_id, action_type, category, risk_level, description, context_json
+            SELECT request_id, project_id, thread_id, action_type, category, risk_level, policy_action, policy_reason, description, context_json
             FROM codex_approvals
             ORDER BY created_at ASC
             ",
         )?;
         let rows = stmt.query_map([], |row| {
-            let raw_context: Option<String> = row.get(7)?;
+            let raw_context: Option<String> = row.get(9)?;
             let context_json = raw_context
                 .map(|text| {
                     serde_json::from_str(&text).map_err(|err| {
-                        rusqlite::Error::FromSqlConversionFailure(7, Type::Text, Box::new(err))
+                        rusqlite::Error::FromSqlConversionFailure(9, Type::Text, Box::new(err))
                     })
                 })
                 .transpose()?;
@@ -654,7 +666,9 @@ impl PersistenceService {
                 action_type: row.get(3)?,
                 category: row.get(4)?,
                 risk_level: row.get(5)?,
-                description: row.get(6)?,
+                policy_action: row.get(6)?,
+                policy_reason: row.get(7)?,
+                description: row.get(8)?,
                 context_json,
             })
         })?;
@@ -667,14 +681,16 @@ impl PersistenceService {
             let conn = this.connect()?;
             conn.execute(
                 "
-                INSERT INTO codex_approvals (request_id, project_id, thread_id, action_type, category, risk_level, description, context_json, created_at, updated_at)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, datetime('now'), datetime('now'))
+                INSERT INTO codex_approvals (request_id, project_id, thread_id, action_type, category, risk_level, policy_action, policy_reason, description, context_json, created_at, updated_at)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, datetime('now'), datetime('now'))
                 ON CONFLICT(request_id) DO UPDATE SET
                   project_id = excluded.project_id,
                   thread_id = excluded.thread_id,
                   action_type = excluded.action_type,
                   category = excluded.category,
                   risk_level = excluded.risk_level,
+                  policy_action = excluded.policy_action,
+                  policy_reason = excluded.policy_reason,
                   description = excluded.description,
                   context_json = excluded.context_json,
                   updated_at = excluded.updated_at
@@ -686,6 +702,8 @@ impl PersistenceService {
                     approval.action_type,
                     approval.category,
                     approval.risk_level,
+                    approval.policy_action,
+                    approval.policy_reason,
                     approval.description,
                     approval.context_json.map(|value| value.to_string())
                 ],
@@ -736,8 +754,8 @@ impl PersistenceService {
             conn.execute(
                 "
                 INSERT INTO approval_audit_log (
-                  request_id, project_id, thread_id, action_type, category, risk_level, decision, description, context_json, created_at
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                  request_id, project_id, thread_id, action_type, category, risk_level, policy_action, policy_reason, decision, description, context_json, created_at
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
                 ",
                 params![
                     approval.request_id,
@@ -746,6 +764,8 @@ impl PersistenceService {
                     approval.action_type,
                     approval.category,
                     approval.risk_level,
+                    approval.policy_action,
+                    approval.policy_reason,
                     decision,
                     approval.description,
                     approval.context_json.clone().map(|value| value.to_string()),
@@ -760,6 +780,8 @@ impl PersistenceService {
                 action_type: approval.action_type,
                 category: approval.category,
                 risk_level: approval.risk_level,
+                policy_action: approval.policy_action,
+                policy_reason: approval.policy_reason,
                 decision,
                 description: approval.description,
                 context_json: approval.context_json,
@@ -780,7 +802,7 @@ impl PersistenceService {
             let mut stmt = if project_id.is_some() {
                 conn.prepare(
                     "
-                    SELECT audit_id, request_id, project_id, thread_id, action_type, category, risk_level, decision, description, context_json, created_at
+                    SELECT audit_id, request_id, project_id, thread_id, action_type, category, risk_level, policy_action, policy_reason, decision, description, context_json, created_at
                     FROM approval_audit_log
                     WHERE project_id = ?1
                     ORDER BY audit_id DESC
@@ -789,7 +811,7 @@ impl PersistenceService {
             } else {
                 conn.prepare(
                     "
-                    SELECT audit_id, request_id, project_id, thread_id, action_type, category, risk_level, decision, description, context_json, created_at
+                    SELECT audit_id, request_id, project_id, thread_id, action_type, category, risk_level, policy_action, policy_reason, decision, description, context_json, created_at
                     FROM approval_audit_log
                     ORDER BY audit_id DESC
                     ",
@@ -807,11 +829,11 @@ impl PersistenceService {
 }
 
 fn approval_audit_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ApprovalAuditRecord> {
-    let raw_context: Option<String> = row.get(9)?;
+    let raw_context: Option<String> = row.get(11)?;
     let context_json = raw_context
         .map(|text| {
             serde_json::from_str(&text).map_err(|err| {
-                rusqlite::Error::FromSqlConversionFailure(9, Type::Text, Box::new(err))
+                rusqlite::Error::FromSqlConversionFailure(11, Type::Text, Box::new(err))
             })
         })
         .transpose()?;
@@ -823,10 +845,12 @@ fn approval_audit_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ApprovalAudit
         action_type: row.get(4)?,
         category: row.get(5)?,
         risk_level: row.get(6)?,
-        decision: row.get(7)?,
-        description: row.get(8)?,
+        policy_action: row.get(7)?,
+        policy_reason: row.get(8)?,
+        decision: row.get(9)?,
+        description: row.get(10)?,
         context_json,
-        created_at: row.get(10)?,
+        created_at: row.get(12)?,
     })
 }
 
@@ -993,6 +1017,10 @@ mod tests {
             action_type: "approval/request".to_string(),
             category: "filesystem".to_string(),
             risk_level: "medium".to_string(),
+            policy_action: "prompt".to_string(),
+            policy_reason: Some(
+                "High-risk filesystem mutation requires explicit approval".to_string(),
+            ),
             description: "Allow file edit".to_string(),
             context_json: Some(json!({"path":"src/main.rs"})),
         };

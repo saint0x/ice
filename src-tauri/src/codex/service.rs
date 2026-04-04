@@ -18,7 +18,9 @@ use uuid::Uuid;
 use crate::app::events::CODEX_EVENT;
 use crate::app::paths::IcePaths;
 use crate::persistence::db::PersistenceService;
-use crate::security::approvals::{classify_approval, PendingApprovalRecord, SecurityService};
+use crate::security::approvals::{
+    apply_approval_policy, classify_approval, PendingApprovalRecord, SecurityService,
+};
 
 pub struct CodexService {
     app: AppHandle,
@@ -592,6 +594,41 @@ impl CodexService {
                                 build_pending_approval(id, &method, &value, &runtime.threads)
                             };
                             if let Some(approval) = approval {
+                                if approval.policy_action == "block" {
+                                    let _ = security.record_policy_block(approval.clone()).await;
+                                    if let Some(thread) = mark_thread_after_denial(
+                                        &state,
+                                        approval.thread_id.as_deref(),
+                                    ) {
+                                        let _ =
+                                            persistence.upsert_codex_thread(thread.clone()).await;
+                                        let _ = app.emit(
+                                            CODEX_EVENT,
+                                            json!({ "type": "threadUpdated", "thread": thread }),
+                                        );
+                                    }
+                                    let payload = json!({
+                                        "id": approval.request_id,
+                                        "error": {
+                                            "code": -32002,
+                                            "message": approval
+                                                .policy_reason
+                                                .clone()
+                                                .unwrap_or_else(|| "Blocked by backend safety policy".to_string())
+                                        }
+                                    });
+                                    if let Ok(mut stdin) = process.stdin.try_lock() {
+                                        let _ =
+                                            stdin.write_all(payload.to_string().as_bytes()).await;
+                                        let _ = stdin.write_all(b"\n").await;
+                                        let _ = stdin.flush().await;
+                                    }
+                                    let _ = app.emit(
+                                        CODEX_EVENT,
+                                        json!({ "type": "approvalBlocked", "approval": approval }),
+                                    );
+                                    continue;
+                                }
                                 if let Some(thread) = update_thread_for_approval_request(
                                     &state,
                                     approval.thread_id.as_deref(),
@@ -868,6 +905,8 @@ fn build_pending_approval(
         .and_then(|value| value.as_str())
         .map(ToOwned::to_owned);
     let (category, risk_level, fallback_title) = classify_approval(method, params);
+    let (policy_action, policy_reason) =
+        apply_approval_policy(method, &category, &risk_level, params);
     Some(PendingApprovalRecord {
         request_id,
         project_id,
@@ -875,6 +914,8 @@ fn build_pending_approval(
         action_type: method.to_string(),
         category,
         risk_level,
+        policy_action,
+        policy_reason,
         description: description.unwrap_or(fallback_title),
         context_json: Some(params.clone()),
     })
