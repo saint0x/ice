@@ -14,6 +14,16 @@ pub async fn app_health(app: AppHandle, state: State<'_, AppState>) -> Result<He
 }
 
 #[tauri::command]
+pub async fn app_bootstrap(state: State<'_, AppState>) -> Result<AppBootstrapDto, AppError> {
+    Ok(AppBootstrapDto {
+        storage_root: state.paths.root().to_string_lossy().to_string(),
+        db_path: state.paths.db_path().to_string_lossy().to_string(),
+        projects: state.projects.list_projects().await?,
+        workspace_layout: state.workspace.get_layout("primary").await?,
+    })
+}
+
+#[tauri::command]
 pub async fn app_config_get(
     key: String,
     state: State<'_, AppState>,
@@ -84,6 +94,44 @@ pub async fn project_tree_read(
 }
 
 #[tauri::command]
+pub async fn project_snapshot(
+    input: ProjectSnapshotInput,
+    state: State<'_, AppState>,
+) -> Result<ProjectSnapshotDto, AppError> {
+    let project_summary = state
+        .projects
+        .list_projects()
+        .await?
+        .into_iter()
+        .find(|project| project.project.id == input.project_id)
+        .ok_or_else(|| AppError::from(anyhow::anyhow!("unknown project {}", input.project_id)))?;
+    let git = state.git.read_status(&project_summary.project).await?;
+    let tree = state
+        .fs
+        .read_tree(
+            &input.project_id,
+            None,
+            input.tree_depth.unwrap_or(3),
+            &state.projects,
+            &state.git,
+        )
+        .await?;
+    let browser_tabs = state.browser.list_tabs(Some(&input.project_id)).await;
+    let terminal_sessions = state.terminal.list(Some(&input.project_id)).await;
+    let codex_threads = state.codex.list_threads(Some(&input.project_id)).await;
+    let approvals = state.security.list_approvals(Some(&input.project_id)).await;
+    Ok(ProjectSnapshotDto {
+        project: project_summary,
+        tree,
+        git,
+        browser_tabs,
+        terminal_sessions,
+        codex_threads,
+        approvals,
+    })
+}
+
+#[tauri::command]
 pub async fn file_read_text(
     input: ReadFileInput,
     state: State<'_, AppState>,
@@ -146,6 +194,24 @@ pub async fn entry_rename(
         .fs
         .rename_entry(&input.project_id, &input.from, &input.to, &state.projects)
         .await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn project_watch_start(
+    project_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    state.fs.start_watch(&project_id, &state.projects).await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn project_watch_stop(
+    project_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    state.fs.stop_watch(&project_id).await?;
     Ok(())
 }
 

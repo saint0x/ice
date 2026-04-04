@@ -1,7 +1,10 @@
 use anyhow::{anyhow, Context, Result};
+use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
+use parking_lot::Mutex;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 
 use crate::app::events::FS_EVENT;
@@ -10,6 +13,7 @@ use crate::projects::service::ProjectService;
 
 pub struct FsService {
     app: AppHandle,
+    watchers: Arc<Mutex<HashMap<String, ProjectWatcher>>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -22,9 +26,17 @@ pub struct FsEntry {
     pub git_status: Option<String>,
 }
 
+struct ProjectWatcher {
+    root: PathBuf,
+    watcher: RecommendedWatcher,
+}
+
 impl FsService {
     pub fn new(app: AppHandle) -> Self {
-        Self { app }
+        Self {
+            app,
+            watchers: Arc::new(Mutex::new(HashMap::new())),
+        }
     }
 
     pub async fn read_tree(
@@ -150,6 +162,56 @@ impl FsService {
         )?;
         Ok(())
     }
+
+    pub async fn start_watch(&self, project_id: &str, projects: &ProjectService) -> Result<()> {
+        let root = projects.resolve_project_path(project_id).await?;
+        let project_id = project_id.to_string();
+        let emit_project_id = project_id.clone();
+        let app = self.app.clone();
+        let watch_root = root.clone();
+        let mut watcher =
+            notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
+                if let Ok(event) = event {
+                    let paths = event
+                        .paths
+                        .iter()
+                        .filter_map(|path| path.strip_prefix(&watch_root).ok())
+                        .map(|path| path.to_string_lossy().to_string())
+                        .collect::<Vec<_>>();
+                    let kind = describe_event_kind(&event.kind);
+                    let _ = app.emit(
+                        FS_EVENT,
+                        serde_json::json!({
+                            "type": "watchEvent",
+                            "projectId": emit_project_id,
+                            "kind": kind,
+                            "paths": paths
+                        }),
+                    );
+                }
+            })?;
+        watcher.configure(Config::default())?;
+        watcher.watch(&root, RecursiveMode::Recursive)?;
+        self.watchers
+            .lock()
+            .insert(project_id.clone(), ProjectWatcher { root, watcher });
+        self.app.emit(
+            FS_EVENT,
+            serde_json::json!({ "type": "watchStarted", "projectId": project_id }),
+        )?;
+        Ok(())
+    }
+
+    pub async fn stop_watch(&self, project_id: &str) -> Result<()> {
+        if let Some(mut watcher) = self.watchers.lock().remove(project_id) {
+            let _ = watcher.watcher.unwatch(&watcher.root);
+        }
+        self.app.emit(
+            FS_EVENT,
+            serde_json::json!({ "type": "watchStopped", "projectId": project_id }),
+        )?;
+        Ok(())
+    }
 }
 
 fn resolve_under_root(root: &Path, relative: &str) -> Result<PathBuf> {
@@ -204,4 +266,15 @@ fn walk_tree_inner(
         }
     }
     Ok(())
+}
+
+fn describe_event_kind(kind: &EventKind) -> &'static str {
+    match kind {
+        EventKind::Create(_) => "create",
+        EventKind::Modify(_) => "modify",
+        EventKind::Remove(_) => "remove",
+        EventKind::Any => "any",
+        EventKind::Other => "other",
+        EventKind::Access(_) => "access",
+    }
 }

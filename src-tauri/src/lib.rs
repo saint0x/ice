@@ -26,13 +26,17 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::app_health,
+            commands::app_bootstrap,
             commands::app_config_get,
             commands::app_config_set,
             commands::project_add,
             commands::project_remove,
             commands::project_list,
             commands::project_reorder,
+            commands::project_snapshot,
             commands::project_tree_read,
+            commands::project_watch_start,
+            commands::project_watch_stop,
             commands::file_read_text,
             commands::file_write_text,
             commands::dir_create,

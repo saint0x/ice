@@ -11,6 +11,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 anyhow = "1"
 chrono = { version = "0.4", features = ["serde"] }
 dirs = "6"
+notify = "8"
 parking_lot = "0.12"
 portable-pty = "0.9"
 rusqlite = { version = "0.32", features = ["bundled"] }

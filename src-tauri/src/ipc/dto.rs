@@ -8,6 +8,27 @@ pub struct HealthDto {
     pub codex_available: bool,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppBootstrapDto {
+    pub storage_root: String,
+    pub db_path: String,
+    pub projects: Vec<crate::projects::models::ProjectSummary>,
+    pub workspace_layout: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectSnapshotDto {
+    pub project: crate::projects::models::ProjectSummary,
+    pub tree: Vec<crate::fs::service::FsEntry>,
+    pub git: crate::git::service::GitStatusSummary,
+    pub browser_tabs: Vec<crate::browser::service::BrowserTabRecord>,
+    pub terminal_sessions: Vec<crate::terminal::service::TerminalSessionRecord>,
+    pub codex_threads: Vec<crate::codex::service::CodexThreadBinding>,
+    pub approvals: Vec<crate::security::approvals::PendingApprovalRecord>,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppConfigSetInput {
@@ -34,6 +55,13 @@ pub struct ReadTreeInput {
     pub project_id: String,
     pub path: Option<String>,
     pub depth: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectSnapshotInput {
+    pub project_id: String,
+    pub tree_depth: Option<usize>,
 }
 
 #[derive(Debug, Deserialize)]
