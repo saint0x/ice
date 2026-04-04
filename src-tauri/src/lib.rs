@@ -46,6 +46,8 @@ pub fn run() {
             commands::workspace_layout_set,
             commands::workspace_chrome_get,
             commands::workspace_chrome_set,
+            commands::workspace_session_get,
+            commands::workspace_session_set,
             commands::git_status_read,
             commands::git_stage_paths,
             commands::git_unstage_paths,

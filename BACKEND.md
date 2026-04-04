@@ -61,7 +61,7 @@ Rules for this checklist:
 
 ### Persistence / State
 
-- [ ] Add dedicated tables for workspace tabs, pane metadata, and dock layout snapshots rather than only raw workspace JSON blobs.
+- [ ] Add dedicated persistence for dock session contents beyond shell chrome dimensions and open/closed flags.
 - [ ] Add migrations versioning beyond opportunistic `CREATE TABLE IF NOT EXISTS`.
 - [ ] Add periodic integrity checks and repair tooling for `~/.ice/ice.db`.
 - [ ] Add cleanup policies for stale sessions, stale browser history, and stale diagnostics artifacts.
@@ -90,7 +90,7 @@ Rules for this checklist:
 
 ### Persistence
 
-- ✅ SQLite persistence exists for projects, workspace layouts, browser tabs, browser history, terminal sessions, Codex threads, Codex approvals, and app config in [db.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/persistence/db.rs).
+- ✅ SQLite persistence exists for projects, workspace layouts, workspace sessions, browser tabs, browser history, terminal sessions, Codex threads, Codex approvals, and app config in [db.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/persistence/db.rs).
 - ✅ Browser tab metadata and navigation history are persisted locally.
 - ✅ Terminal session metadata is persisted locally, including `is_running`.
 - ✅ Codex thread bindings are persisted locally.
@@ -140,10 +140,16 @@ Rules for this checklist:
 - ✅ Project removal now clears browser, terminal, Codex thread, and approval state for that project.
 - ✅ Backend state is organized around per-project context rather than a hidden singleton project.
 
+### Workspace / Workbench
+
+- ✅ Workspace shell chrome state is persisted canonically through the backend.
+- ✅ Workspace session state now persists active pane, pane tree, and tab metadata as first-class SQLite-backed backend state in [service.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/workspace/service.rs).
+- ✅ Workspace session writes are validated server-side so invalid pane trees and unknown tab references are rejected before persistence.
+
 ### IPC / Tauri Commands
 
 - ✅ Thin command routing exists in [commands.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/ipc/commands.rs).
-- ✅ Commands now cover health, config read, project lifecycle, tree/file operations, workspace layout, git actions, browser actions, terminal actions, Codex actions, and approval listing.
+- ✅ Commands now cover health, config read, project lifecycle, tree/file operations, workspace layout/session/chrome, git actions, browser actions, terminal actions, Codex actions, and approval listing.
 
 ### Verification
 

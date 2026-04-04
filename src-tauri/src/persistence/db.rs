@@ -8,6 +8,7 @@ use crate::codex::service::CodexThreadBinding;
 use crate::projects::models::ProjectRecord;
 use crate::security::approvals::PendingApprovalRecord;
 use crate::terminal::service::TerminalSessionRecord;
+use crate::workspace::service::WorkspaceSessionState;
 
 #[derive(Clone)]
 pub struct PersistenceService {
@@ -43,6 +44,11 @@ impl PersistenceService {
             CREATE TABLE IF NOT EXISTS workspace_layouts (
               workspace_id TEXT PRIMARY KEY,
               layout_json TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS workspace_sessions (
+              workspace_id TEXT PRIMARY KEY,
+              session_json TEXT NOT NULL,
               updated_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS codex_threads (
@@ -132,6 +138,51 @@ impl PersistenceService {
             let raw = conn
                 .query_row(
                     "SELECT layout_json FROM workspace_layouts WHERE workspace_id = ?1",
+                    params![workspace_id],
+                    |row| row.get::<_, String>(0),
+                )
+                .optional()?;
+            Ok(raw.map(|text| serde_json::from_str(&text)).transpose()?)
+        })
+        .await?
+    }
+
+    pub async fn upsert_workspace_session(
+        &self,
+        workspace_id: String,
+        session: &WorkspaceSessionState,
+    ) -> Result<()> {
+        let this = self.clone();
+        let session_json = serde_json::to_string(session)?;
+        tokio::task::spawn_blocking(move || -> Result<()> {
+            let conn = this.connect()?;
+            conn.execute(
+                "
+                INSERT INTO workspace_sessions (workspace_id, session_json, updated_at)
+                VALUES (?1, ?2, datetime('now'))
+                ON CONFLICT(workspace_id) DO UPDATE SET
+                  session_json = excluded.session_json,
+                  updated_at = excluded.updated_at
+                ",
+                params![workspace_id, session_json],
+            )?;
+            Ok(())
+        })
+        .await??;
+        Ok(())
+    }
+
+    pub async fn read_workspace_session(
+        &self,
+        workspace_id: &str,
+    ) -> Result<Option<WorkspaceSessionState>> {
+        let this = self.clone();
+        let workspace_id = workspace_id.to_owned();
+        tokio::task::spawn_blocking(move || -> Result<Option<WorkspaceSessionState>> {
+            let conn = this.connect()?;
+            let raw = conn
+                .query_row(
+                    "SELECT session_json FROM workspace_sessions WHERE workspace_id = ?1",
                     params![workspace_id],
                     |row| row.get::<_, String>(0),
                 )
@@ -638,6 +689,9 @@ mod tests {
     use crate::codex::service::CodexThreadBinding;
     use crate::security::approvals::PendingApprovalRecord;
     use crate::terminal::service::TerminalSessionRecord;
+    use crate::workspace::service::{
+        WorkspacePaneNode, WorkspaceSessionState, WorkspaceSplitNode, WorkspaceTabRecord,
+    };
     use serde_json::json;
     use tempfile::tempdir;
 
@@ -654,6 +708,46 @@ mod tests {
                 .await
                 .expect("workspace read"),
             Some(json!({"panes": 3}))
+        );
+
+        let workspace_session = WorkspaceSessionState {
+            active_pane_id: "pane-1".to_string(),
+            tabs: vec![WorkspaceTabRecord {
+                id: "tab-1".to_string(),
+                project_id: "project-a".to_string(),
+                kind: "editor".to_string(),
+                title: "main.rs".to_string(),
+                icon: Some("file-code".to_string()),
+                dirty: true,
+                pinned: false,
+                meta: Some(json!({"path":"src/main.rs"})),
+            }],
+            root: WorkspacePaneNode::Split(WorkspaceSplitNode {
+                id: "split-1".to_string(),
+                direction: "horizontal".to_string(),
+                children: vec![
+                    WorkspacePaneNode::Leaf {
+                        id: "pane-1".to_string(),
+                        tabs: vec!["tab-1".to_string()],
+                        active_tab_id: Some("tab-1".to_string()),
+                    },
+                    WorkspacePaneNode::Leaf {
+                        id: "pane-2".to_string(),
+                        tabs: Vec::new(),
+                        active_tab_id: None,
+                    },
+                ],
+                ratio: 0.5,
+            }),
+        };
+        db.upsert_workspace_session("workspace-a".to_string(), &workspace_session)
+            .await
+            .expect("workspace session write");
+        assert_eq!(
+            db.read_workspace_session("workspace-a")
+                .await
+                .expect("workspace session read"),
+            Some(workspace_session)
         );
 
         let tab = BrowserTabRecord {

@@ -21,6 +21,7 @@ pub async fn app_bootstrap(state: State<'_, AppState>) -> Result<AppBootstrapDto
         projects: state.projects.list_projects().await?,
         workspace_layout: state.workspace.get_layout("primary").await?,
         workspace_chrome: state.workspace.get_chrome_state("primary").await?,
+        workspace_session: state.workspace.get_session_state("primary").await?,
     })
 }
 
@@ -252,6 +253,26 @@ pub async fn workspace_chrome_set(
     state
         .workspace
         .set_chrome_state(&input.workspace_id, input.chrome_state)
+        .await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn workspace_session_get(
+    workspace_id: String,
+    state: State<'_, AppState>,
+) -> Result<crate::workspace::service::WorkspaceSessionState, AppError> {
+    Ok(state.workspace.get_session_state(&workspace_id).await?)
+}
+
+#[tauri::command]
+pub async fn workspace_session_set(
+    input: SetWorkspaceSessionInput,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    state
+        .workspace
+        .set_session_state(&input.workspace_id, input.session_state)
         .await?;
     Ok(())
 }

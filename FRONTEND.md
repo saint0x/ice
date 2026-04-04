@@ -15,6 +15,7 @@ Rules for this checklist:
 
 - [ ] Replace all demo Zustand seed data in [projects.ts](/Users/deepsaint/Desktop/ice/frontend/src/stores/projects.ts), [files.ts](/Users/deepsaint/Desktop/ice/frontend/src/stores/files.ts), [git.ts](/Users/deepsaint/Desktop/ice/frontend/src/stores/git.ts), [terminal.ts](/Users/deepsaint/Desktop/ice/frontend/src/stores/terminal.ts), and [codex.ts](/Users/deepsaint/Desktop/ice/frontend/src/stores/codex.ts) with Tauri IPC loaders.
 - [ ] Subscribe to backend events for filesystem, git, browser, terminal, and Codex updates instead of relying on local-only mutations.
+- [ ] Replace the local workspace session seed in [workspace.ts](/Users/deepsaint/Desktop/ice/frontend/src/stores/workspace.ts) with `workspace_session_get` / `workspace_session_set`.
 - [ ] Persist and hydrate workspace layout from the backend rather than purely local in-memory state.
 
 ### Filesystem / Editor
@@ -94,6 +95,7 @@ Rules for this checklist:
 
 - ✅ The frontend types already model the right major concepts in [index.ts](/Users/deepsaint/Desktop/ice/frontend/src/types/index.ts): projects, tabs, pane layouts, file entries, git state, terminal sessions, Codex threads, and approvals.
 - ✅ Important state is already keyed by `projectId` across project, file, git, terminal, and Codex stores.
+- ✅ The backend now exposes a first-class workspace session payload through bootstrap and dedicated workspace session IPC commands, so the frontend no longer needs to invent pane/tab state locally.
 
 ### Visual / Product Direction
 

@@ -16,6 +16,7 @@ pub struct AppBootstrapDto {
     pub projects: Vec<crate::projects::models::ProjectSummary>,
     pub workspace_layout: Option<serde_json::Value>,
     pub workspace_chrome: crate::workspace::service::WorkspaceChromeState,
+    pub workspace_session: crate::workspace::service::WorkspaceSessionState,
 }
 
 #[derive(Debug, Serialize)]
@@ -115,6 +116,13 @@ pub struct SetWorkspaceLayoutInput {
 pub struct SetWorkspaceChromeInput {
     pub workspace_id: String,
     pub chrome_state: crate::workspace::service::WorkspaceChromeState,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetWorkspaceSessionInput {
+    pub workspace_id: String,
+    pub session_state: crate::workspace::service::WorkspaceSessionState,
 }
 
 #[derive(Debug, Deserialize)]
