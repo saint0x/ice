@@ -10,20 +10,13 @@ interface TerminalState {
   upsertSession: (session: TerminalSession) => void
   setScrollback: (id: TerminalId, content: string) => void
   appendScrollback: (id: TerminalId, chunk: string) => void
-  createSession: (projectId: ProjectId, title?: string) => TerminalId
   closeSession: (id: TerminalId) => void
   setActiveSession: (projectId: ProjectId, id: TerminalId) => void
-  renameSession: (id: TerminalId, title: string) => void
 }
 
-let _counter = 0
-
 export const useTerminalStore = create<TerminalState>((set) => ({
-  sessions: new Map([
-    ['term-1', { id: 'term-1', projectId: 'proj-1', title: 'zsh', cwd: '/Users/deepsaint/Desktop/ice' }],
-    ['term-2', { id: 'term-2', projectId: 'proj-1', title: 'build', cwd: '/Users/deepsaint/Desktop/ice' }],
-  ]),
-  activeSessionId: new Map([['proj-1', 'term-1']]),
+  sessions: new Map(),
+  activeSessionId: new Map(),
   scrollback: new Map(),
 
   hydrateSessions: (sessions) =>
@@ -69,24 +62,6 @@ export const useTerminalStore = create<TerminalState>((set) => ({
       return { scrollback }
     }),
 
-  createSession: (projectId, title) => {
-    const id: TerminalId = `term-${++_counter + 100}`
-    const session: TerminalSession = {
-      id,
-      projectId,
-      title: title ?? 'zsh',
-      cwd: '',
-    }
-    set((s) => {
-      const sessions = new Map(s.sessions)
-      sessions.set(id, session)
-      const activeSessionId = new Map(s.activeSessionId)
-      activeSessionId.set(projectId, id)
-      return { sessions, activeSessionId }
-    })
-    return id
-  },
-
   closeSession: (id) =>
     set((s) => {
       const sessions = new Map(s.sessions)
@@ -110,14 +85,5 @@ export const useTerminalStore = create<TerminalState>((set) => ({
       const activeSessionId = new Map(s.activeSessionId)
       activeSessionId.set(projectId, id)
       return { activeSessionId }
-    }),
-
-  renameSession: (id, title) =>
-    set((s) => {
-      const sessions = new Map(s.sessions)
-      const session = sessions.get(id)
-      if (!session) return s
-      sessions.set(id, { ...session, title })
-      return { sessions }
     }),
 }))

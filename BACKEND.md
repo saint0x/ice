@@ -39,6 +39,7 @@ Rules for this checklist:
 - [ ] Replace the remaining frontend browser viewport placeholder with the final native renderer host.
 - [ ] Add richer editor conflict-resolution flows on top of the existing version-token backend guard so stale-save errors can be resolved intentionally in the UI.
 - [ ] Publish a typed shared contract for project, tree, git, browser, terminal, Codex, and approval payloads.
+- [ ] Keep pressure on frontend integration to remove remaining local-only helper mutations so backend state stays canonical across startup and runtime.
 
 ### Testing / Release
 
@@ -103,6 +104,7 @@ Rules for this checklist:
 - ✅ Project-level browser restore policy now exists as backend state, with canonical per-project get/set commands under the project service.
 - ✅ The current frontend now uses the browser renderer bridge for a pane-hosted renderer host, attaching/detaching sessions and syncing renderer state back through backend browser IPC.
 - ✅ The current frontend now also uses the production file IO backend for editor reads and saves, including binary-file detection and optimistic version-token save enforcement.
+- ✅ The current frontend no longer seeds fake startup projects, git state, terminal sessions, Codex threads, or workspace tabs before backend hydration.
 
 ### Terminal
 

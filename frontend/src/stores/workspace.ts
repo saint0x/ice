@@ -44,20 +44,11 @@ interface WorkspaceState {
 }
 
 const initialPaneId = nextPaneId()
-const welcomeTabId = nextTabId()
-
-const initialTab: Tab = {
-  id: welcomeTabId,
-  projectId: 'proj-1',
-  type: 'editor',
-  title: 'Welcome',
-}
-
 const initialLayout: PaneNode = {
   id: initialPaneId,
   type: 'leaf',
-  tabs: [welcomeTabId],
-  activeTabId: welcomeTabId,
+  tabs: [],
+  activeTabId: null,
 }
 
 function findAndUpdatePane(layout: PaneLayout, paneId: PaneId, updater: (pane: PaneNode) => PaneNode): PaneLayout {
@@ -120,7 +111,7 @@ function removeEmptyPanes(layout: PaneLayout): PaneLayout | null {
 
 export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   layout: initialLayout,
-  tabs: new Map([[welcomeTabId, initialTab]]),
+  tabs: new Map(),
   activePaneId: initialPaneId,
   sidebarOpen: true,
   sidebarWidth: 240,

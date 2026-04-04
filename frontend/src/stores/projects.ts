@@ -16,31 +16,10 @@ interface ProjectsState {
   updateProject: (id: ProjectId, patch: Partial<Project>) => void
 }
 
-const DEMO_PROJECTS: Project[] = [
-  {
-    id: 'proj-1',
-    name: 'ice',
-    path: '/Users/deepsaint/Desktop/ice',
-    color: '#7c9bf7',
-    branch: 'main',
-    collapsed: false,
-    expandedSections: new Set(['files'] as SidebarSection[]),
-  },
-  {
-    id: 'proj-2',
-    name: 'glass',
-    path: '/Users/deepsaint/Desktop/Glass',
-    color: '#66bb6a',
-    branch: 'dev',
-    collapsed: false,
-    expandedSections: new Set(['files'] as SidebarSection[]),
-  },
-]
-
 export const useProjectsStore = create<ProjectsState>((set) => ({
-  projects: new Map(DEMO_PROJECTS.map((p) => [p.id, p])),
-  projectOrder: DEMO_PROJECTS.map((p) => p.id),
-  activeProjectId: DEMO_PROJECTS[0]?.id ?? null,
+  projects: new Map(),
+  projectOrder: [],
+  activeProjectId: null,
 
   hydrateProjects: (projects) =>
     set((s) => {

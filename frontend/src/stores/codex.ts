@@ -16,26 +16,9 @@ interface CodexState {
 }
 
 export const useCodexStore = create<CodexState>((set) => ({
-  threads: new Map([
-    ['thread-1', {
-      id: 'thread-1',
-      projectId: 'proj-1',
-      title: 'Implement pane grid layout',
-      lastMessage: 'I\'ve created the split pane system with drag handles...',
-      unread: true,
-      status: 'idle' as const,
-    }],
-    ['thread-2', {
-      id: 'thread-2',
-      projectId: 'proj-1',
-      title: 'Fix terminal resize',
-      lastMessage: 'The terminal now resizes correctly when...',
-      unread: false,
-      status: 'running' as const,
-    }],
-  ]),
+  threads: new Map(),
   approvals: [],
-  activeThreadId: new Map([['proj-1', 'thread-1']]),
+  activeThreadId: new Map(),
 
   hydrateThreads: (threads) =>
     set((s) => {
