@@ -17,9 +17,7 @@ Rules for this checklist:
 
 ### Git
 
-- [ ] Add discard / restore workflows with explicit safety rules and approval gating.
-- [ ] Add diff payload endpoints for whole-tree staged and unstaged views in addition to per-file diff reads.
-- [ ] Add commit metadata validation and better error surfaces for missing author config and hooks.
+- [ ] Add structured git mutation events beyond status refresh so the frontend can distinguish stage, restore, commit, fetch, pull, and push outcomes.
 
 ### Browser
 
@@ -53,7 +51,7 @@ Rules for this checklist:
 
 ### Testing / Release
 
-- [ ] Expand Fozzy scenarios further into git mutation, browser navigation, and Codex recovery flows.
+- [ ] Expand Fozzy scenarios further into browser navigation and Codex recovery flows.
 - [ ] Add host-backed Fozzy coverage for the new git and filesystem mutation commands.
 - [ ] Add startup smoke tests that assert canonical storage under `~/.ice`.
 - [ ] Add release packaging checks for Tauri bundles once the frontend wiring is complete.
@@ -96,6 +94,9 @@ Rules for this checklist:
 - ✅ Native git branch list, checkout, fetch, pull, and push commands are implemented behind typed IPC commands.
 - ✅ Pull uses `--ff-only` by default to avoid hidden merge commits from the desktop shell.
 - ✅ Filesystem watch activity now triggers debounced native git status refresh events so git surfaces can stay hot without blind frontend polling.
+- ✅ Native git restore/discard flows now exist through typed backend commands with explicit staged/worktree targeting in [service.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/git/service.rs).
+- ✅ Whole-tree staged and unstaged diff payload reads now exist alongside per-file diffs through `git_diff_tree_read`.
+- ✅ Commit readiness now exposes author config, commit-message validation, hooks path, and active hooks so the frontend can explain blocked commits before execution.
 
 ### Browser
 
@@ -159,3 +160,4 @@ Rules for this checklist:
 - ✅ Fozzy coverage exists with [backend.production_gate.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.production_gate.fozzy.json) and [backend.topology.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.topology.fozzy.json).
 - ✅ Feature-focused Fozzy scenarios now exist for approval policy and FS/editor contracts in [backend.approval_policy.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.approval_policy.fozzy.json) and [backend.fs_editor.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.fs_editor.fozzy.json).
 - ✅ Feature-focused Fozzy coverage now also exists for terminal lifecycle and persistence contracts in [backend.terminal_lifecycle.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.terminal_lifecycle.fozzy.json).
+- ✅ Feature-focused Fozzy coverage now also exists for git mutation and commit-readiness contracts in [backend.git_mutation.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.git_mutation.fozzy.json).

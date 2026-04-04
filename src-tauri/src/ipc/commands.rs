@@ -371,12 +371,42 @@ pub async fn git_unstage_paths(
 }
 
 #[tauri::command]
+pub async fn git_restore_paths(
+    input: GitRestoreInput,
+    state: State<'_, AppState>,
+) -> Result<crate::git::service::GitStatusSummary, AppError> {
+    let project = state.projects.require_project(&input.project_id).await?;
+    state
+        .git
+        .restore_paths(
+            &project,
+            &input.paths,
+            input.staged.unwrap_or(false),
+            input.worktree.unwrap_or(true),
+        )
+        .await?;
+    Ok(state.git.read_status(&project).await?)
+}
+
+#[tauri::command]
 pub async fn git_commit(
     input: GitCommitInput,
     state: State<'_, AppState>,
 ) -> Result<crate::git::service::GitStatusSummary, AppError> {
     let project = state.projects.require_project(&input.project_id).await?;
     Ok(state.git.commit(&project, &input.message).await?)
+}
+
+#[tauri::command]
+pub async fn git_commit_readiness(
+    input: GitCommitReadinessInput,
+    state: State<'_, AppState>,
+) -> Result<crate::git::service::GitCommitReadiness, AppError> {
+    let project = state.projects.require_project(&input.project_id).await?;
+    Ok(state
+        .git
+        .commit_readiness(&project, input.message.as_deref())
+        .await?)
 }
 
 #[tauri::command]
@@ -443,6 +473,18 @@ pub async fn git_diff_read(
     Ok(state
         .git
         .read_diff(&project, &input.path, input.staged.unwrap_or(false))
+        .await?)
+}
+
+#[tauri::command]
+pub async fn git_diff_tree_read(
+    input: GitDiffTreeInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::git::service::GitDiffRecord>, AppError> {
+    let project = state.projects.require_project(&input.project_id).await?;
+    Ok(state
+        .git
+        .read_diff_tree(&project, input.staged.unwrap_or(false))
         .await?)
 }
 

@@ -205,6 +205,15 @@ pub struct GitPathsInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct GitRestoreInput {
+    pub project_id: String,
+    pub paths: Vec<String>,
+    pub staged: Option<bool>,
+    pub worktree: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GitBranchCheckoutInput {
     pub project_id: String,
     pub branch_name: String,
@@ -245,9 +254,23 @@ pub struct GitCommitInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct GitCommitReadinessInput {
+    pub project_id: String,
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GitDiffInput {
     pub project_id: String,
     pub path: String,
+    pub staged: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitDiffTreeInput {
+    pub project_id: String,
     pub staged: Option<bool>,
 }
 

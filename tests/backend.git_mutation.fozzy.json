@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "name": "backend-git-mutation",
+  "steps": [
+    {
+      "type": "trace_event",
+      "name": "verify_git_mutation_contract",
+      "fields": {
+        "target": "src-tauri/git"
+      }
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test git::service::tests::parse_status_counts_staged_and_untracked_changes -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test git::service::tests::parse_status_counts_staged_and_untracked_changes -- --exact"
+      ],
+      "expect_exit": 0
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test git::service::tests::ensure_paths_requires_non_empty_input -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test git::service::tests::ensure_paths_requires_non_empty_input -- --exact"
+      ],
+      "expect_exit": 0
+    }
+  ]
+}

@@ -1,8 +1,10 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 
 use anyhow::{anyhow, Result};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
+use tokio::fs;
 use tokio::process::Command;
 
 use crate::app::events::GIT_EVENT;
@@ -53,30 +55,36 @@ pub struct GitStatusSummary {
     pub changes: Vec<GitChangeRecord>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitCommitReadiness {
+    pub author_name: Option<String>,
+    pub author_email: Option<String>,
+    pub author_configured: bool,
+    pub commit_message_valid: bool,
+    pub message_hint: Option<String>,
+    pub blocking_reason: Option<String>,
+    pub hooks_path: Option<String>,
+    pub active_hooks: Vec<String>,
+}
+
 impl GitService {
     pub fn new(app: AppHandle) -> Self {
         Self { app }
     }
 
     pub async fn read_status(&self, project: &ProjectRecord) -> Result<GitStatusSummary> {
-        let output = Command::new("git")
-            .args([
-                "-C",
-                &project.root_path,
+        let output = run_git(
+            &project.root_path,
+            &[
                 "status",
                 "--porcelain=2",
                 "--branch",
                 "--untracked-files=all",
-            ])
-            .output()
-            .await?;
-        if !output.status.success() {
-            return Err(anyhow!(
-                "{}",
-                String::from_utf8_lossy(&output.stderr).trim().to_string()
-            ));
-        }
-        let summary = parse_status(&String::from_utf8_lossy(&output.stdout));
+            ],
+        )
+        .await?;
+        let summary = parse_status(&output);
         self.app.emit(
             GIT_EVENT,
             serde_json::json!({ "type": "statusRead", "projectId": project.id, "summary": summary }),
@@ -101,86 +109,126 @@ impl GitService {
     }
 
     pub async fn stage_paths(&self, project: &ProjectRecord, paths: &[String]) -> Result<()> {
-        if paths.is_empty() {
-            return Ok(());
-        }
-        let mut command = Command::new("git");
-        command
-            .arg("-C")
-            .arg(&project.root_path)
-            .arg("add")
-            .arg("--");
-        for path in paths {
-            command.arg(path);
-        }
-        let output = command.output().await?;
-        if !output.status.success() {
-            return Err(anyhow!(
-                "{}",
-                String::from_utf8_lossy(&output.stderr).trim().to_string()
-            ));
-        }
+        ensure_paths(paths)?;
+        let mut args = vec!["add", "--"];
+        let path_args = paths.iter().map(String::as_str).collect::<Vec<_>>();
+        args.extend(path_args);
+        run_git(&project.root_path, &args).await?;
         Ok(())
     }
 
     pub async fn unstage_paths(&self, project: &ProjectRecord, paths: &[String]) -> Result<()> {
-        if paths.is_empty() {
-            return Ok(());
-        }
-        let mut command = Command::new("git");
-        command
-            .arg("-C")
-            .arg(&project.root_path)
-            .args(["restore", "--staged", "--"]);
-        for path in paths {
-            command.arg(path);
-        }
-        let output = command.output().await?;
-        if !output.status.success() {
+        ensure_paths(paths)?;
+        let mut args = vec!["restore", "--staged", "--"];
+        let path_args = paths.iter().map(String::as_str).collect::<Vec<_>>();
+        args.extend(path_args);
+        run_git(&project.root_path, &args).await?;
+        Ok(())
+    }
+
+    pub async fn restore_paths(
+        &self,
+        project: &ProjectRecord,
+        paths: &[String],
+        staged: bool,
+        worktree: bool,
+    ) -> Result<()> {
+        ensure_paths(paths)?;
+        if !staged && !worktree {
             return Err(anyhow!(
-                "{}",
-                String::from_utf8_lossy(&output.stderr).trim().to_string()
+                "restore must target at least one of staged=true or worktree=true"
             ));
         }
+        let mut args = vec!["restore"];
+        if staged {
+            args.push("--staged");
+        }
+        if worktree {
+            args.push("--worktree");
+        }
+        args.push("--");
+        let path_args = paths.iter().map(String::as_str).collect::<Vec<_>>();
+        args.extend(path_args);
+        run_git(&project.root_path, &args).await?;
         Ok(())
     }
 
     pub async fn commit(&self, project: &ProjectRecord, message: &str) -> Result<GitStatusSummary> {
-        let output = Command::new("git")
-            .arg("-C")
-            .arg(&project.root_path)
-            .args(["commit", "-m", message])
-            .output()
-            .await?;
-        if !output.status.success() {
+        let readiness = self.commit_readiness(project, Some(message)).await?;
+        if !readiness.commit_message_valid {
             return Err(anyhow!(
                 "{}",
-                String::from_utf8_lossy(&output.stderr).trim().to_string()
+                readiness
+                    .blocking_reason
+                    .unwrap_or_else(|| "commit message is required".to_string())
             ));
         }
+        if !readiness.author_configured {
+            return Err(anyhow!(
+                "{}",
+                readiness.blocking_reason.unwrap_or_else(|| {
+                    "git author name/email must be configured before commit".to_string()
+                })
+            ));
+        }
+        run_git(&project.root_path, &["commit", "-m", message]).await?;
         self.read_status(project).await
     }
 
+    pub async fn commit_readiness(
+        &self,
+        project: &ProjectRecord,
+        message: Option<&str>,
+    ) -> Result<GitCommitReadiness> {
+        let author_name = git_config_get(&project.root_path, "user.name").await?;
+        let author_email = git_config_get(&project.root_path, "user.email").await?;
+        let hooks_path = git_path(&project.root_path, "hooks").await?;
+        let active_hooks = if let Some(hooks_path) = hooks_path.as_deref() {
+            list_active_hooks(&project.root_path, hooks_path).await?
+        } else {
+            Vec::new()
+        };
+
+        let author_configured = author_name.is_some() && author_email.is_some();
+        let trimmed = message.map(str::trim).unwrap_or_default();
+        let commit_message_valid = !trimmed.is_empty();
+        let blocking_reason = if !author_configured {
+            Some("git author name/email must be configured before commit".to_string())
+        } else if !commit_message_valid {
+            Some("commit message cannot be empty".to_string())
+        } else {
+            None
+        };
+
+        Ok(GitCommitReadiness {
+            author_name,
+            author_email,
+            author_configured,
+            commit_message_valid,
+            message_hint: if commit_message_valid {
+                None
+            } else {
+                Some("Provide a non-empty commit message".to_string())
+            },
+            blocking_reason,
+            hooks_path,
+            active_hooks,
+        })
+    }
+
     pub async fn list_branches(&self, project: &ProjectRecord) -> Result<Vec<GitBranchRecord>> {
-        let output = Command::new("git")
-            .arg("-C")
-            .arg(&project.root_path)
-            .args([
+        let output = run_git(
+            &project.root_path,
+            &[
                 "for-each-ref",
                 "--format=%(refname:short)\t%(refname)\t%(objectname:short)\t%(upstream:short)\t%(upstream:trackshort)\t%(HEAD)",
                 "refs/heads",
                 "refs/remotes",
-            ])
-            .output()
-            .await?;
-        if !output.status.success() {
-            return Err(anyhow!(
-                "{}",
-                String::from_utf8_lossy(&output.stderr).trim().to_string()
-            ));
-        }
+            ],
+        )
+        .await?;
 
-        let mut branches = String::from_utf8_lossy(&output.stdout)
+        let mut branches = output
             .lines()
             .filter_map(parse_branch_line)
             .collect::<Vec<_>>();
@@ -201,22 +249,15 @@ impl GitService {
         create: bool,
         start_point: Option<&str>,
     ) -> Result<GitStatusSummary> {
-        let mut command = Command::new("git");
-        command.arg("-C").arg(&project.root_path).arg("switch");
+        let mut args = vec!["switch"];
         if create {
-            command.arg("-c");
+            args.push("-c");
         }
-        command.arg(branch_name);
+        args.push(branch_name);
         if let Some(start_point) = start_point {
-            command.arg(start_point);
+            args.push(start_point);
         }
-        let output = command.output().await?;
-        if !output.status.success() {
-            return Err(anyhow!(
-                "{}",
-                String::from_utf8_lossy(&output.stderr).trim().to_string()
-            ));
-        }
+        run_git(&project.root_path, &args).await?;
         self.read_status(project).await
     }
 
@@ -225,21 +266,11 @@ impl GitService {
         project: &ProjectRecord,
         remote: Option<&str>,
     ) -> Result<GitStatusSummary> {
-        let mut command = Command::new("git");
-        command
-            .arg("-C")
-            .arg(&project.root_path)
-            .args(["fetch", "--prune"]);
+        let mut args = vec!["fetch", "--prune"];
         if let Some(remote) = remote {
-            command.arg(remote);
+            args.push(remote);
         }
-        let output = command.output().await?;
-        if !output.status.success() {
-            return Err(anyhow!(
-                "{}",
-                String::from_utf8_lossy(&output.stderr).trim().to_string()
-            ));
-        }
+        run_git(&project.root_path, &args).await?;
         self.read_status(project).await
     }
 
@@ -249,24 +280,14 @@ impl GitService {
         remote: Option<&str>,
         branch: Option<&str>,
     ) -> Result<GitStatusSummary> {
-        let mut command = Command::new("git");
-        command
-            .arg("-C")
-            .arg(&project.root_path)
-            .args(["pull", "--ff-only"]);
+        let mut args = vec!["pull", "--ff-only"];
         if let Some(remote) = remote {
-            command.arg(remote);
+            args.push(remote);
         }
         if let Some(branch) = branch {
-            command.arg(branch);
+            args.push(branch);
         }
-        let output = command.output().await?;
-        if !output.status.success() {
-            return Err(anyhow!(
-                "{}",
-                String::from_utf8_lossy(&output.stderr).trim().to_string()
-            ));
-        }
+        run_git(&project.root_path, &args).await?;
         self.read_status(project).await
     }
 
@@ -277,24 +298,17 @@ impl GitService {
         branch: Option<&str>,
         set_upstream: bool,
     ) -> Result<GitStatusSummary> {
-        let mut command = Command::new("git");
-        command.arg("-C").arg(&project.root_path).arg("push");
+        let mut args = vec!["push"];
         if set_upstream {
-            command.arg("-u");
+            args.push("-u");
         }
         if let Some(remote) = remote {
-            command.arg(remote);
+            args.push(remote);
         }
         if let Some(branch) = branch {
-            command.arg(branch);
+            args.push(branch);
         }
-        let output = command.output().await?;
-        if !output.status.success() {
-            return Err(anyhow!(
-                "{}",
-                String::from_utf8_lossy(&output.stderr).trim().to_string()
-            ));
-        }
+        run_git(&project.root_path, &args).await?;
         self.read_status(project).await
     }
 
@@ -304,25 +318,32 @@ impl GitService {
         path: &str,
         staged: bool,
     ) -> Result<GitDiffRecord> {
-        let mut command = Command::new("git");
-        command.arg("-C").arg(&project.root_path).arg("diff");
-        if staged {
-            command.arg("--cached");
-        }
-        command.args(["--no-ext-diff", "--"]);
-        command.arg(path);
-        let output = command.output().await?;
-        if !output.status.success() {
-            return Err(anyhow!(
-                "{}",
-                String::from_utf8_lossy(&output.stderr).trim().to_string()
-            ));
-        }
+        let diff = read_diff_text(&project.root_path, Some(path), staged).await?;
         Ok(GitDiffRecord {
             path: path.to_string(),
             staged,
-            diff: String::from_utf8_lossy(&output.stdout).to_string(),
+            diff,
         })
+    }
+
+    pub async fn read_diff_tree(
+        &self,
+        project: &ProjectRecord,
+        staged: bool,
+    ) -> Result<Vec<GitDiffRecord>> {
+        let status = self.read_status(project).await?;
+        let paths = status
+            .changes
+            .iter()
+            .filter(|change| change.staged == staged)
+            .map(|change| change.path.clone())
+            .collect::<Vec<_>>();
+        let mut diffs = Vec::new();
+        for path in paths {
+            let diff = read_diff_text(&project.root_path, Some(&path), staged).await?;
+            diffs.push(GitDiffRecord { path, staged, diff });
+        }
+        Ok(diffs)
     }
 
     pub fn schedule_status_refresh(app: AppHandle, project_id: String, root_path: String) {
@@ -428,24 +449,121 @@ fn parse_status(raw: &str) -> GitStatusSummary {
 }
 
 async fn read_status_for_root(root_path: &str) -> Result<GitStatusSummary> {
-    let output = Command::new("git")
-        .args([
-            "-C",
-            root_path,
+    let output = run_git(
+        root_path,
+        &[
             "status",
             "--porcelain=2",
             "--branch",
             "--untracked-files=all",
-        ])
+        ],
+    )
+    .await?;
+    Ok(parse_status(&output))
+}
+
+async fn run_git(root_path: &str, args: &[&str]) -> Result<String> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(root_path)
+        .args(args)
         .output()
         .await?;
     if !output.status.success() {
-        return Err(anyhow!(
-            "{}",
-            String::from_utf8_lossy(&output.stderr).trim().to_string()
-        ));
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let message = if !stderr.is_empty() {
+            stderr
+        } else if !stdout.is_empty() {
+            stdout
+        } else {
+            format!("git {} failed", args.join(" "))
+        };
+        return Err(anyhow!(message));
     }
-    Ok(parse_status(&String::from_utf8_lossy(&output.stdout)))
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+async fn read_diff_text(root_path: &str, path: Option<&str>, staged: bool) -> Result<String> {
+    let mut args = vec!["diff"];
+    if staged {
+        args.push("--cached");
+    }
+    args.push("--no-ext-diff");
+    if let Some(path) = path {
+        args.push("--");
+        args.push(path);
+    }
+    run_git(root_path, &args).await
+}
+
+async fn git_config_get(root_path: &str, key: &str) -> Result<Option<String>> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(root_path)
+        .args(["config", "--get", key])
+        .output()
+        .await?;
+    if output.status.success() {
+        let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if value.is_empty() {
+            return Ok(None);
+        }
+        return Ok(Some(value));
+    }
+    Ok(None)
+}
+
+async fn git_path(root_path: &str, key: &str) -> Result<Option<String>> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(root_path)
+        .args(["rev-parse", "--git-path", key])
+        .output()
+        .await?;
+    if !output.status.success() {
+        return Ok(None);
+    }
+    let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if value.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(value))
+}
+
+async fn list_active_hooks(root_path: &str, hooks_path: &str) -> Result<Vec<String>> {
+    let hooks_dir = PathBuf::from(root_path).join(hooks_path);
+    let mut entries = match fs::read_dir(&hooks_dir).await {
+        Ok(entries) => entries,
+        Err(_) => return Ok(Vec::new()),
+    };
+    let mut hooks = Vec::new();
+    while let Some(entry) = entries.next_entry().await? {
+        let path = entry.path();
+        let metadata = entry.metadata().await?;
+        if !metadata.is_file() {
+            continue;
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if metadata.permissions().mode() & 0o111 == 0 {
+                continue;
+            }
+        }
+        if let Some(name) = path.file_name().and_then(|value| value.to_str()) {
+            hooks.push(name.to_string());
+        }
+    }
+    hooks.sort();
+    Ok(hooks)
+}
+
+fn ensure_paths(paths: &[String]) -> Result<()> {
+    if paths.is_empty() {
+        return Err(anyhow!("at least one path is required"));
+    }
+    Ok(())
 }
 
 fn parse_branch_line(line: &str) -> Option<GitBranchRecord> {
@@ -471,5 +589,29 @@ fn normalize_optional(value: Option<&str>) -> Option<String> {
     match value.map(str::trim) {
         Some("") | None => None,
         Some(value) => Some(value.to_string()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ensure_paths, parse_status};
+
+    #[test]
+    fn parse_status_counts_staged_and_untracked_changes() {
+        let summary = parse_status(
+            "# branch.head main\n# branch.ab +2 -1\n1 M. N... 100644 100644 100644 abc def src/main.rs\n? new.txt\n",
+        );
+        assert_eq!(summary.branch.as_deref(), Some("main"));
+        assert_eq!(summary.ahead, 2);
+        assert_eq!(summary.behind, 1);
+        assert_eq!(summary.staged, 1);
+        assert_eq!(summary.untracked, 1);
+        assert_eq!(summary.changes.len(), 2);
+    }
+
+    #[test]
+    fn ensure_paths_requires_non_empty_input() {
+        assert!(ensure_paths(&[]).is_err());
+        assert!(ensure_paths(&[String::from("src/main.rs")]).is_ok());
     }
 }

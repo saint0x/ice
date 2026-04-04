@@ -31,7 +31,10 @@ Rules for this checklist:
 
 - [ ] Replace the demo git store with live git status data.
 - [ ] Add stage / unstage / commit interactions in [GitSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/GitSurface.tsx).
+- [ ] Use `git_commit_readiness` to preflight author config and message validity before enabling the final commit action.
 - [ ] Add file-level diff rendering and change selection flows.
+- [ ] Use `git_diff_tree_read` for staged and unstaged change groups so the frontend does not have to fan out per-file diff requests just to render the git surface.
+- [ ] Use `git_restore_paths` for discard/revert actions instead of local-only row removal.
 - [ ] Wire branch list / checkout / fetch / pull / push actions to the now-available backend git commands.
 
 ### Browser
