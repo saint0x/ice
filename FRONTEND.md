@@ -24,7 +24,7 @@ Rules for this checklist:
 - [ ] Hydrate the sidebar file tree from the backend tree API.
 - [ ] Translate backend tree rows into the nested structure expected by [FileTree.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/sidebar/FileTree.tsx).
 - [ ] Open real editor tabs from `file_read` / `file_read_text` and push edits through backend writes.
-- [ ] Add dirty-state tracking, save affordances, and external-change conflict UI.
+- [ ] Add dirty-state tracking, save affordances, and stale-version conflict UI using the backend file `versionToken`.
 - [ ] Wire the Search quick action in [ProjectSection.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/sidebar/ProjectSection.tsx) to `file_search_paths` and `file_search_text`.
 
 ### Git
@@ -99,6 +99,7 @@ Rules for this checklist:
 - ✅ The backend now exposes a first-class workspace session payload through bootstrap and dedicated workspace session IPC commands, so the frontend no longer needs to invent pane/tab state locally.
 - ✅ The backend tree API now supports hidden-file and `.gitignore` controls, and the file-read API now distinguishes binary files from editable text.
 - ✅ The backend now exposes project-scoped filename and content search commands for the sidebar search entrypoint.
+- ✅ The backend file-read/write contract now supports optimistic save conflict detection through a version token.
 
 ### Visual / Product Direction
 

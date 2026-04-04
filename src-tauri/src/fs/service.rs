@@ -6,7 +6,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
 use tokio::process::Command;
 
@@ -51,6 +51,8 @@ pub struct FileReadResult {
     pub is_binary: bool,
     pub size_bytes: u64,
     pub encoding: Option<String>,
+    pub modified_at_ms: Option<u128>,
+    pub version_token: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -87,6 +89,11 @@ pub struct ContentSearchResult {
 struct ProjectWatcher {
     root: PathBuf,
     watcher: RecommendedWatcher,
+}
+
+struct FileVersion {
+    modified_at_ms: Option<u128>,
+    token: String,
 }
 
 impl FsService {
@@ -131,6 +138,8 @@ impl FsService {
     ) -> Result<FileReadResult> {
         let root = projects.resolve_project_path(project_id).await?;
         let full_path = resolve_under_root(&root, path)?;
+        let metadata = tokio::fs::metadata(&full_path).await?;
+        let version = file_version(&metadata);
         let bytes = tokio::fs::read(&full_path).await?;
         let size_bytes = bytes.len() as u64;
         if is_binary_bytes(&bytes) {
@@ -140,6 +149,8 @@ impl FsService {
                 is_binary: true,
                 size_bytes,
                 encoding: None,
+                modified_at_ms: version.as_ref().and_then(|version| version.modified_at_ms),
+                version_token: version.as_ref().map(|version| version.token.clone()),
             });
         }
 
@@ -151,6 +162,8 @@ impl FsService {
             is_binary: false,
             size_bytes,
             encoding: Some("utf-8".to_string()),
+            modified_at_ms: version.as_ref().and_then(|version| version.modified_at_ms),
+            version_token: version.as_ref().map(|version| version.token.clone()),
         })
     }
 
@@ -220,10 +233,27 @@ impl FsService {
         project_id: &str,
         path: &str,
         content: &str,
+        expected_version_token: Option<&str>,
         projects: &ProjectService,
     ) -> Result<()> {
         let root = projects.resolve_project_path(project_id).await?;
         let full_path = resolve_under_root(&root, path)?;
+        if let Some(expected_version_token) = expected_version_token {
+            let metadata = tokio::fs::metadata(&full_path).await.with_context(|| {
+                format!(
+                    "failed to read file metadata before saving {}",
+                    full_path.display()
+                )
+            })?;
+            let actual = file_version(&metadata)
+                .ok_or_else(|| anyhow!("failed to derive a stable version token for {}", path))?;
+            if actual.token != expected_version_token {
+                return Err(anyhow!(
+                    "save conflict: {} changed on disk since it was opened",
+                    path
+                ));
+            }
+        }
         if let Some(parent) = full_path.parent() {
             tokio::fs::create_dir_all(parent).await?;
         }
@@ -479,6 +509,26 @@ fn should_refresh_git(kind: &EventKind, paths: &[String]) -> bool {
     paths.iter().any(|path| path != ".git")
 }
 
+fn file_version(metadata: &std::fs::Metadata) -> Option<FileVersion> {
+    let modified = metadata.modified().ok();
+    let modified_at_ms = modified.as_ref().map(system_time_to_millis);
+    let modified_nanos = modified
+        .as_ref()
+        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(0);
+    Some(FileVersion {
+        modified_at_ms,
+        token: format!("{}:{}", metadata.len(), modified_nanos),
+    })
+}
+
+fn system_time_to_millis(time: &SystemTime) -> u128 {
+    time.duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or(0)
+}
+
 fn search_paths_under_root(root: &Path, query: &str, limit: usize) -> Result<Vec<String>> {
     let mut paths = Vec::new();
     let mut builder = WalkBuilder::new(root);
@@ -605,11 +655,14 @@ fn is_binary_bytes(bytes: &[u8]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        is_binary_bytes, parse_rg_match_record, search_paths_under_root, walk_tree, TreeReadOptions,
+        file_version, is_binary_bytes, parse_rg_match_record, search_paths_under_root, walk_tree,
+        TreeReadOptions,
     };
     use std::collections::HashMap;
     use std::fs;
     use std::path::Path;
+    use std::thread::sleep;
+    use std::time::Duration;
     use tempfile::tempdir;
 
     #[test]
@@ -659,5 +712,19 @@ mod tests {
         assert_eq!(record.line_number, 7);
         assert_eq!(record.submatches.len(), 1);
         assert_eq!(record.submatches[0].text, "main");
+    }
+
+    #[test]
+    fn file_version_token_changes_after_write() {
+        let temp = tempdir().expect("temp dir");
+        let file_path = temp.path().join("main.rs");
+        fs::write(&file_path, "one").expect("write one");
+        let first =
+            file_version(&fs::metadata(&file_path).expect("meta one")).expect("first version");
+        sleep(Duration::from_millis(2));
+        fs::write(&file_path, "two").expect("write two");
+        let second =
+            file_version(&fs::metadata(&file_path).expect("meta two")).expect("second version");
+        assert_ne!(first.token, second.token);
     }
 }

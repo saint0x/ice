@@ -207,6 +207,7 @@ pub async fn file_write_text(
             &input.project_id,
             &input.path,
             &input.content,
+            input.expected_version_token.as_deref(),
             &state.projects,
         )
         .await?;

@@ -90,6 +90,7 @@ pub struct WriteFileInput {
     pub project_id: String,
     pub path: String,
     pub content: String,
+    pub expected_version_token: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
