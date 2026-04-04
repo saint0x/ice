@@ -107,6 +107,14 @@ impl PersistenceService {
             );
             ",
         )?;
+        add_column_if_missing(
+            &conn,
+            "ALTER TABLE codex_threads ADD COLUMN last_assistant_message TEXT",
+        )?;
+        add_column_if_missing(
+            &conn,
+            "ALTER TABLE codex_threads ADD COLUMN unread INTEGER NOT NULL DEFAULT 0",
+        )?;
         Ok(())
     }
 
@@ -251,7 +259,7 @@ impl PersistenceService {
         let conn = self.connect()?;
         let mut stmt = conn.prepare(
             "
-            SELECT project_id, thread_id, title, model, status, last_turn_id
+            SELECT project_id, thread_id, title, model, status, last_turn_id, last_assistant_message, unread
             FROM codex_threads
             ORDER BY updated_at DESC
             ",
@@ -264,6 +272,8 @@ impl PersistenceService {
                 model: row.get(3)?,
                 status: row.get(4)?,
                 last_turn_id: row.get(5)?,
+                last_assistant_message: row.get(6)?,
+                unread: row.get::<_, i64>(7)? != 0,
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
@@ -275,14 +285,16 @@ impl PersistenceService {
             let conn = this.connect()?;
             conn.execute(
                 "
-                INSERT INTO codex_threads (thread_id, project_id, title, model, status, last_turn_id, created_at, updated_at)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime('now'), datetime('now'))
+                INSERT INTO codex_threads (thread_id, project_id, title, model, status, last_turn_id, last_assistant_message, unread, created_at, updated_at)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, datetime('now'), datetime('now'))
                 ON CONFLICT(thread_id) DO UPDATE SET
                   project_id = excluded.project_id,
                   title = excluded.title,
                   model = excluded.model,
                   status = excluded.status,
                   last_turn_id = excluded.last_turn_id,
+                  last_assistant_message = excluded.last_assistant_message,
+                  unread = excluded.unread,
                   updated_at = excluded.updated_at
                 ",
                 params![
@@ -291,7 +303,9 @@ impl PersistenceService {
                     thread.title,
                     thread.model,
                     thread.status,
-                    thread.last_turn_id
+                    thread.last_turn_id,
+                    thread.last_assistant_message,
+                    thread.unread as i64
                 ],
             )?;
             Ok(())
@@ -682,6 +696,18 @@ impl PersistenceService {
     }
 }
 
+fn add_column_if_missing(conn: &Connection, sql: &str) -> Result<()> {
+    match conn.execute(sql, []) {
+        Ok(_) => Ok(()),
+        Err(rusqlite::Error::SqliteFailure(_, Some(message)))
+            if message.contains("duplicate column name") =>
+        {
+            Ok(())
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::PersistenceService;
@@ -807,6 +833,8 @@ mod tests {
             model: Some("gpt-5-codex".to_string()),
             status: "idle".to_string(),
             last_turn_id: Some("turn-1".to_string()),
+            last_assistant_message: Some("Summary".to_string()),
+            unread: true,
         };
         db.upsert_codex_thread(thread.clone())
             .await

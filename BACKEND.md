@@ -39,9 +39,6 @@ Rules for this checklist:
 
 ### Codex / Agent Runtime
 
-- [ ] Normalize more App Server notifications into typed backend events instead of raw pass-through payloads.
-- [ ] Add richer thread state updates so running / idle / waiting approval status stays exact across notifications.
-- [ ] Add persisted turn summaries / last assistant message snippets for sidebar and chat previews.
 - [ ] Add reconnect / restart handling for `codex app-server` with state recovery.
 - [ ] Add stronger approval classification so frontend approvals can render intent-specific UI.
 - [ ] Add schema/version capture against the installed Codex binary for stricter contract management.
@@ -130,6 +127,8 @@ Rules for this checklist:
 - ✅ `CODEX_HOME` is forced to `~/.ice/codex`.
 - ✅ Implemented Codex commands include status, model list, auth read, login start, thread create, turn start, server-request response, and thread list.
 - ✅ Server requests are captured as pending approvals and emitted as backend events.
+- ✅ Codex notifications now update typed thread state for running, waiting approval, idle, error, and disconnected flows instead of only passing raw payloads through.
+- ✅ Codex thread persistence now includes last assistant message snippets and unread state for sidebar/chat previews.
 
 ### Security / Approvals
 

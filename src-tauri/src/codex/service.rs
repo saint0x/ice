@@ -76,6 +76,8 @@ pub struct CodexThreadBinding {
     pub model: Option<String>,
     pub status: String,
     pub last_turn_id: Option<String>,
+    pub last_assistant_message: Option<String>,
+    pub unread: bool,
 }
 
 impl CodexService {
@@ -85,7 +87,12 @@ impl CodexService {
         paths: IcePaths,
         security: Arc<SecurityService>,
     ) -> Self {
-        let persisted_threads = persistence.load_codex_threads_sync().unwrap_or_default();
+        let persisted_threads = persistence
+            .load_codex_threads_sync()
+            .unwrap_or_default()
+            .into_iter()
+            .map(normalize_thread_after_startup)
+            .collect::<Vec<_>>();
         let threads = persisted_threads
             .into_iter()
             .map(|thread| (thread.thread_id.clone(), thread))
@@ -212,6 +219,8 @@ impl CodexService {
             model,
             status: "idle".to_string(),
             last_turn_id: None,
+            last_assistant_message: None,
+            unread: false,
         };
         self.state.lock().threads.insert(thread_id, binding.clone());
         self.persistence
@@ -249,6 +258,7 @@ impl CodexService {
             if let Some(binding) = state.threads.get_mut(&thread_id) {
                 binding.project_id = project_id;
                 binding.status = "running".to_string();
+                binding.unread = false;
                 binding.last_turn_id = result
                     .get("turn")
                     .and_then(|turn| turn.get("id"))
@@ -316,8 +326,37 @@ impl CodexService {
     }
 
     async fn ensure_process(&self) -> Result<CodexProcess> {
-        if let Some(process) = self.state.lock().process.as_ref() {
-            return Ok(process.clone());
+        let existing_process = {
+            let state = self.state.lock();
+            state.process.as_ref().cloned()
+        };
+        if let Some(process) = existing_process {
+            if process_is_alive(&process).await {
+                return Ok(process);
+            }
+            let disconnected_threads = {
+                let mut runtime = self.state.lock();
+                runtime.process = None;
+                runtime.pending_server_requests.clear();
+                runtime
+                    .threads
+                    .values_mut()
+                    .filter_map(|thread| {
+                        if matches!(thread.status.as_str(), "running" | "waitingApproval") {
+                            thread.status = "disconnected".to_string();
+                            Some(thread.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            };
+            for thread in disconnected_threads {
+                self.persistence.upsert_codex_thread(thread).await?;
+            }
+            let _ = self
+                .app
+                .emit(CODEX_EVENT, json!({ "type": "serverDisconnected" }));
         }
 
         let mut child = Command::new("codex")
@@ -343,6 +382,9 @@ impl CodexService {
         self.spawn_reader(stdout, stderr, process.clone());
         self.state.lock().process = Some(process.clone());
         self.initialize_process(&process).await?;
+        let _ = self
+            .app
+            .emit(CODEX_EVENT, json!({ "type": "serverConnected" }));
         Ok(process)
     }
 
@@ -402,6 +444,7 @@ impl CodexService {
 
     fn spawn_reader(&self, stdout: ChildStdout, stderr: ChildStderr, process: CodexProcess) {
         let app = self.app.clone();
+        let persistence = self.persistence.clone();
         let state = self.state.clone();
         let security = self.security.clone();
         tauri::async_runtime::spawn(async move {
@@ -421,6 +464,16 @@ impl CodexService {
                                 build_pending_approval(id, &method, &value, &runtime.threads)
                             };
                             if let Some(approval) = approval {
+                                if let Some(thread) = update_thread_for_approval_request(
+                                    &state,
+                                    approval.thread_id.as_deref(),
+                                ) {
+                                    let _ = persistence.upsert_codex_thread(thread.clone()).await;
+                                    let _ = app.emit(
+                                        CODEX_EVENT,
+                                        json!({ "type": "threadUpdated", "thread": thread }),
+                                    );
+                                }
                                 let _ = security.upsert_approval(approval.clone()).await;
                                 let _ = app.emit(
                                     CODEX_EVENT,
@@ -443,12 +496,39 @@ impl CodexService {
                             let _ = sender.send(result);
                         }
                     } else {
+                        if let Some(thread) = apply_notification_to_threads(&state, &value) {
+                            let _ = persistence.upsert_codex_thread(thread.clone()).await;
+                            let _ = app.emit(
+                                CODEX_EVENT,
+                                json!({ "type": "threadUpdated", "thread": thread }),
+                            );
+                        }
                         let _ = app.emit(
                             CODEX_EVENT,
                             json!({ "type": "notification", "payload": value }),
                         );
                     }
                 }
+            }
+            let disconnected_threads = {
+                let mut runtime = state.lock();
+                runtime.process = None;
+                runtime.pending_server_requests.clear();
+                runtime
+                    .threads
+                    .values_mut()
+                    .filter_map(|thread| {
+                        if matches!(thread.status.as_str(), "running" | "waitingApproval") {
+                            thread.status = "disconnected".to_string();
+                            Some(thread.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            };
+            for thread in disconnected_threads {
+                let _ = persistence.upsert_codex_thread(thread).await;
             }
             let _ = app.emit(CODEX_EVENT, json!({ "type": "serverDisconnected" }));
         });
@@ -480,6 +560,139 @@ fn resolve_login_shell() -> String {
     }
 
     std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string())
+}
+
+async fn process_is_alive(process: &CodexProcess) -> bool {
+    let mut child = process.child.lock().await;
+    matches!(child.try_wait(), Ok(None))
+}
+
+fn normalize_thread_after_startup(mut thread: CodexThreadBinding) -> CodexThreadBinding {
+    if matches!(thread.status.as_str(), "running" | "waitingApproval") {
+        thread.status = "disconnected".to_string();
+    }
+    thread
+}
+
+fn update_thread_for_approval_request(
+    state: &Arc<Mutex<CodexRuntimeState>>,
+    thread_id: Option<&str>,
+) -> Option<CodexThreadBinding> {
+    let mut runtime = state.lock();
+    let thread = runtime.threads.get_mut(thread_id?)?;
+    thread.status = "waitingApproval".to_string();
+    thread.unread = true;
+    Some(thread.clone())
+}
+
+fn apply_notification_to_threads(
+    state: &Arc<Mutex<CodexRuntimeState>>,
+    payload: &Value,
+) -> Option<CodexThreadBinding> {
+    let method = payload.get("method").and_then(|value| value.as_str())?;
+    let params = payload.get("params").unwrap_or(payload);
+    let thread_id = extract_thread_id(params)?;
+    let mut runtime = state.lock();
+    let thread = runtime.threads.get_mut(&thread_id)?;
+
+    if let Some(title) = extract_title(params) {
+        thread.title = Some(title);
+    }
+    if let Some(model) = extract_model(params) {
+        thread.model = Some(model);
+    }
+    if let Some(turn_id) = extract_turn_id(params) {
+        thread.last_turn_id = Some(turn_id);
+    }
+    if let Some(message) = extract_assistant_message(params) {
+        thread.last_assistant_message = Some(message);
+        thread.unread = true;
+    }
+
+    if method.contains("approval") {
+        thread.status = "waitingApproval".to_string();
+    } else if method.contains("turn/start")
+        || method.contains("turn.started")
+        || method.contains("turn/update")
+        || method.contains("turn.delta")
+    {
+        thread.status = "running".to_string();
+    } else if method.contains("turn/completed")
+        || method.contains("turn.completed")
+        || method.contains("turn/finished")
+    {
+        thread.status = "idle".to_string();
+    } else if method.contains("turn/failed") || method.contains("turn.error") {
+        thread.status = "error".to_string();
+    } else if method.contains("thread/updated") && thread.status == "disconnected" {
+        thread.status = "idle".to_string();
+    }
+
+    Some(thread.clone())
+}
+
+fn extract_thread_id(payload: &Value) -> Option<String> {
+    payload
+        .get("threadId")
+        .or_else(|| payload.get("thread_id"))
+        .or_else(|| payload.get("thread").and_then(|thread| thread.get("id")))
+        .and_then(|value| value.as_str())
+        .map(ToOwned::to_owned)
+}
+
+fn extract_turn_id(payload: &Value) -> Option<String> {
+    payload
+        .get("turnId")
+        .or_else(|| payload.get("turn_id"))
+        .or_else(|| payload.get("turn").and_then(|turn| turn.get("id")))
+        .and_then(|value| value.as_str())
+        .map(ToOwned::to_owned)
+}
+
+fn extract_title(payload: &Value) -> Option<String> {
+    payload
+        .get("title")
+        .or_else(|| payload.get("thread").and_then(|thread| thread.get("title")))
+        .and_then(|value| value.as_str())
+        .map(ToOwned::to_owned)
+}
+
+fn extract_model(payload: &Value) -> Option<String> {
+    payload
+        .get("model")
+        .or_else(|| payload.get("thread").and_then(|thread| thread.get("model")))
+        .and_then(|value| value.as_str())
+        .map(ToOwned::to_owned)
+}
+
+fn extract_assistant_message(payload: &Value) -> Option<String> {
+    if let Some(text) = payload
+        .get("message")
+        .and_then(extract_text_from_value)
+        .or_else(|| payload.get("delta").and_then(extract_text_from_value))
+        .or_else(|| payload.get("item").and_then(extract_text_from_value))
+        .or_else(|| payload.get("content").and_then(extract_text_from_value))
+    {
+        let summary = text.trim().replace('\n', " ");
+        if !summary.is_empty() {
+            return Some(summary.chars().take(160).collect());
+        }
+    }
+    None
+}
+
+fn extract_text_from_value(value: &Value) -> Option<String> {
+    match value {
+        Value::String(text) => Some(text.clone()),
+        Value::Array(items) => items.iter().find_map(extract_text_from_value),
+        Value::Object(map) => map
+            .get("text")
+            .and_then(extract_text_from_value)
+            .or_else(|| map.get("message").and_then(extract_text_from_value))
+            .or_else(|| map.get("content").and_then(extract_text_from_value))
+            .or_else(|| map.get("parts").and_then(extract_text_from_value)),
+        _ => None,
+    }
 }
 
 fn build_pending_approval(

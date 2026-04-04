@@ -101,6 +101,7 @@ Rules for this checklist:
 - ✅ The backend now exposes project-scoped filename and content search commands for the sidebar search entrypoint.
 - ✅ The backend file-read/write contract now supports optimistic save conflict detection through a version token.
 - ✅ The backend file-read/write contract now exposes encoding and BOM metadata so the frontend can preserve legacy text files correctly on save.
+- ✅ The backend Codex thread payload now includes normalized status, unread state, and last assistant message summaries for sidebar/chat rendering.
 
 ### Visual / Product Direction
 
