@@ -110,6 +110,7 @@ Rules for this checklist:
 - ✅ The frontend types already model the right major concepts in [index.ts](/Users/deepsaint/Desktop/ice/frontend/src/types/index.ts): projects, tabs, pane layouts, file entries, git state, terminal sessions, Codex threads, and approvals.
 - ✅ Important state is already keyed by `projectId` across project, file, git, terminal, and Codex stores.
 - ✅ The backend now exposes a first-class workspace session payload through bootstrap and dedicated workspace session IPC commands, so the frontend no longer needs to invent pane/tab state locally.
+- ✅ Backend persistence now tracks an explicit schema version in SQLite, which gives production migrations a canonical upgrade baseline instead of implicit table-shape assumptions.
 - ✅ The backend tree API now supports hidden-file and `.gitignore` controls, and the file-read API now distinguishes binary files from editable text.
 - ✅ The backend now exposes project-scoped filename and content search commands for the sidebar search entrypoint.
 - ✅ The backend file-read/write contract now supports optimistic save conflict detection through a version token.

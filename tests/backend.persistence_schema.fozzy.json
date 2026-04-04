@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "name": "backend-persistence-schema",
+  "steps": [
+    {
+      "type": "trace_event",
+      "name": "verify_persistence_schema_contract",
+      "fields": {
+        "target": "src-tauri/persistence-schema"
+      }
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test persistence::db::tests::persists_canonical_schema_version -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test persistence::db::tests::persists_canonical_schema_version -- --exact"
+      ],
+      "expect_exit": 0
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test persistence::db::tests::persists_workspace_browser_terminal_codex_and_config_state -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test persistence::db::tests::persists_workspace_browser_terminal_codex_and_config_state -- --exact"
+      ],
+      "expect_exit": 0
+    }
+  ]
+}

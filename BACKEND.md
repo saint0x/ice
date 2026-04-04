@@ -31,7 +31,6 @@ Rules for this checklist:
 ### Persistence / State
 
 - [ ] Add dedicated persistence for dock session contents beyond shell chrome dimensions and open/closed flags.
-- [ ] Add migrations versioning beyond opportunistic `CREATE TABLE IF NOT EXISTS`.
 - [ ] Add periodic integrity checks and repair tooling for `~/.ice/ice.db`.
 - [ ] Add cleanup policies for stale sessions, stale browser history, and stale diagnostics artifacts.
 
@@ -59,6 +58,7 @@ Rules for this checklist:
 ### Persistence
 
 - ✅ SQLite persistence exists for projects, workspace layouts, workspace sessions, browser tabs, browser history, terminal sessions, Codex threads, Codex approvals, and app config in [db.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/persistence/db.rs).
+- ✅ Schema versioning now exists through `schema_metadata`, with a canonical backend schema version recorded during startup migrations in [db.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/persistence/db.rs).
 - ✅ Browser tab metadata and navigation history are persisted locally.
 - ✅ Terminal session metadata is persisted locally, including `is_running`.
 - ✅ Codex thread bindings are persisted locally.
@@ -159,6 +159,7 @@ Rules for this checklist:
 - ✅ Feature-focused Fozzy scenarios now exist for approval policy and FS/editor contracts in [backend.approval_policy.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.approval_policy.fozzy.json) and [backend.fs_editor.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.fs_editor.fozzy.json).
 - ✅ Feature-focused Fozzy coverage now also exists for nested filesystem tree contracts in [backend.fs_tree.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.fs_tree.fozzy.json).
 - ✅ Feature-focused Fozzy coverage now also exists for terminal lifecycle and persistence contracts in [backend.terminal_lifecycle.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.terminal_lifecycle.fozzy.json).
+- ✅ Feature-focused Fozzy coverage now also exists for persistence schema-version contracts in [backend.persistence_schema.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.persistence_schema.fozzy.json).
 - ✅ Feature-focused Fozzy coverage now also exists for git mutation and commit-readiness contracts in [backend.git_mutation.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.git_mutation.fozzy.json).
 - ✅ Feature-focused Fozzy coverage now also exists for structured git event contracts in [backend.git_events.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.git_events.fozzy.json).
 - ✅ Feature-focused Fozzy coverage now also exists for browser metadata and renderer-sync contracts in [backend.browser_contract.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.browser_contract.fozzy.json).

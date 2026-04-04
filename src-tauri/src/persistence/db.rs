@@ -11,6 +11,8 @@ use crate::security::approvals::{ApprovalAuditRecord, PendingApprovalRecord};
 use crate::terminal::service::TerminalSessionRecord;
 use crate::workspace::service::WorkspaceSessionState;
 
+const CURRENT_SCHEMA_VERSION: i64 = 1;
+
 #[derive(Clone)]
 pub struct PersistenceService {
     db_path: PathBuf,
@@ -32,6 +34,16 @@ impl PersistenceService {
         conn.execute_batch(
             "
             PRAGMA journal_mode=WAL;
+            CREATE TABLE IF NOT EXISTS schema_metadata (
+              key TEXT PRIMARY KEY,
+              value TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+            ",
+        )?;
+        let existing_version = read_schema_version(&conn)?;
+        conn.execute_batch(
+            "
             CREATE TABLE IF NOT EXISTS projects (
               id TEXT PRIMARY KEY,
               name TEXT NOT NULL,
@@ -216,7 +228,14 @@ impl PersistenceService {
             &conn,
             "ALTER TABLE browser_tabs ADD COLUMN is_secure INTEGER NOT NULL DEFAULT 0",
         )?;
+        write_schema_version(&conn, existing_version.unwrap_or(CURRENT_SCHEMA_VERSION))?;
         Ok(())
+    }
+
+    #[cfg(test)]
+    pub fn schema_version(&self) -> Result<i64> {
+        let conn = self.connect()?;
+        Ok(read_schema_version(&conn)?.unwrap_or(CURRENT_SCHEMA_VERSION))
     }
 
     pub async fn upsert_workspace_layout(&self, workspace_id: String, layout: Value) -> Result<()> {
@@ -1078,9 +1097,35 @@ fn add_column_if_missing(conn: &Connection, sql: &str) -> Result<()> {
     }
 }
 
+fn read_schema_version(conn: &Connection) -> Result<Option<i64>> {
+    Ok(conn
+        .query_row(
+            "SELECT value FROM schema_metadata WHERE key = 'schema_version'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?
+        .map(|value| value.parse::<i64>())
+        .transpose()?)
+}
+
+fn write_schema_version(conn: &Connection, version: i64) -> Result<()> {
+    conn.execute(
+        "
+        INSERT INTO schema_metadata (key, value, updated_at)
+        VALUES ('schema_version', ?1, datetime('now'))
+        ON CONFLICT(key) DO UPDATE SET
+          value = excluded.value,
+          updated_at = excluded.updated_at
+        ",
+        params![version.to_string()],
+    )?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::PersistenceService;
+    use super::{PersistenceService, CURRENT_SCHEMA_VERSION};
     use crate::browser::service::{BrowserHistoryEntry, BrowserTabRecord};
     use crate::codex::service::CodexThreadBinding;
     use crate::security::approvals::PendingApprovalRecord;
@@ -1313,5 +1358,15 @@ mod tests {
             .load_pending_approvals_sync()
             .expect("approval empty")
             .is_empty());
+    }
+
+    #[test]
+    fn persists_canonical_schema_version() {
+        let temp = tempdir().expect("temp dir");
+        let db = PersistenceService::new(temp.path().join("ice.db")).expect("db");
+        assert_eq!(
+            db.schema_version().expect("schema version"),
+            CURRENT_SCHEMA_VERSION
+        );
     }
 }
