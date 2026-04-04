@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::process::Command as StdCommand;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -322,6 +323,7 @@ impl CodexService {
         let mut child = Command::new("codex")
             .arg("app-server")
             .env("CODEX_HOME", self.paths.concern_dir("codex"))
+            .env("SHELL", resolve_login_shell())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -459,6 +461,25 @@ impl CodexService {
             }
         });
     }
+}
+
+fn resolve_login_shell() -> String {
+    if let Ok(output) = StdCommand::new("dscl")
+        .args([".", "-read", "/Users/deepsaint", "UserShell"])
+        .output()
+    {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if let Some(value) = stdout.trim().strip_prefix("UserShell:") {
+                let shell = value.trim();
+                if !shell.is_empty() {
+                    return shell.to_string();
+                }
+            }
+        }
+    }
+
+    std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string())
 }
 
 fn build_pending_approval(

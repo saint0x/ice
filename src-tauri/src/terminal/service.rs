@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::PathBuf;
+use std::process::Command as StdCommand;
 use std::sync::Arc;
 use std::thread;
 
@@ -87,6 +88,9 @@ impl TerminalService {
             .to_string();
 
         let mut command = CommandBuilder::new(&shell);
+        for arg in login_shell_args(&shell) {
+            command.arg(arg);
+        }
         command.cwd(cwd.clone());
 
         let child = pair
@@ -307,5 +311,39 @@ impl TerminalService {
 }
 
 fn default_shell() -> String {
-    std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string())
+    resolve_login_shell().unwrap_or_else(|| "/bin/zsh".to_string())
+}
+
+fn resolve_login_shell() -> Option<String> {
+    if let Ok(output) = StdCommand::new("dscl")
+        .args([".", "-read", "/Users/deepsaint", "UserShell"])
+        .output()
+    {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            if let Some(value) = stdout.trim().strip_prefix("UserShell:") {
+                let shell = value.trim();
+                if !shell.is_empty() {
+                    return Some(shell.to_string());
+                }
+            }
+        }
+    }
+
+    std::env::var("SHELL")
+        .ok()
+        .filter(|value| !value.is_empty())
+}
+
+fn login_shell_args(shell: &str) -> &'static [&'static str] {
+    match PathBuf::from(shell)
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+    {
+        "bash" | "zsh" | "sh" => &["-l"],
+        "fish" => &["--login"],
+        "nu" => &["-l"],
+        _ => &[],
+    }
 }
