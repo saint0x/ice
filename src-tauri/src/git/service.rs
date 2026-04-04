@@ -68,6 +68,44 @@ pub struct GitCommitReadiness {
     pub active_hooks: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum GitMutationAction {
+    Stage,
+    Unstage,
+    Restore,
+    Commit,
+    Checkout,
+    Fetch,
+    Pull,
+    Push,
+}
+
+#[derive(Debug, Clone, Serialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GitMutationContext {
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub paths: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub staged: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub worktree: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub branch_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created_branch: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_point: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remote: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub set_upstream: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub commit_message: Option<String>,
+}
+
 impl GitService {
     pub fn new(app: AppHandle) -> Self {
         Self { app }
@@ -108,22 +146,47 @@ impl GitService {
             .collect())
     }
 
-    pub async fn stage_paths(&self, project: &ProjectRecord, paths: &[String]) -> Result<()> {
+    pub async fn stage_paths(
+        &self,
+        project: &ProjectRecord,
+        paths: &[String],
+    ) -> Result<GitStatusSummary> {
         ensure_paths(paths)?;
         let mut args = vec!["add", "--"];
         let path_args = paths.iter().map(String::as_str).collect::<Vec<_>>();
         args.extend(path_args);
         run_git(&project.root_path, &args).await?;
-        Ok(())
+        self.complete_mutation(
+            project,
+            GitMutationAction::Stage,
+            GitMutationContext {
+                paths: paths.to_vec(),
+                ..GitMutationContext::default()
+            },
+        )
+        .await
     }
 
-    pub async fn unstage_paths(&self, project: &ProjectRecord, paths: &[String]) -> Result<()> {
+    pub async fn unstage_paths(
+        &self,
+        project: &ProjectRecord,
+        paths: &[String],
+    ) -> Result<GitStatusSummary> {
         ensure_paths(paths)?;
         let mut args = vec!["restore", "--staged", "--"];
         let path_args = paths.iter().map(String::as_str).collect::<Vec<_>>();
         args.extend(path_args);
         run_git(&project.root_path, &args).await?;
-        Ok(())
+        self.complete_mutation(
+            project,
+            GitMutationAction::Unstage,
+            GitMutationContext {
+                paths: paths.to_vec(),
+                staged: Some(true),
+                ..GitMutationContext::default()
+            },
+        )
+        .await
     }
 
     pub async fn restore_paths(
@@ -132,7 +195,7 @@ impl GitService {
         paths: &[String],
         staged: bool,
         worktree: bool,
-    ) -> Result<()> {
+    ) -> Result<GitStatusSummary> {
         ensure_paths(paths)?;
         if !staged && !worktree {
             return Err(anyhow!(
@@ -150,7 +213,17 @@ impl GitService {
         let path_args = paths.iter().map(String::as_str).collect::<Vec<_>>();
         args.extend(path_args);
         run_git(&project.root_path, &args).await?;
-        Ok(())
+        self.complete_mutation(
+            project,
+            GitMutationAction::Restore,
+            GitMutationContext {
+                paths: paths.to_vec(),
+                staged: Some(staged),
+                worktree: Some(worktree),
+                ..GitMutationContext::default()
+            },
+        )
+        .await
     }
 
     pub async fn commit(&self, project: &ProjectRecord, message: &str) -> Result<GitStatusSummary> {
@@ -172,7 +245,15 @@ impl GitService {
             ));
         }
         run_git(&project.root_path, &["commit", "-m", message]).await?;
-        self.read_status(project).await
+        self.complete_mutation(
+            project,
+            GitMutationAction::Commit,
+            GitMutationContext {
+                commit_message: Some(message.to_string()),
+                ..GitMutationContext::default()
+            },
+        )
+        .await
     }
 
     pub async fn commit_readiness(
@@ -258,7 +339,17 @@ impl GitService {
             args.push(start_point);
         }
         run_git(&project.root_path, &args).await?;
-        self.read_status(project).await
+        self.complete_mutation(
+            project,
+            GitMutationAction::Checkout,
+            GitMutationContext {
+                branch_name: Some(branch_name.to_string()),
+                created_branch: Some(create),
+                start_point: start_point.map(str::to_string),
+                ..GitMutationContext::default()
+            },
+        )
+        .await
     }
 
     pub async fn fetch(
@@ -271,7 +362,15 @@ impl GitService {
             args.push(remote);
         }
         run_git(&project.root_path, &args).await?;
-        self.read_status(project).await
+        self.complete_mutation(
+            project,
+            GitMutationAction::Fetch,
+            GitMutationContext {
+                remote: remote.map(str::to_string),
+                ..GitMutationContext::default()
+            },
+        )
+        .await
     }
 
     pub async fn pull(
@@ -288,7 +387,16 @@ impl GitService {
             args.push(branch);
         }
         run_git(&project.root_path, &args).await?;
-        self.read_status(project).await
+        self.complete_mutation(
+            project,
+            GitMutationAction::Pull,
+            GitMutationContext {
+                remote: remote.map(str::to_string),
+                branch: branch.map(str::to_string),
+                ..GitMutationContext::default()
+            },
+        )
+        .await
     }
 
     pub async fn push(
@@ -309,7 +417,17 @@ impl GitService {
             args.push(branch);
         }
         run_git(&project.root_path, &args).await?;
-        self.read_status(project).await
+        self.complete_mutation(
+            project,
+            GitMutationAction::Push,
+            GitMutationContext {
+                remote: remote.map(str::to_string),
+                branch: branch.map(str::to_string),
+                set_upstream: Some(set_upstream),
+                ..GitMutationContext::default()
+            },
+        )
+        .await
     }
 
     pub async fn read_diff(
@@ -359,6 +477,26 @@ impl GitService {
                 );
             }
         });
+    }
+
+    async fn complete_mutation(
+        &self,
+        project: &ProjectRecord,
+        action: GitMutationAction,
+        context: GitMutationContext,
+    ) -> Result<GitStatusSummary> {
+        let summary = self.read_status(project).await?;
+        self.app.emit(
+            GIT_EVENT,
+            serde_json::json!({
+                "type": "mutationCompleted",
+                "projectId": project.id,
+                "action": action,
+                "context": context,
+                "summary": summary
+            }),
+        )?;
+        Ok(summary)
     }
 }
 
@@ -594,7 +732,7 @@ fn normalize_optional(value: Option<&str>) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ensure_paths, parse_status};
+    use super::{ensure_paths, parse_status, GitMutationAction, GitMutationContext};
 
     #[test]
     fn parse_status_counts_staged_and_untracked_changes() {
@@ -613,5 +751,17 @@ mod tests {
     fn ensure_paths_requires_non_empty_input() {
         assert!(ensure_paths(&[]).is_err());
         assert!(ensure_paths(&[String::from("src/main.rs")]).is_ok());
+    }
+
+    #[test]
+    fn git_mutation_context_skips_empty_fields() {
+        let value = serde_json::to_value(GitMutationContext::default()).unwrap();
+        assert_eq!(value, serde_json::json!({}));
+    }
+
+    #[test]
+    fn git_mutation_action_serializes_to_camel_case() {
+        let value = serde_json::to_value(GitMutationAction::Pull).unwrap();
+        assert_eq!(value, serde_json::json!("pull"));
     }
 }

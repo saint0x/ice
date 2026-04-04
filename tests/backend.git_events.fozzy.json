@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "name": "backend-git-events",
+  "steps": [
+    {
+      "type": "trace_event",
+      "name": "verify_git_event_contract",
+      "fields": {
+        "target": "src-tauri/git-events"
+      }
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test git::service::tests::git_mutation_context_skips_empty_fields -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test git::service::tests::git_mutation_context_skips_empty_fields -- --exact"
+      ],
+      "expect_exit": 0
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test git::service::tests::git_mutation_action_serializes_to_camel_case -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test git::service::tests::git_mutation_action_serializes_to_camel_case -- --exact"
+      ],
+      "expect_exit": 0
+    }
+  ]
+}

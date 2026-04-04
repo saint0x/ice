@@ -36,6 +36,7 @@ Rules for this checklist:
 - [ ] Use `git_diff_tree_read` for staged and unstaged change groups so the frontend does not have to fan out per-file diff requests just to render the git surface.
 - [ ] Use `git_restore_paths` for discard/revert actions instead of local-only row removal.
 - [ ] Wire branch list / checkout / fetch / pull / push actions to the now-available backend git commands.
+- [ ] Subscribe to `app://git` `mutationCompleted` events so the UI can distinguish stage, unstage, restore, commit, checkout, fetch, pull, and push outcomes without inferring intent from a generic status refresh.
 
 ### Browser
 

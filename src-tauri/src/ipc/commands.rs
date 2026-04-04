@@ -391,8 +391,7 @@ pub async fn git_stage_paths(
     state: State<'_, AppState>,
 ) -> Result<crate::git::service::GitStatusSummary, AppError> {
     let project = state.projects.require_project(&input.project_id).await?;
-    state.git.stage_paths(&project, &input.paths).await?;
-    Ok(state.git.read_status(&project).await?)
+    Ok(state.git.stage_paths(&project, &input.paths).await?)
 }
 
 #[tauri::command]
@@ -401,8 +400,7 @@ pub async fn git_unstage_paths(
     state: State<'_, AppState>,
 ) -> Result<crate::git::service::GitStatusSummary, AppError> {
     let project = state.projects.require_project(&input.project_id).await?;
-    state.git.unstage_paths(&project, &input.paths).await?;
-    Ok(state.git.read_status(&project).await?)
+    Ok(state.git.unstage_paths(&project, &input.paths).await?)
 }
 
 #[tauri::command]
@@ -411,7 +409,7 @@ pub async fn git_restore_paths(
     state: State<'_, AppState>,
 ) -> Result<crate::git::service::GitStatusSummary, AppError> {
     let project = state.projects.require_project(&input.project_id).await?;
-    state
+    Ok(state
         .git
         .restore_paths(
             &project,
@@ -419,8 +417,7 @@ pub async fn git_restore_paths(
             input.staged.unwrap_or(false),
             input.worktree.unwrap_or(true),
         )
-        .await?;
-    Ok(state.git.read_status(&project).await?)
+        .await?)
 }
 
 #[tauri::command]
