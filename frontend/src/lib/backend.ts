@@ -339,6 +339,18 @@ export async function terminalWrite(sessionId: string, data: string) {
   })
 }
 
+export async function terminalResize(sessionId: string, cols: number, rows: number) {
+  return invoke<void>('terminal_resize', {
+    input: { sessionId, cols, rows },
+  })
+}
+
+export async function terminalRename(sessionId: string, title: string) {
+  return invoke<void>('terminal_rename', {
+    input: { sessionId, title },
+  })
+}
+
 export async function terminalScrollbackRead(sessionId: string) {
   return invoke<TerminalScrollbackDto>('terminal_scrollback_read', {
     input: { sessionId },
