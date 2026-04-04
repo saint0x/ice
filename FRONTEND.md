@@ -45,6 +45,9 @@ Rules for this checklist:
 - [ ] Hydrate browser tab chrome from backend `BrowserTabRecord` metadata instead of local placeholder fields.
 - [ ] Use `browser_tab_renderer_state_set` from the renderer host to keep loading, title, favicon, security-origin, and nav affordances in sync.
 - [ ] Use `browser_tab_pin_set` for pinned tabs and `browser_tab_open_external` for “open in external browser” affordances.
+- [ ] Use `browser_renderer_attach` / `browser_renderer_detach` when the pane-hosted native browser surface mounts and unmounts.
+- [ ] Route in-page search through `browser_find_in_page` and feed renderer results back through `browser_find_in_page_report`.
+- [ ] Route download intent from the renderer through `browser_download_request` instead of opening ad hoc OS dialogs directly.
 
 ### Terminal
 

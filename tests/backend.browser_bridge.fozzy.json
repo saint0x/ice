@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "name": "backend-browser-bridge",
+  "steps": [
+    {
+      "type": "trace_event",
+      "name": "verify_browser_bridge_contract",
+      "fields": {
+        "target": "src-tauri/browser-bridge"
+      }
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test browser::service::tests::infers_secure_origin_from_https_url -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test browser::service::tests::infers_secure_origin_from_https_url -- --exact"
+      ],
+      "expect_exit": 0
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test persistence::db::tests::persists_workspace_browser_terminal_codex_and_config_state -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test persistence::db::tests::persists_workspace_browser_terminal_codex_and_config_state -- --exact"
+      ],
+      "expect_exit": 0
+    }
+  ]
+}

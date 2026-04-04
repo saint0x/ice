@@ -553,6 +553,84 @@ pub async fn browser_tab_open_external(
 }
 
 #[tauri::command]
+pub async fn browser_renderer_attach(
+    input: BrowserRendererAttachInput,
+    state: State<'_, AppState>,
+) -> Result<crate::browser::service::BrowserRendererSession, AppError> {
+    Ok(state
+        .browser
+        .attach_renderer(&input.tab_id, input.renderer_id, input.pane_id)
+        .await?)
+}
+
+#[tauri::command]
+pub async fn browser_renderer_detach(
+    tab_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    state.browser.detach_renderer(&tab_id).await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn browser_renderer_session_get(
+    tab_id: String,
+    state: State<'_, AppState>,
+) -> Result<Option<crate::browser::service::BrowserRendererSession>, AppError> {
+    Ok(state.browser.renderer_session(&tab_id).await)
+}
+
+#[tauri::command]
+pub async fn browser_find_in_page(
+    input: BrowserFindInPageInput,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    state
+        .browser
+        .request_find_in_page(
+            &input.tab_id,
+            input.query,
+            input.forward.unwrap_or(true),
+            input.find_next.unwrap_or(false),
+        )
+        .await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn browser_find_in_page_report(
+    input: BrowserFindInPageResultInput,
+    state: State<'_, AppState>,
+) -> Result<crate::browser::service::BrowserFindInPageResult, AppError> {
+    Ok(state
+        .browser
+        .report_find_in_page(
+            &input.tab_id,
+            input.query,
+            input.matches,
+            input.active_match_ordinal,
+            input.final_update.unwrap_or(false),
+        )
+        .await?)
+}
+
+#[tauri::command]
+pub async fn browser_download_request(
+    input: BrowserDownloadRequestInput,
+    state: State<'_, AppState>,
+) -> Result<crate::browser::service::BrowserDownloadRequest, AppError> {
+    Ok(state
+        .browser
+        .request_download(
+            &input.tab_id,
+            input.url,
+            input.suggested_filename,
+            input.mime_type,
+        )
+        .await?)
+}
+
+#[tauri::command]
 pub async fn browser_tab_back(
     tab_id: String,
     state: State<'_, AppState>,

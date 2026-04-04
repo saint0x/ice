@@ -178,6 +178,42 @@ pub struct BrowserRendererStateInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct BrowserRendererAttachInput {
+    pub tab_id: String,
+    pub renderer_id: String,
+    pub pane_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserFindInPageInput {
+    pub tab_id: String,
+    pub query: String,
+    pub forward: Option<bool>,
+    pub find_next: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserFindInPageResultInput {
+    pub tab_id: String,
+    pub query: String,
+    pub matches: usize,
+    pub active_match_ordinal: usize,
+    pub final_update: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserDownloadRequestInput {
+    pub tab_id: String,
+    pub url: String,
+    pub suggested_filename: Option<String>,
+    pub mime_type: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TerminalCreateInput {
     pub project_id: String,
     pub cwd: Option<String>,

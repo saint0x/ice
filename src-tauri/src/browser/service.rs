@@ -14,6 +14,7 @@ pub struct BrowserService {
     app: AppHandle,
     persistence: Arc<PersistenceService>,
     tabs: RwLock<HashMap<String, BrowserTabState>>,
+    renderers: RwLock<HashMap<String, BrowserRendererSession>>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -47,6 +48,35 @@ pub struct BrowserExternalOpenRequest {
     pub tab_id: String,
     pub project_id: String,
     pub url: String,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserRendererSession {
+    pub tab_id: String,
+    pub renderer_id: String,
+    pub pane_id: Option<String>,
+    pub attached: bool,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserFindInPageResult {
+    pub tab_id: String,
+    pub query: String,
+    pub matches: usize,
+    pub active_match_ordinal: usize,
+    pub final_update: bool,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserDownloadRequest {
+    pub tab_id: String,
+    pub project_id: String,
+    pub url: String,
+    pub suggested_filename: Option<String>,
+    pub mime_type: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -111,6 +141,7 @@ impl BrowserService {
             app,
             persistence,
             tabs: RwLock::new(tabs),
+            renderers: RwLock::new(HashMap::new()),
         }
     }
 
@@ -281,6 +312,135 @@ impl BrowserService {
         Ok(request)
     }
 
+    pub async fn attach_renderer(
+        &self,
+        tab_id: &str,
+        renderer_id: String,
+        pane_id: Option<String>,
+    ) -> Result<BrowserRendererSession> {
+        if !self.tabs.read().contains_key(tab_id) {
+            return Err(anyhow!("unknown browser tab"));
+        }
+        let session = BrowserRendererSession {
+            tab_id: tab_id.to_string(),
+            renderer_id,
+            pane_id,
+            attached: true,
+        };
+        self.renderers
+            .write()
+            .insert(tab_id.to_string(), session.clone());
+        let _ = self.app.emit(
+            BROWSER_EVENT,
+            serde_json::json!({ "type": "rendererAttached", "session": session.clone() }),
+        );
+        Ok(session)
+    }
+
+    pub async fn detach_renderer(&self, tab_id: &str) -> Result<()> {
+        let session = self
+            .renderers
+            .write()
+            .remove(tab_id)
+            .ok_or_else(|| anyhow!("no renderer session attached"))?;
+        let _ = self.app.emit(
+            BROWSER_EVENT,
+            serde_json::json!({ "type": "rendererDetached", "session": session }),
+        );
+        Ok(())
+    }
+
+    pub async fn renderer_session(&self, tab_id: &str) -> Option<BrowserRendererSession> {
+        self.renderers.read().get(tab_id).cloned()
+    }
+
+    pub async fn request_find_in_page(
+        &self,
+        tab_id: &str,
+        query: String,
+        forward: bool,
+        find_next: bool,
+    ) -> Result<()> {
+        let tab = self
+            .tabs
+            .read()
+            .get(tab_id)
+            .ok_or_else(|| anyhow!("unknown browser tab"))?
+            .record
+            .clone();
+        let session = self
+            .renderers
+            .read()
+            .get(tab_id)
+            .cloned()
+            .ok_or_else(|| anyhow!("no renderer session attached"))?;
+        let _ = self.app.emit(
+            BROWSER_EVENT,
+            serde_json::json!({
+              "type": "findInPageRequested",
+              "tab": tab,
+              "session": session,
+              "query": query,
+              "forward": forward,
+              "findNext": find_next
+            }),
+        );
+        Ok(())
+    }
+
+    pub async fn report_find_in_page(
+        &self,
+        tab_id: &str,
+        query: String,
+        matches: usize,
+        active_match_ordinal: usize,
+        final_update: bool,
+    ) -> Result<BrowserFindInPageResult> {
+        if !self.tabs.read().contains_key(tab_id) {
+            return Err(anyhow!("unknown browser tab"));
+        }
+        let result = BrowserFindInPageResult {
+            tab_id: tab_id.to_string(),
+            query,
+            matches,
+            active_match_ordinal,
+            final_update,
+        };
+        let _ = self.app.emit(
+            BROWSER_EVENT,
+            serde_json::json!({ "type": "findInPageResult", "result": result.clone() }),
+        );
+        Ok(result)
+    }
+
+    pub async fn request_download(
+        &self,
+        tab_id: &str,
+        url: String,
+        suggested_filename: Option<String>,
+        mime_type: Option<String>,
+    ) -> Result<BrowserDownloadRequest> {
+        let tab = self
+            .tabs
+            .read()
+            .get(tab_id)
+            .ok_or_else(|| anyhow!("unknown browser tab"))?
+            .record
+            .clone();
+        let request = BrowserDownloadRequest {
+            tab_id: tab.tab_id,
+            project_id: tab.project_id,
+            url,
+            suggested_filename,
+            mime_type,
+        };
+        let _ = self.app.emit(
+            BROWSER_EVENT,
+            serde_json::json!({ "type": "downloadRequested", "request": request.clone() }),
+        );
+        Ok(request)
+    }
+
     pub async fn go_back(&self, tab_id: &str) -> Result<BrowserTabRecord> {
         self.step_history(tab_id, -1).await
     }
@@ -353,9 +513,19 @@ impl BrowserService {
     }
 
     pub async fn remove_project_tabs(&self, project_id: &str) -> Result<()> {
+        let removed_tab_ids = {
+            let tabs = self.tabs.read();
+            tabs.values()
+                .filter(|tab| tab.record.project_id == project_id)
+                .map(|tab| tab.record.tab_id.clone())
+                .collect::<Vec<_>>()
+        };
         self.tabs
             .write()
             .retain(|_, tab| tab.record.project_id != project_id);
+        self.renderers
+            .write()
+            .retain(|tab_id, _| !removed_tab_ids.iter().any(|id| id == tab_id));
         self.persistence
             .delete_browser_history_for_project(project_id.to_string())
             .await?;
