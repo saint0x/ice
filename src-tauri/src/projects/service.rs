@@ -7,7 +7,10 @@ use crate::browser::service::BrowserService;
 use crate::codex::service::CodexService;
 use crate::git::service::GitService;
 use crate::persistence::db::PersistenceService;
-use crate::projects::models::{ProjectRecord, ProjectSummary};
+use crate::projects::models::{
+    BrowserRestorePolicy, ProjectBrowserSidebarItem, ProjectCodexSidebarItem, ProjectRecord,
+    ProjectSummary,
+};
 use crate::security::approvals::SecurityService;
 use crate::terminal::service::TerminalService;
 
@@ -143,6 +146,47 @@ impl ProjectService {
         ))
     }
 
+    pub async fn browser_restore_policy(&self, project_id: &str) -> Result<BrowserRestorePolicy> {
+        let _ = self.require_project(project_id).await?;
+        Ok(self
+            .persistence
+            .config_get(&browser_restore_policy_key(project_id))
+            .await?
+            .and_then(|value| serde_json::from_value(value).ok())
+            .unwrap_or_default())
+    }
+
+    pub async fn set_browser_restore_policy(
+        &self,
+        project_id: &str,
+        policy: BrowserRestorePolicy,
+    ) -> Result<BrowserRestorePolicy> {
+        let _ = self.require_project(project_id).await?;
+        self.persistence
+            .config_set(
+                browser_restore_policy_key(project_id),
+                serde_json::to_value(&policy)?,
+            )
+            .await?;
+        Ok(policy)
+    }
+
+    pub async fn browser_sidebar_items(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<ProjectBrowserSidebarItem>> {
+        let _ = self.require_project(project_id).await?;
+        Ok(self.browser.sidebar_tabs(project_id).await)
+    }
+
+    pub async fn codex_sidebar_items(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<ProjectCodexSidebarItem>> {
+        let _ = self.require_project(project_id).await?;
+        Ok(self.codex.sidebar_threads(project_id).await)
+    }
+
     async fn list_project_records(&self) -> Result<Vec<ProjectRecord>> {
         let records = self.list_project_records_unsorted().await?;
         let stored_order = self
@@ -186,6 +230,10 @@ impl ProjectService {
             .config_set("projects.order".to_string(), serde_json::json!(order))
             .await
     }
+}
+
+fn browser_restore_policy_key(project_id: &str) -> String {
+    format!("browser.restorePolicy.{project_id}")
 }
 
 fn color_from_name(name: &str) -> String {

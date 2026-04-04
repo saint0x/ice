@@ -48,6 +48,7 @@ Rules for this checklist:
 - [ ] Use `browser_renderer_attach` / `browser_renderer_detach` when the pane-hosted native browser surface mounts and unmounts.
 - [ ] Route in-page search through `browser_find_in_page` and feed renderer results back through `browser_find_in_page_report`.
 - [ ] Route download intent from the renderer through `browser_download_request` instead of opening ad hoc OS dialogs directly.
+- [ ] Use `project_browser_sidebar` for sidebar browser rows and `project_browser_restore_policy_get/set` for per-project restore settings.
 
 ### Terminal
 
@@ -63,6 +64,7 @@ Rules for this checklist:
 - [ ] Render real streaming turn output in [CodexSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/CodexSurface.tsx).
 - [ ] Add approval prompts bound to backend pending approvals, using approval `category` and `riskLevel` for intent-specific UI.
 - [ ] Add thread creation and prompt submission wired to backend Codex commands.
+- [ ] Use `project_codex_sidebar` for project-scoped sidebar thread previews instead of recomputing them from the full thread store.
 
 ### Multi-Project UX
 

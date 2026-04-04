@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 use crate::app::events::BROWSER_EVENT;
 use crate::persistence::db::PersistenceService;
+use crate::projects::models::ProjectBrowserSidebarItem;
 
 pub struct BrowserService {
     app: AppHandle,
@@ -510,6 +511,30 @@ impl BrowserService {
             .ok_or_else(|| anyhow!("unknown browser tab"))?
             .history
             .clone())
+    }
+
+    pub async fn sidebar_tabs(&self, project_id: &str) -> Vec<ProjectBrowserSidebarItem> {
+        let mut items = self
+            .tabs
+            .read()
+            .values()
+            .filter(|tab| tab.record.project_id == project_id)
+            .map(|tab| ProjectBrowserSidebarItem {
+                tab_id: tab.record.tab_id.clone(),
+                title: tab.record.title.clone(),
+                url: tab.record.url.clone(),
+                is_pinned: tab.record.is_pinned,
+                is_loading: tab.record.is_loading,
+                is_secure: tab.record.is_secure,
+            })
+            .collect::<Vec<_>>();
+        items.sort_by(|left, right| {
+            right
+                .is_pinned
+                .cmp(&left.is_pinned)
+                .then_with(|| left.title.cmp(&right.title))
+        });
+        items
     }
 
     pub async fn remove_project_tabs(&self, project_id: &str) -> Result<()> {

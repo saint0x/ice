@@ -18,6 +18,7 @@ use uuid::Uuid;
 use crate::app::events::CODEX_EVENT;
 use crate::app::paths::IcePaths;
 use crate::persistence::db::PersistenceService;
+use crate::projects::models::ProjectCodexSidebarItem;
 use crate::security::approvals::{
     apply_approval_policy, classify_approval, PendingApprovalRecord, SecurityService,
 };
@@ -326,6 +327,33 @@ impl CodexService {
             })
             .cloned()
             .collect()
+    }
+
+    pub async fn sidebar_threads(&self, project_id: &str) -> Vec<ProjectCodexSidebarItem> {
+        let mut items = self
+            .state
+            .lock()
+            .threads
+            .values()
+            .filter(|thread| thread.project_id == project_id)
+            .map(|thread| ProjectCodexSidebarItem {
+                thread_id: thread.thread_id.clone(),
+                title: thread
+                    .title
+                    .clone()
+                    .unwrap_or_else(|| "New Thread".to_string()),
+                status: thread.status.clone(),
+                unread: thread.unread,
+                last_assistant_message: thread.last_assistant_message.clone(),
+            })
+            .collect::<Vec<_>>();
+        items.sort_by(|left, right| {
+            right
+                .unread
+                .cmp(&left.unread)
+                .then_with(|| left.title.cmp(&right.title))
+        });
+        items
     }
 
     pub async fn respond_to_server_request(&self, request_id: u64, result: Value) -> Result<()> {

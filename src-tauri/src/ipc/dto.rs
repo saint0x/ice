@@ -53,6 +53,13 @@ pub struct ReorderProjectsInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ProjectBrowserRestorePolicyInput {
+    pub project_id: String,
+    pub policy: crate::projects::models::BrowserRestorePolicy,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ReadTreeInput {
     pub project_id: String,
     pub path: Option<String>,

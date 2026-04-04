@@ -71,6 +71,41 @@ pub async fn project_list(
 }
 
 #[tauri::command]
+pub async fn project_browser_restore_policy_get(
+    project_id: String,
+    state: State<'_, AppState>,
+) -> Result<crate::projects::models::BrowserRestorePolicy, AppError> {
+    Ok(state.projects.browser_restore_policy(&project_id).await?)
+}
+
+#[tauri::command]
+pub async fn project_browser_restore_policy_set(
+    input: ProjectBrowserRestorePolicyInput,
+    state: State<'_, AppState>,
+) -> Result<crate::projects::models::BrowserRestorePolicy, AppError> {
+    Ok(state
+        .projects
+        .set_browser_restore_policy(&input.project_id, input.policy)
+        .await?)
+}
+
+#[tauri::command]
+pub async fn project_browser_sidebar(
+    project_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::projects::models::ProjectBrowserSidebarItem>, AppError> {
+    Ok(state.projects.browser_sidebar_items(&project_id).await?)
+}
+
+#[tauri::command]
+pub async fn project_codex_sidebar(
+    project_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::projects::models::ProjectCodexSidebarItem>, AppError> {
+    Ok(state.projects.codex_sidebar_items(&project_id).await?)
+}
+
+#[tauri::command]
 pub async fn project_reorder(
     input: ReorderProjectsInput,
     state: State<'_, AppState>,

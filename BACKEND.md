@@ -22,7 +22,6 @@ Rules for this checklist:
 ### Browser
 
 - [ ] Decide and implement the final Tauri-native browser container strategy for pane-hosted browsing.
-- [ ] Add project-level startup restore policy for browser tabs.
 
 ### Terminal
 
@@ -44,7 +43,6 @@ Rules for this checklist:
 
 - [ ] Replace the frontend’s demo Zustand seeds with real IPC-backed loaders and event sync.
 - [ ] Publish a typed shared contract for project, tree, git, browser, terminal, Codex, and approval payloads.
-- [ ] Add backend commands for browser tab listing by project section and Codex thread summaries tailored to sidebar rendering.
 
 ### Testing / Release
 
@@ -103,6 +101,7 @@ Rules for this checklist:
 - ✅ Browser tab metadata now persists loading state, favicon URL, security origin, and secure-context state in [service.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/browser/service.rs) and [db.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/persistence/db.rs).
 - ✅ Renderer-facing browser sync commands now exist for pinning, tab metadata updates, and open-external requests without hard-coding a specific browser engine into the backend contract.
 - ✅ Browser renderer bridge commands now exist for renderer attach/detach, renderer session lookup, find-in-page requests/results, and download requests without coupling the rest of the backend to a specific native browser implementation.
+- ✅ Project-level browser restore policy now exists as backend state, with canonical per-project get/set commands under the project service.
 
 ### Terminal
 
@@ -150,6 +149,7 @@ Rules for this checklist:
 
 - ✅ Thin command routing exists in [commands.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/ipc/commands.rs).
 - ✅ Commands now cover health, config read, project lifecycle, tree/file operations, workspace layout/session/chrome, git actions, browser actions, terminal actions, Codex actions, and approval listing.
+- ✅ Backend sidebar projection commands now exist for project-scoped browser tab summaries and Codex thread summaries tailored to sidebar rendering.
 
 ### Verification
 
@@ -163,3 +163,4 @@ Rules for this checklist:
 - ✅ Feature-focused Fozzy coverage now also exists for git mutation and commit-readiness contracts in [backend.git_mutation.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.git_mutation.fozzy.json).
 - ✅ Feature-focused Fozzy coverage now also exists for browser metadata and renderer-sync contracts in [backend.browser_contract.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.browser_contract.fozzy.json).
 - ✅ Feature-focused Fozzy coverage now also exists for browser renderer bridge contracts in [backend.browser_bridge.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.browser_bridge.fozzy.json).
+- ✅ Feature-focused Fozzy coverage now also exists for project sidebar and browser restore-policy contracts in [backend.project_sidebar.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.project_sidebar.fozzy.json).
