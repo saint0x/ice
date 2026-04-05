@@ -105,6 +105,7 @@ Rules for this checklist:
 - ✅ Native browser panes now inject a runtime script that reports favicon metadata and executes real in-page text search inside the mounted child webview instead of fabricating search results in the React shell.
 - ✅ Native browser downloads now land under `~/.ice/browser/downloads`, emit requested/finished browser events with destination-path metadata, and stay inside the canonical backend browser concern instead of using ad hoc renderer-owned paths.
 - ✅ Native browser new-window requests now create in-app project browser tabs through the backend service instead of bypassing the shell with placeholder external-window behavior.
+- ✅ The current frontend now consumes backend browser runtime events through canonical store-backed notice state for find results, downloads, external-open requests, and renderer lifecycle updates instead of using component-local helper banners.
 - ✅ The current frontend now also uses the production file IO backend for editor reads and saves, including binary-file detection and optimistic version-token save enforcement.
 - ✅ The current frontend now also uses that same file IO contract for in-editor find/replace workflows and explicit stale-save conflict resolution instead of surfacing raw version-token save failures.
 - ✅ The current frontend no longer seeds fake startup projects, git state, terminal sessions, Codex threads, or workspace tabs before backend hydration.

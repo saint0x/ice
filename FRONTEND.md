@@ -22,7 +22,6 @@ Rules for this checklist:
 ### Browser
 
 - [ ] Improve renderer metadata capture beyond the current native-host URL/loading/title/favicon sync, especially blocked-frame fallbacks.
-- [ ] Add conflict-resolution UX for backend save-token mismatches instead of showing the raw backend error banner.
 
 ### Terminal
 
@@ -83,6 +82,7 @@ Rules for this checklist:
 - ✅ The browser surface is now a pane-hosted native child-webview host that attaches/detaches through the backend browser bridge and syncs runtime bounds through backend IPC.
 - ✅ Browser find-in-page now executes inside the native child-webview runtime and returns real match counts plus active selection state through backend browser events instead of frontend-fabricated results.
 - ✅ Browser downloads now surface real backend-driven requested/finished notices with canonical destination paths under `~/.ice/browser/downloads`, and popup/new-window requests now materialize as in-app browser tabs.
+- ✅ Browser runtime notices now flow through canonical browser store state from backend `app://browser` events instead of living as transient component-local helper state in [BrowserSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/BrowserSurface.tsx).
 - ✅ The editor surface now reads real file contents from the backend, blocks binary-file text editing, saves through backend `file_write_text`, and honors backend version-token save guards.
 - ✅ The editor now has in-surface find/replace controls on the real backend-backed document model, and stale save conflicts now surface explicit reload-from-disk vs overwrite-disk actions instead of a raw backend error.
 - ✅ The existing title-bar and project utility actions now open real backend-backed workbench tabs for files, project search, diagnostics, and debug state instead of decorative placeholders.

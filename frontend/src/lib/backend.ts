@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type Event, type UnlistenFn } from '@tauri-apps/api/event'
 import type {
+  BrowserRuntimeNotice,
   BrowserTab,
   CodexApproval,
   CodexMessage,
@@ -312,6 +313,14 @@ interface BrowserEventPayload {
   tabId?: string
   result?: BrowserFindInPageResultDto
   request?: BrowserExternalOpenRequestDto | BrowserDownloadRequestDto
+  session?: {
+    tabId: string
+    rendererId: string
+    paneId?: string | null
+    windowLabel: string
+    nativeWebviewLabel: string
+    attached: boolean
+  }
 }
 
 interface BrowserExternalOpenRequestDto {
@@ -943,6 +952,77 @@ export function toBrowserTab(dto: BrowserTabDto): BrowserTab {
     securityOrigin: dto.securityOrigin ?? undefined,
     isSecure: dto.isSecure,
   }
+}
+
+export function toBrowserRuntimeNotice(payload: BrowserEventPayload): BrowserRuntimeNotice | null {
+  const createdAt = new Date().toISOString()
+  if (payload.type === 'findInPageResult' && payload.result) {
+    return {
+      id: `${payload.result.tabId}:${payload.result.query}:${createdAt}`,
+      projectId: '',
+      tabId: payload.result.tabId,
+      kind: 'findResult',
+      message: payload.result.matches > 0
+        ? `${payload.result.activeMatchOrdinal}/${payload.result.matches} matches for "${payload.result.query}"`
+        : `No matches for "${payload.result.query}"`,
+      createdAt,
+    }
+  }
+  if (payload.type === 'downloadRequested' && payload.request && 'completed' in payload.request) {
+    return {
+      id: `${payload.request.tabId}:download:start:${createdAt}`,
+      projectId: payload.request.projectId,
+      tabId: payload.request.tabId,
+      kind: 'downloadRequested',
+      message: payload.request.destinationPath
+        ? `Downloading to ${payload.request.destinationPath}`
+        : `Download requested: ${payload.request.suggestedFilename ?? payload.request.url}`,
+      createdAt,
+    }
+  }
+  if (payload.type === 'downloadFinished' && payload.request && 'completed' in payload.request) {
+    return {
+      id: `${payload.request.tabId}:download:end:${createdAt}`,
+      projectId: payload.request.projectId,
+      tabId: payload.request.tabId,
+      kind: 'downloadFinished',
+      message: payload.request.success
+        ? `Download finished${payload.request.destinationPath ? `: ${payload.request.destinationPath}` : ''}`
+        : `Download failed${payload.request.destinationPath ? `: ${payload.request.destinationPath}` : ''}`,
+      createdAt,
+    }
+  }
+  if (payload.type === 'openExternalRequested' && payload.request && 'url' in payload.request) {
+    return {
+      id: `${payload.request.tabId}:external:${createdAt}`,
+      projectId: payload.request.projectId,
+      tabId: payload.request.tabId,
+      kind: 'openExternalRequested',
+      message: `Opened externally: ${payload.request.url}`,
+      createdAt,
+    }
+  }
+  if (payload.type === 'rendererAttached' && payload.session) {
+    return {
+      id: `${payload.session.tabId}:renderer:attach:${createdAt}`,
+      projectId: '',
+      tabId: payload.session.tabId,
+      kind: 'rendererAttached',
+      message: 'Native browser renderer attached.',
+      createdAt,
+    }
+  }
+  if (payload.type === 'rendererDetached' && payload.session) {
+    return {
+      id: `${payload.session.tabId}:renderer:detach:${createdAt}`,
+      projectId: '',
+      tabId: payload.session.tabId,
+      kind: 'rendererDetached',
+      message: 'Native browser renderer detached.',
+      createdAt,
+    }
+  }
+  return null
 }
 
 export function toProjectBrowserSidebarItem(dto: ProjectBrowserSidebarItemDto): ProjectBrowserSidebarItem {

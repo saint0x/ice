@@ -119,6 +119,23 @@ export interface BrowserTab {
   isSecure: boolean
 }
 
+export type BrowserRuntimeNoticeKind =
+  | 'findResult'
+  | 'downloadRequested'
+  | 'downloadFinished'
+  | 'openExternalRequested'
+  | 'rendererAttached'
+  | 'rendererDetached'
+
+export interface BrowserRuntimeNotice {
+  id: string
+  projectId: ProjectId
+  tabId: string
+  kind: BrowserRuntimeNoticeKind
+  message: string
+  createdAt: string
+}
+
 export interface ProjectBrowserSidebarItem {
   tabId: string
   title: string

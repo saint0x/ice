@@ -19,6 +19,7 @@ import {
   terminalList,
   terminalScrollbackRead,
   toBrowserTab,
+  toBrowserRuntimeNotice,
   toCodexApproval,
   toCodexMessage,
   toProjectBrowserSidebarItem,
@@ -62,6 +63,7 @@ export function useBackendIntegration() {
   const hydrateBrowserSidebarItems = useBrowserStore((state) => state.hydrateSidebarItems)
   const upsertBrowserTab = useBrowserStore((state) => state.upsertTab)
   const closeBrowserTab = useBrowserStore((state) => state.closeTab)
+  const pushBrowserRuntimeNotice = useBrowserStore((state) => state.pushRuntimeNotice)
   const hydrateSessions = useTerminalStore((state) => state.hydrateSessions)
   const upsertSession = useTerminalStore((state) => state.upsertSession)
   const setScrollback = useTerminalStore((state) => state.setScrollback)
@@ -200,6 +202,16 @@ export function useBackendIntegration() {
     })
 
     void listenBrowserEvents((payload) => {
+      const runtimeNotice = toBrowserRuntimeNotice(payload)
+      if (runtimeNotice) {
+        if (!runtimeNotice.projectId && payload.tab) {
+          runtimeNotice.projectId = payload.tab.projectId
+        }
+        if (!runtimeNotice.projectId && payload.request && 'projectId' in payload.request) {
+          runtimeNotice.projectId = payload.request.projectId
+        }
+        pushBrowserRuntimeNotice(runtimeNotice)
+      }
       if (
         (payload.type === 'tabCreated' ||
           payload.type === 'tabNavigated' ||
@@ -291,7 +303,7 @@ export function useBackendIntegration() {
         void projectWatchStop(projectId)
       }
     }
-  }, [addApproval, addThread, appendScrollback, clearScrollback, closeBrowserTab, closeSession, hydrateApprovals, hydrateBrowserSidebarItems, hydrateBrowserTabs, hydrateCodexSidebarItems, hydrateGitState, hydrateMessages, hydrateProjects, hydrateSessions, hydrateThreads, hydrateTree, hydrateWorkspace, recordGitMutation, resolveApproval, setScrollback, updateProject, updateThread, upsertBrowserTab, upsertMessage, upsertSession])
+  }, [addApproval, addThread, appendScrollback, clearScrollback, closeBrowserTab, closeSession, hydrateApprovals, hydrateBrowserSidebarItems, hydrateBrowserTabs, hydrateCodexSidebarItems, hydrateGitState, hydrateMessages, hydrateProjects, hydrateSessions, hydrateThreads, hydrateTree, hydrateWorkspace, pushBrowserRuntimeNotice, recordGitMutation, resolveApproval, setScrollback, updateProject, updateThread, upsertBrowserTab, upsertMessage, upsertSession])
 
   useEffect(() => {
     if (!hydratedRef.current) return

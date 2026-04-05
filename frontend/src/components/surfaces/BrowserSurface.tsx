@@ -1,12 +1,11 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, RotateCw, Lock, Globe, ExternalLink, Search, X, AlertTriangle, Pin } from 'lucide-react'
+import { ArrowLeft, ArrowRight, RotateCw, Lock, Globe, ExternalLink, Search, X, AlertTriangle, Pin, Download, Info } from 'lucide-react'
 import type { Tab } from '@/types'
 import {
   browserRendererAttach,
   browserRendererBoundsSet,
   browserRendererDetach,
   browserFindInPage,
-  listenBrowserEvents,
   browserTabBack,
   browserTabForward,
   browserTabNavigate,
@@ -26,16 +25,24 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
   const browserTabId = tab.meta?.tabId as string | undefined
   const browserTab = useBrowserStore((s) => browserTabId ? s.tabs.get(browserTabId) : undefined)
   const upsertBrowserTab = useBrowserStore((s) => s.upsertTab)
+  const runtimeNotices = useBrowserStore((s) => browserTabId ? s.runtimeNotices.get(browserTabId) ?? [] : [])
+  const dismissRuntimeNotice = useBrowserStore((s) => s.dismissRuntimeNotice)
   const [draftUrl, setDraftUrl] = useState<string | null>(null)
   const [findQuery, setFindQuery] = useState('')
-  const [findResult, setFindResult] = useState<string | null>(null)
-  const [downloadNotice, setDownloadNotice] = useState<string | null>(null)
   const [surfaceError, setSurfaceError] = useState<string | null>(null)
   const viewportRef = useRef<HTMLDivElement>(null)
 
   const rendererId = useMemo(() => (
     browserTabId ? `renderer-${browserTabId}-${tab.id}` : undefined
   ), [browserTabId, tab.id])
+  const latestFindResult = useMemo(
+    () => runtimeNotices.find((notice) => notice.kind === 'findResult'),
+    [runtimeNotices],
+  )
+  const visibleNotices = useMemo(
+    () => runtimeNotices.filter((notice) => notice.kind !== 'findResult').slice(0, 3),
+    [runtimeNotices],
+  )
 
   const url = draftUrl ?? browserTab?.url ?? (tab.meta?.url as string) ?? 'https://example.com'
 
@@ -83,54 +90,10 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
     }
   }, [browserTabId, browserTab?.url])
 
-  useEffect(() => {
-    if (!browserTabId) return
-    let disposed = false
-    let unlisten: (() => void) | undefined
-    void listenBrowserEvents((payload) => {
-      if (disposed) return
-      if (payload.type === 'findInPageResult' && payload.result?.tabId === browserTabId) {
-        setFindResult(
-          payload.result.matches > 0
-            ? `${payload.result.activeMatchOrdinal}/${payload.result.matches} matches`
-            : 'No matches',
-        )
-        return
-      }
-      if (payload.type === 'downloadRequested' && payload.request?.tabId === browserTabId) {
-        const filename = 'suggestedFilename' in payload.request ? payload.request.suggestedFilename : null
-        const destination = 'destinationPath' in payload.request ? payload.request.destinationPath : null
-        const label = filename || payload.request.url
-        setDownloadNotice(
-          destination
-            ? `Downloading ${label} to ${destination}`
-            : `Download requested: ${label}`,
-        )
-        return
-      }
-      if (payload.type === 'downloadFinished' && payload.request?.tabId === browserTabId) {
-        const destination = 'destinationPath' in payload.request ? payload.request.destinationPath : null
-        const success = 'success' in payload.request ? payload.request.success : null
-        setDownloadNotice(
-          success
-            ? `Download finished${destination ? `: ${destination}` : ''}`
-            : `Download failed${destination ? `: ${destination}` : ''}`,
-        )
-      }
-    }).then((dispose) => {
-      unlisten = dispose
-    })
-    return () => {
-      disposed = true
-      unlisten?.()
-    }
-  }, [browserTabId])
-
   const runFindInPage = async (mode: 'first' | 'next') => {
     if (!browserTabId) return
     const query = findQuery.trim()
     if (!query) {
-      setFindResult(null)
       return
     }
     setSurfaceError(null)
@@ -242,13 +205,16 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
               }
             }}
           />
-          {findResult && <span className={styles.findResult}>{findResult}</span>}
+          {latestFindResult?.message && (
+            <span className={styles.findResult}>
+              {latestFindResult.message}
+            </span>
+          )}
           {findQuery && (
             <button
               className={styles.findClear}
               onClick={() => {
                 setFindQuery('')
-                setFindResult(null)
               }}
               aria-label="Clear find"
             >
@@ -264,18 +230,28 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
             <span>{surfaceError}</span>
           </div>
         )}
-        {downloadNotice && (
-          <div className={styles.downloadBanner}>
-            <span>{downloadNotice}</span>
-            <button
-              className={styles.downloadDismiss}
-              onClick={() => setDownloadNotice(null)}
-              aria-label="Dismiss download notice"
-            >
-              <X size={11} />
-            </button>
+        {visibleNotices.length > 0 ? (
+          <div className={styles.noticeStack}>
+            {visibleNotices.map((notice) => (
+              <div
+                key={notice.id}
+                className={`${styles.runtimeNotice} ${notice.kind.includes('download') ? styles.downloadBanner : styles.infoBanner}`}
+              >
+                <div className={styles.noticeCopy}>
+                  {notice.kind.includes('download') ? <Download size={12} /> : <Info size={12} />}
+                  <span>{notice.message}</span>
+                </div>
+                <button
+                  className={styles.downloadDismiss}
+                  onClick={() => browserTabId && dismissRuntimeNotice(browserTabId, notice.id)}
+                  aria-label="Dismiss browser notice"
+                >
+                  <X size={11} />
+                </button>
+              </div>
+            ))}
           </div>
-        )}
+        ) : null}
         <div
           ref={viewportRef}
           className={styles.nativeViewport}

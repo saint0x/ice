@@ -1,22 +1,26 @@
 import { create } from 'zustand'
-import type { BrowserTab, ProjectBrowserSidebarItem, ProjectId } from '@/types'
+import type { BrowserRuntimeNotice, BrowserTab, ProjectBrowserSidebarItem, ProjectId } from '@/types'
 
 interface BrowserState {
   tabs: Map<string, BrowserTab>
   activeTabId: Map<ProjectId, string | null>
   sidebarItems: Map<ProjectId, ProjectBrowserSidebarItem[]>
+  runtimeNotices: Map<string, BrowserRuntimeNotice[]>
 
   hydrateTabs: (tabs: BrowserTab[]) => void
   hydrateSidebarItems: (projectId: ProjectId, items: ProjectBrowserSidebarItem[]) => void
   upsertTab: (tab: BrowserTab) => void
   closeTab: (tabId: string) => void
   setActiveTab: (projectId: ProjectId, tabId: string) => void
+  pushRuntimeNotice: (notice: BrowserRuntimeNotice) => void
+  dismissRuntimeNotice: (tabId: string, noticeId: string) => void
 }
 
 export const useBrowserStore = create<BrowserState>((set) => ({
   tabs: new Map(),
   activeTabId: new Map(),
   sidebarItems: new Map(),
+  runtimeNotices: new Map(),
 
   hydrateTabs: (tabs) =>
     set((s) => {
@@ -59,13 +63,15 @@ export const useBrowserStore = create<BrowserState>((set) => ({
       const tabs = new Map(s.tabs)
       const tab = tabs.get(tabId)
       tabs.delete(tabId)
-      if (!tab) return { tabs }
+      const runtimeNotices = new Map(s.runtimeNotices)
+      runtimeNotices.delete(tabId)
+      if (!tab) return { tabs, runtimeNotices }
       const activeTabId = new Map(s.activeTabId)
       if (activeTabId.get(tab.projectId) === tabId) {
         const remaining = [...tabs.values()].filter((candidate) => candidate.projectId === tab.projectId)
         activeTabId.set(tab.projectId, remaining[0]?.id ?? null)
       }
-      return { tabs, activeTabId }
+      return { tabs, activeTabId, runtimeNotices }
     }),
 
   setActiveTab: (projectId, tabId) =>
@@ -73,5 +79,24 @@ export const useBrowserStore = create<BrowserState>((set) => ({
       const activeTabId = new Map(s.activeTabId)
       activeTabId.set(projectId, tabId)
       return { activeTabId }
+    }),
+
+  pushRuntimeNotice: (notice) =>
+    set((s) => {
+      const runtimeNotices = new Map(s.runtimeNotices)
+      const existing = runtimeNotices.get(notice.tabId) ?? []
+      runtimeNotices.set(notice.tabId, [notice, ...existing].slice(0, 20))
+      return { runtimeNotices }
+    }),
+
+  dismissRuntimeNotice: (tabId, noticeId) =>
+    set((s) => {
+      const runtimeNotices = new Map(s.runtimeNotices)
+      const existing = runtimeNotices.get(tabId) ?? []
+      runtimeNotices.set(
+        tabId,
+        existing.filter((notice) => notice.id !== noticeId),
+      )
+      return { runtimeNotices }
     }),
 }))
