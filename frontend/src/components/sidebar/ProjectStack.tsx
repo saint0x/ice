@@ -1,5 +1,6 @@
 import { memo, useState } from 'react'
-import { FolderPlus, GripVertical } from 'lucide-react'
+import { FolderPlus, FolderSearch, GripVertical } from 'lucide-react'
+import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { projectAdd, projectReorder, toProject } from '@/lib/backend'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useProjectsStore } from '@/stores/projects'
@@ -36,8 +37,7 @@ export const ProjectStack = memo(function ProjectStack() {
     }
   }
 
-  const onAddProject = async () => {
-    const rootPath = newProjectPath.trim()
+  const addProjectAtPath = async (rootPath: string) => {
     if (!rootPath || isAdding) return
     setIsAdding(true)
     setSurfaceError(null)
@@ -53,6 +53,31 @@ export const ProjectStack = memo(function ProjectStack() {
       pushError('Project add failed', error, message)
     } finally {
       setIsAdding(false)
+    }
+  }
+
+  const onAddProject = async () => {
+    const rootPath = newProjectPath.trim()
+    if (!rootPath) return
+    await addProjectAtPath(rootPath)
+  }
+
+  const onBrowseFolder = async () => {
+    if (isAdding) return
+    setSurfaceError(null)
+    try {
+      const selection = await openDialog({
+        directory: true,
+        multiple: false,
+        title: 'Select a project folder',
+      })
+      if (typeof selection === 'string' && selection.length > 0) {
+        await addProjectAtPath(selection)
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to open folder picker'
+      setSurfaceError(message)
+      pushError('Folder picker failed', error, message)
     }
   }
 
@@ -73,9 +98,25 @@ export const ProjectStack = memo(function ProjectStack() {
               }
             }}
           />
-          <button className={styles.addBtn} type="button" onClick={() => void onAddProject()} disabled={isAdding || !newProjectPath.trim()}>
+          <button
+            className={styles.addBtn}
+            type="button"
+            onClick={() => void onBrowseFolder()}
+            disabled={isAdding}
+            title="Select a folder to add as a project"
+          >
+            <FolderSearch size={13} />
+            <span>{isAdding ? 'Adding…' : 'Browse'}</span>
+          </button>
+          <button
+            className={styles.addBtn}
+            type="button"
+            onClick={() => void onAddProject()}
+            disabled={isAdding || !newProjectPath.trim()}
+            title="Add project from the path entered above"
+          >
             <FolderPlus size={13} />
-            <span>{isAdding ? 'Adding…' : 'Add'}</span>
+            <span>Add</span>
           </button>
         </div>
         {surfaceError ? <div className={styles.errorBanner}>{surfaceError}</div> : null}

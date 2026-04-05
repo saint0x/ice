@@ -5,6 +5,7 @@ mod diagnostics;
 mod fs;
 mod git;
 mod ipc;
+mod menu;
 mod persistence;
 mod projects;
 mod security;
@@ -14,15 +15,21 @@ mod workspace;
 use app::startup::build_state;
 use app::state::AppState;
 use ipc::commands;
-use tauri::{Manager, RunEvent};
+use tauri::{Emitter, Manager, RunEvent};
 
 pub fn run() {
     diagnostics::init_tracing();
 
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let state = build_state(app.handle().clone())?;
             app.manage(state);
+            let menu = menu::build_app_menu(app.handle())?;
+            app.set_menu(menu)?;
+            app.on_menu_event(|app_handle, event| {
+                let _ = app_handle.emit("app://menu", event.id().0.as_str());
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

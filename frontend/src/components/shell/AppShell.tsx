@@ -8,11 +8,13 @@ import { ToastViewport } from './ToastViewport'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useBackendIntegration } from '@/hooks/useBackendIntegration'
+import { useMenuEvents } from '@/hooks/useMenuEvents'
 import styles from './AppShell.module.css'
 
 export const AppShell = memo(function AppShell() {
   useKeyboardShortcuts()
   useBackendIntegration()
+  useMenuEvents()
 
   const bottomDockOpen = useWorkspaceStore((s) => s.bottomDockOpen)
   const chatPanelOpen = useWorkspaceStore((s) => s.chatPanelOpen)
