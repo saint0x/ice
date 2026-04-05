@@ -37,7 +37,6 @@ Rules for this checklist:
 - [ ] Add richer editor conflict-resolution flows on top of the existing version-token backend guard so stale-save errors can be resolved intentionally in the UI.
 - [ ] Publish a typed shared contract for project, tree, git, browser, terminal, Codex, and approval payloads.
 - [ ] Keep pressure on frontend integration to remove remaining local-only helper mutations so backend state stays canonical across startup and runtime.
-- [ ] Finish frontend integration of the richer terminal backend surface beyond resize/respawn/rename, especially more explicit session diagnostics actions.
 ### Testing / Release
 
 - [ ] Expand Fozzy scenarios further into browser navigation and Codex recovery flows.
@@ -126,6 +125,7 @@ Rules for this checklist:
 - ✅ Terminal project cleanup removes both live handles and persisted metadata.
 - ✅ Terminal sessions now persist bounded scrollback, startup commands, environment overrides, restore state, and exit diagnostics in [service.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/terminal/service.rs) and [db.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/persistence/db.rs).
 - ✅ Terminal sessions can now be respawned from persisted metadata, and app shutdown / crash recovery marks live sessions as restorable instead of leaving ghost running state.
+- ✅ Terminal backend actions now also include interrupt, EOF, and explicit scrollback clear flows, with frontend wiring for operational diagnostics controls in the dock and terminal surface.
 
 ### Codex / Agent Runtime
 

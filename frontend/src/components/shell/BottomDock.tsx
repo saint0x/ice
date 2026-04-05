@@ -1,10 +1,10 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, ChevronUp, Plus, Terminal, RotateCcw, PencilLine, Check, X, Clock3, FileTerminal, History, ShieldAlert } from 'lucide-react'
+import { ChevronDown, ChevronUp, Plus, Terminal, RotateCcw, PencilLine, Check, X, Clock3, FileTerminal, History, ShieldAlert, Copy, Eraser } from 'lucide-react'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useTerminalStore } from '@/stores/terminal'
 import { useProjectsStore } from '@/stores/projects'
 import { TerminalSurface } from '@/components/surfaces/TerminalSurface'
-import { terminalClose, terminalCreate, terminalRename, terminalRespawn, terminalScrollbackRead, toTerminalSession } from '@/lib/backend'
+import { terminalClose, terminalCreate, terminalRename, terminalRespawn, terminalScrollbackClear, terminalScrollbackRead, toTerminalSession } from '@/lib/backend'
 import styles from './BottomDock.module.css'
 
 export const BottomDock = memo(function BottomDock() {
@@ -19,6 +19,7 @@ export const BottomDock = memo(function BottomDock() {
   const closeSession = useTerminalStore((s) => s.closeSession)
   const upsertSession = useTerminalStore((s) => s.upsertSession)
   const renameSession = useTerminalStore((s) => s.renameSession)
+  const clearScrollback = useTerminalStore((s) => s.clearScrollback)
   const resizeRef = useRef<{ startY: number; startH: number } | null>(null)
   const [renameDraft, setRenameDraft] = useState('')
   const [isRenaming, setIsRenaming] = useState(false)
@@ -26,6 +27,7 @@ export const BottomDock = memo(function BottomDock() {
   const [surfaceError, setSurfaceError] = useState<string | null>(null)
   const [scrollbackPreview, setScrollbackPreview] = useState<string>('')
   const [isPreviewLoading, setIsPreviewLoading] = useState(false)
+  const [isClearingHistory, setIsClearingHistory] = useState(false)
 
   const projectSessions = useMemo(() => {
     const result = []
@@ -123,6 +125,30 @@ export const BottomDock = memo(function BottomDock() {
       setSurfaceError(error instanceof Error ? error.message : 'Failed to restart terminal')
     } finally {
       setIsRestarting(false)
+    }
+  }
+
+  const onClearHistory = async () => {
+    if (!activeSession) return
+    setIsClearingHistory(true)
+    setSurfaceError(null)
+    try {
+      const updated = await terminalScrollbackClear(activeSession.id)
+      upsertSession(toTerminalSession(updated))
+      clearScrollback(activeSession.id)
+      setScrollbackPreview('')
+    } catch (error) {
+      setSurfaceError(error instanceof Error ? error.message : 'Failed to clear terminal history')
+    } finally {
+      setIsClearingHistory(false)
+    }
+  }
+
+  const onCopyHistory = async () => {
+    try {
+      await navigator.clipboard.writeText(scrollbackPreview)
+    } catch (error) {
+      setSurfaceError(error instanceof Error ? error.message : 'Failed to copy terminal history')
     }
   }
 
@@ -246,6 +272,14 @@ export const BottomDock = memo(function BottomDock() {
                   <span>{activeSession.lastExitReason}</span>
                 </div>
               ) : null}
+              <button className={styles.diagnosticAction} onClick={() => void onCopyHistory()} disabled={!scrollbackPreview}>
+                <Copy size={12} />
+                <span>Copy</span>
+              </button>
+              <button className={styles.diagnosticAction} onClick={() => void onClearHistory()} disabled={isClearingHistory}>
+                <Eraser size={12} />
+                <span>{isClearingHistory ? 'Clearing…' : 'Clear'}</span>
+              </button>
             </div>
             <div className={styles.historyPanel}>
               <div className={styles.historyHeader}>Recent scrollback</div>

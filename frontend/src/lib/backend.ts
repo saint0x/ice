@@ -551,6 +551,18 @@ export async function terminalRespawn(sessionId: string) {
   return invoke<TerminalSessionRecordDto>('terminal_respawn', { sessionId })
 }
 
+export async function terminalInterrupt(sessionId: string) {
+  return invoke<void>('terminal_interrupt', { sessionId })
+}
+
+export async function terminalSendEof(sessionId: string) {
+  return invoke<void>('terminal_send_eof', { sessionId })
+}
+
+export async function terminalScrollbackClear(sessionId: string) {
+  return invoke<TerminalSessionRecordDto>('terminal_scrollback_clear', { sessionId })
+}
+
 export async function codexThreadsList(projectId?: string) {
   return invoke<CodexThreadDto[]>('codex_threads_list', { projectId })
 }

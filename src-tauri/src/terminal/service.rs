@@ -206,6 +206,14 @@ impl TerminalService {
         Ok(())
     }
 
+    pub async fn interrupt(&self, session_id: &str) -> Result<()> {
+        self.write(session_id, "\u{3}").await
+    }
+
+    pub async fn send_eof(&self, session_id: &str) -> Result<()> {
+        self.write(session_id, "\u{4}").await
+    }
+
     pub async fn resize(&self, session_id: &str, cols: u16, rows: u16) -> Result<()> {
         let handle = self.get(session_id)?;
         handle.master.lock().resize(PtySize {
@@ -244,6 +252,35 @@ impl TerminalService {
             serde_json::json!({ "type": "sessionClosed", "sessionId": session_id }),
         )?;
         Ok(())
+    }
+
+    pub async fn clear_scrollback(&self, session_id: &str) -> Result<TerminalSessionRecord> {
+        if !self.metadata.lock().contains_key(session_id) {
+            return Err(anyhow!("unknown terminal session"));
+        }
+        self.scrollback
+            .lock()
+            .insert(session_id.to_string(), String::new());
+        let updated = self
+            .update_metadata(session_id, |record| {
+                record.scrollback_bytes = 0;
+            })?
+            .ok_or_else(|| anyhow!("unknown terminal session"))?;
+        self.persistence
+            .upsert_terminal_session(updated.clone())
+            .await?;
+        self.persistence
+            .upsert_terminal_scrollback(session_id.to_string(), String::new())
+            .await?;
+        self.app.emit(
+            TERMINAL_EVENT,
+            serde_json::json!({
+                "type": "scrollbackCleared",
+                "sessionId": session_id,
+                "session": updated.clone()
+            }),
+        )?;
+        Ok(updated)
     }
 
     pub async fn rename(&self, session_id: &str, title: &str) -> Result<TerminalSessionRecord> {

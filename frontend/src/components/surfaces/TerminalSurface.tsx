@@ -1,7 +1,7 @@
 import { memo, useRef, useEffect, useState } from 'react'
-import { Loader2, RotateCcw, TerminalSquare } from 'lucide-react'
+import { Loader2, RotateCcw, TerminalSquare, Hand, CornerDownLeft } from 'lucide-react'
 import type { TerminalSession } from '@/types'
-import { terminalResize, terminalRespawn, terminalWrite, toTerminalSession } from '@/lib/backend'
+import { terminalInterrupt, terminalResize, terminalRespawn, terminalSendEof, terminalWrite, toTerminalSession } from '@/lib/backend'
 import { useThemeStore } from '@/stores/theme'
 import { useTerminalStore } from '@/stores/terminal'
 import styles from './TerminalSurface.module.css'
@@ -142,8 +142,38 @@ export const TerminalSurface = memo(function TerminalSurface({ session }: Props)
     }
   }
 
+  const onInterrupt = async () => {
+    setSurfaceError(null)
+    try {
+      await terminalInterrupt(session.id)
+    } catch (error) {
+      setSurfaceError(error instanceof Error ? error.message : 'Failed to send interrupt')
+    }
+  }
+
+  const onSendEof = async () => {
+    setSurfaceError(null)
+    try {
+      await terminalSendEof(session.id)
+    } catch (error) {
+      setSurfaceError(error instanceof Error ? error.message : 'Failed to send EOF')
+    }
+  }
+
   return (
     <div className={styles.surface}>
+      {session.isRunning && (
+        <div className={styles.actionBar}>
+          <button className={styles.actionBtn} onClick={() => void onInterrupt()}>
+            <Hand size={12} />
+            <span>Interrupt</span>
+          </button>
+          <button className={styles.actionBtn} onClick={() => void onSendEof()}>
+            <CornerDownLeft size={12} />
+            <span>Send EOF</span>
+          </button>
+        </div>
+      )}
       {!session.isRunning && (
         <div className={styles.exitBanner}>
           <div className={styles.exitMeta}>

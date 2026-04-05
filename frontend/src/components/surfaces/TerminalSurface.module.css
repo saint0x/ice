@@ -7,6 +7,27 @@
   overflow: hidden;
 }
 
+.actionBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-variant);
+  background: color-mix(in srgb, var(--bg-panel) 88%, transparent);
+}
+
+.actionBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: var(--bg-element);
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+}
+
 .exitBanner {
   display: flex;
   align-items: center;

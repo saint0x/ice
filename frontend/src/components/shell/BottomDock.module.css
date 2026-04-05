@@ -226,6 +226,22 @@
   background: var(--bg-element);
 }
 
+.diagnosticAction {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  color: var(--text-primary);
+  background: var(--bg-element-selected);
+}
+
+.diagnosticAction:disabled {
+  opacity: 0.5;
+}
+
 .diagnosticItem span,
 .diagnosticBadge span {
   white-space: nowrap;

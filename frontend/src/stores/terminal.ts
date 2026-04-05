@@ -10,6 +10,7 @@ interface TerminalState {
   upsertSession: (session: TerminalSession) => void
   setScrollback: (id: TerminalId, content: string) => void
   appendScrollback: (id: TerminalId, chunk: string) => void
+  clearScrollback: (id: TerminalId) => void
   closeSession: (id: TerminalId) => void
   setActiveSession: (projectId: ProjectId, id: TerminalId) => void
   renameSession: (id: TerminalId, title: string) => void
@@ -60,6 +61,13 @@ export const useTerminalStore = create<TerminalState>((set) => ({
     set((s) => {
       const scrollback = new Map(s.scrollback)
       scrollback.set(id, `${scrollback.get(id) ?? ''}${chunk}`)
+      return { scrollback }
+    }),
+
+  clearScrollback: (id) =>
+    set((s) => {
+      const scrollback = new Map(s.scrollback)
+      scrollback.set(id, '')
       return { scrollback }
     }),
 

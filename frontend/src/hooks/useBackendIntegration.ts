@@ -64,6 +64,7 @@ export function useBackendIntegration() {
   const upsertSession = useTerminalStore((state) => state.upsertSession)
   const setScrollback = useTerminalStore((state) => state.setScrollback)
   const appendScrollback = useTerminalStore((state) => state.appendScrollback)
+  const clearScrollback = useTerminalStore((state) => state.clearScrollback)
   const closeSession = useTerminalStore((state) => state.closeSession)
   const hydrateThreads = useCodexStore((state) => state.hydrateThreads)
   const hydrateApprovals = useCodexStore((state) => state.hydrateApprovals)
@@ -230,6 +231,13 @@ export function useBackendIntegration() {
         appendScrollback(payload.sessionId, payload.data)
         return
       }
+      if (payload.type === 'scrollbackCleared' && payload.sessionId) {
+        clearScrollback(payload.sessionId)
+        if (payload.session) {
+          upsertSession(toTerminalSession(payload.session))
+        }
+        return
+      }
       if (payload.type === 'sessionClosed' && payload.sessionId) {
         closeSession(payload.sessionId)
       }
@@ -277,7 +285,7 @@ export function useBackendIntegration() {
         void projectWatchStop(projectId)
       }
     }
-  }, [addApproval, addThread, appendScrollback, closeBrowserTab, closeSession, hydrateApprovals, hydrateBrowserSidebarItems, hydrateBrowserTabs, hydrateCodexSidebarItems, hydrateGitState, hydrateMessages, hydrateProjects, hydrateSessions, hydrateThreads, hydrateTree, hydrateWorkspace, resolveApproval, setScrollback, updateProject, updateThread, upsertBrowserTab, upsertMessage, upsertSession])
+  }, [addApproval, addThread, appendScrollback, clearScrollback, closeBrowserTab, closeSession, hydrateApprovals, hydrateBrowserSidebarItems, hydrateBrowserTabs, hydrateCodexSidebarItems, hydrateGitState, hydrateMessages, hydrateProjects, hydrateSessions, hydrateThreads, hydrateTree, hydrateWorkspace, resolveApproval, setScrollback, updateProject, updateThread, upsertBrowserTab, upsertMessage, upsertSession])
 
   useEffect(() => {
     if (!hydratedRef.current) return

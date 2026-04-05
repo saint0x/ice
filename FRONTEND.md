@@ -13,11 +13,9 @@ Rules for this checklist:
 
 ### Backend Wiring
 - [ ] Add editor-local search and replace UI on top of the now-live backend file read/write/search contracts.
-- [ ] Add deeper terminal session diagnostics actions on top of the now-live backend lifecycle contract.
 - [ ] Subscribe to backend events for filesystem, git, browser, terminal, and Codex updates instead of relying on local-only mutations.
 - [ ] Persist and hydrate workspace layout from the backend rather than purely local in-memory state.
 - [ ] Keep removing the last local-only helper logic in frontend stores and surfaces so startup and mutations come exclusively from backend truth.
-- [ ] Add richer terminal diagnostics actions in the dock once the surface uses the full rename/resize/respawn contract.
 
 ### Filesystem / Editor
 
@@ -38,9 +36,6 @@ Rules for this checklist:
 
 ### Terminal
 
-- [ ] Keep the terminal dock session metadata synced with rename/respawn outcomes from backend IPC.
-- [ ] Bind terminal tabs to backend `terminal_scrollback_read` plus live `app://terminal` events so restored sessions render persisted output before new PTY data arrives.
-- [ ] Use backend `terminal_respawn` for restored stopped sessions instead of inventing new local terminal ids.
 - [ ] Keep the bottom dock session model synced to backend session persistence.
 
 ### Codex / Agent UX
@@ -116,6 +111,7 @@ Rules for this checklist:
 - ✅ The Git surface now uses backend git-history and commit-show contracts for recent commit browsing and commit diff inspection instead of stopping at working-tree mutation state.
 - ✅ Terminal sessions and scrollback now hydrate from backend `terminal_list` / `terminal_scrollback_read`, and the frontend listens to live `app://terminal` events through [useBackendIntegration.ts](/Users/deepsaint/Desktop/ice/frontend/src/hooks/useBackendIntegration.ts).
 - ✅ Terminal create, close, write, and respawn flows now route through backend IPC in [TerminalList.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/sidebar/TerminalList.tsx), [BottomDock.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/shell/BottomDock.tsx), and [TerminalSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/TerminalSurface.tsx).
+- ✅ Terminal surfaces and dock diagnostics now also use backend interrupt, EOF, and scrollback-clear actions instead of leaving those operational controls outside the shell.
 - ✅ Codex threads and approvals now hydrate from backend `codex_threads_list` / `codex_approvals_list`, and the frontend listens to live `app://codex` events through [useBackendIntegration.ts](/Users/deepsaint/Desktop/ice/frontend/src/hooks/useBackendIntegration.ts).
 - ✅ Codex thread creation, prompt submission, and approval approve/deny actions now route through backend IPC in [CodexSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/CodexSurface.tsx), [ChatPanel.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/shell/ChatPanel.tsx), and [ProjectSection.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/sidebar/ProjectSection.tsx).
 - ✅ Codex surfaces and the chat panel now render canonical multi-turn history from backend `codex_thread_messages_list` plus live `messageUpserted` events instead of relying on summary-only thread previews.

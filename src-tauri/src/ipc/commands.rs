@@ -857,6 +857,32 @@ pub async fn terminal_respawn(
 }
 
 #[tauri::command]
+pub async fn terminal_interrupt(
+    session_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    state.terminal.interrupt(&session_id).await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn terminal_send_eof(
+    session_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), AppError> {
+    state.terminal.send_eof(&session_id).await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn terminal_scrollback_clear(
+    session_id: String,
+    state: State<'_, AppState>,
+) -> Result<crate::terminal::service::TerminalSessionRecord, AppError> {
+    Ok(state.terminal.clear_scrollback(&session_id).await?)
+}
+
+#[tauri::command]
 pub async fn codex_status(
     state: State<'_, AppState>,
 ) -> Result<crate::codex::service::CodexStatus, AppError> {
