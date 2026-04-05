@@ -22,6 +22,7 @@ export const ProjectStack = memo(function ProjectStack() {
     const index = projectOrder.indexOf(projectId)
     const nextIndex = index + direction
     if (index < 0 || nextIndex < 0 || nextIndex >= projectOrder.length) return
+    const previousOrder = [...projectOrder]
     const nextOrder = [...projectOrder]
     const [moved] = nextOrder.splice(index, 1)
     if (!moved) return
@@ -31,6 +32,7 @@ export const ProjectStack = memo(function ProjectStack() {
     try {
       await projectReorder(nextOrder)
     } catch (error) {
+      reorderProjects(previousOrder)
       const message = error instanceof Error ? error.message : 'Failed to reorder projects'
       setSurfaceError(message)
       pushError('Project reorder failed', error, message)

@@ -3,13 +3,13 @@ import { Globe, Plus, X, Lock, Circle, Pin } from 'lucide-react'
 import type { ProjectId } from '@/types'
 import {
   browserTabClose,
-  browserTabCreate,
   browserTabPinSet,
   projectBrowserRestorePolicyGet,
   projectBrowserRestorePolicySet,
   toBrowserTab,
   type BrowserRestorePolicy,
 } from '@/lib/backend'
+import { createAndOpenBrowserTab } from '@/lib/browserTabs'
 import { useBrowserStore } from '@/stores/browser'
 import { useWorkspaceStore } from '@/stores/workspace'
 import styles from './BrowserList.module.css'
@@ -105,12 +105,7 @@ export const BrowserList = memo(function BrowserList({ projectId }: { projectId:
       <button
         className={styles.addBtn}
         onClick={() => {
-          void browserTabCreate(projectId, 'https://example.com').then((tab) => {
-            const mapped = toBrowserTab(tab)
-            upsertTab(mapped)
-            setActiveTab(projectId, mapped.id)
-            openTab(activePaneId, 'browser', mapped.title, projectId, { tabId: mapped.id, url: mapped.url })
-          })
+          void createAndOpenBrowserTab(projectId)
         }}
       >
         <Plus size={12} />

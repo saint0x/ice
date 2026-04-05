@@ -2,14 +2,12 @@ import { useEffect } from 'react'
 import { listen, type Event, type UnlistenFn } from '@tauri-apps/api/event'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import {
-  browserTabCreate,
   projectAdd,
   terminalCreate,
-  toBrowserTab,
   toProject,
   toTerminalSession,
 } from '@/lib/backend'
-import { useBrowserStore } from '@/stores/browser'
+import { createAndOpenBrowserTab } from '@/lib/browserTabs'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useProjectsStore } from '@/stores/projects'
 import { useTerminalStore } from '@/stores/terminal'
@@ -25,6 +23,15 @@ async function dispatchMenuAction(id: string): Promise<void> {
   const notifications = useNotificationsStore.getState()
   const activeProjectId = projects.activeProjectId
   const activeProject = activeProjectId ? projects.projects.get(activeProjectId) : null
+  const requireActiveProject = (actionLabel: string): string | null => {
+    if (activeProjectId) return activeProjectId
+    notifications.pushNotification({
+      title: 'Select a project first',
+      message: `Open or add a project to use ${actionLabel}.`,
+      level: 'info',
+    })
+    return null
+  }
 
   switch (id) {
     case 'file.add_project': {
@@ -46,30 +53,24 @@ async function dispatchMenuAction(id: string): Promise<void> {
       return
     }
     case 'file.new_terminal': {
-      if (!activeProjectId) return
+      const projectId = requireActiveProject('the terminal')
+      if (!projectId) return
       workspace.setBottomDockOpen(true)
       try {
-        const session = await terminalCreate(activeProjectId)
+        const session = await terminalCreate(projectId)
         const mapped = toTerminalSession(session)
         useTerminalStore.getState().upsertSession(mapped)
-        useTerminalStore.getState().setActiveSession(activeProjectId, mapped.id)
+        useTerminalStore.getState().setActiveSession(projectId, mapped.id)
       } catch (error) {
         notifications.pushError('Terminal create failed', error, 'Failed to create terminal')
       }
       return
     }
     case 'file.new_browser_tab': {
-      if (!activeProjectId) return
+      const projectId = requireActiveProject('a browser tab')
+      if (!projectId) return
       try {
-        const tab = await browserTabCreate(activeProjectId, 'https://localhost:3000')
-        const mapped = toBrowserTab(tab)
-        const browserStore = useBrowserStore.getState()
-        browserStore.upsertTab(mapped)
-        browserStore.setActiveTab(activeProjectId, mapped.id)
-        workspace.openTab(workspace.activePaneId, 'browser', mapped.title, activeProjectId, {
-          tabId: mapped.id,
-          url: mapped.url,
-        })
+        await createAndOpenBrowserTab(projectId)
       } catch (error) {
         notifications.pushError('Browser tab failed', error, 'Failed to create browser tab')
       }
@@ -99,7 +100,10 @@ async function dispatchMenuAction(id: string): Promise<void> {
       return
     }
     case 'edit.find_in_project': {
-      if (!activeProjectId || !activeProject) return
+      if (!activeProjectId || !activeProject) {
+        requireActiveProject('project search')
+        return
+      }
       workspace.openTab(
         workspace.activePaneId,
         'settings',
@@ -119,36 +123,42 @@ async function dispatchMenuAction(id: string): Promise<void> {
       workspace.setChatPanelOpen(!workspace.chatPanelOpen)
       return
     case 'view.files':
-      if (activeProjectId && activeProject) {
-        workspace.openTab(
-          workspace.activePaneId,
-          'settings',
-          `${activeProject.name} Files`,
-          activeProjectId,
-          { tool: 'files' }
-        )
+      if (!activeProjectId || !activeProject) {
+        requireActiveProject('Files')
+        return
       }
+      workspace.openTab(
+        workspace.activePaneId,
+        'settings',
+        `${activeProject.name} Files`,
+        activeProjectId,
+        { tool: 'files' }
+      )
       return
     case 'view.search':
-      if (activeProjectId && activeProject) {
-        workspace.openTab(
-          workspace.activePaneId,
-          'settings',
-          `${activeProject.name} Search`,
-          activeProjectId,
-          { tool: 'search' }
-        )
+      if (!activeProjectId || !activeProject) {
+        requireActiveProject('Search')
+        return
       }
+      workspace.openTab(
+        workspace.activePaneId,
+        'settings',
+        `${activeProject.name} Search`,
+        activeProjectId,
+        { tool: 'search' }
+      )
       return
     case 'view.git':
-      if (activeProjectId && activeProject) {
-        workspace.openTab(
-          workspace.activePaneId,
-          'git',
-          `${activeProject.name} Git`,
-          activeProjectId
-        )
+      if (!activeProjectId || !activeProject) {
+        requireActiveProject('Git')
+        return
       }
+      workspace.openTab(
+        workspace.activePaneId,
+        'git',
+        `${activeProject.name} Git`,
+        activeProjectId
+      )
       return
     case 'view.split_horizontal':
       workspace.splitPane(workspace.activePaneId, 'horizontal')

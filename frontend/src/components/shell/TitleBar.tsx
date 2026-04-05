@@ -6,8 +6,7 @@ import {
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useProjectsStore } from '@/stores/projects'
-import { browserTabCreate, toBrowserTab } from '@/lib/backend'
-import { useBrowserStore } from '@/stores/browser'
+import { createAndOpenBrowserTab } from '@/lib/browserTabs'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useThemeStore, THEMES } from '@/stores/theme'
 import type { ThemeId } from '@/stores/theme'
@@ -22,12 +21,11 @@ export const TitleBar = memo(function TitleBar() {
   const setChatPanelOpen = useWorkspaceStore((s) => s.setChatPanelOpen)
   const openTab = useWorkspaceStore((s) => s.openTab)
   const activePaneId = useWorkspaceStore((s) => s.activePaneId)
-  const upsertBrowserTab = useBrowserStore((s) => s.upsertTab)
-  const setActiveBrowserTab = useBrowserStore((s) => s.setActiveTab)
   const activeProjectId = useProjectsStore((s) => s.activeProjectId)
   const activeProject = useProjectsStore((s) => activeProjectId ? s.projects.get(activeProjectId) : undefined)
   const themeId = useThemeStore((s) => s.themeId)
   const setTheme = useThemeStore((s) => s.setTheme)
+  const pushNotification = useNotificationsStore((s) => s.pushNotification)
   const pushError = useNotificationsStore((s) => s.pushError)
 
   const [themeMenuOpen, setThemeMenuOpen] = useState(false)
@@ -68,29 +66,44 @@ export const TitleBar = memo(function TitleBar() {
   }, [pushError])
 
   const onOpenFiles = useCallback(() => {
-    if (!activeProjectId || !activeProject) return
+    if (!activeProjectId || !activeProject) {
+      pushNotification({
+        title: 'Select a project first',
+        message: 'Open or add a project to use Files.',
+        level: 'info',
+      })
+      return
+    }
     openTab(activePaneId, 'settings', `${activeProject.name} Files`, activeProjectId, { tool: 'files' })
-  }, [activeProjectId, activeProject, activePaneId, openTab])
+  }, [activeProjectId, activeProject, activePaneId, openTab, pushNotification])
 
   const onOpenBrowser = useCallback(() => {
-    if (!activeProjectId || !activeProject) return
-    void browserTabCreate(activeProjectId, 'https://localhost:3000')
-      .then((tab) => {
-        const mapped = toBrowserTab(tab)
-        upsertBrowserTab(mapped)
-        setActiveBrowserTab(activeProjectId, mapped.id)
-        openTab(activePaneId, 'browser', mapped.title, activeProjectId, { tabId: mapped.id, url: mapped.url })
+    if (!activeProjectId) {
+      pushNotification({
+        title: 'Select a project first',
+        message: 'Open or add a project to create a browser tab.',
+        level: 'info',
       })
+      return
+    }
+    void createAndOpenBrowserTab(activeProjectId)
       .catch((error: unknown) => {
         pushError('Browser tab failed', error, 'Failed to create browser tab')
       })
-  }, [activePaneId, activeProject, activeProjectId, openTab, pushError, setActiveBrowserTab, upsertBrowserTab])
+  }, [activeProjectId, pushError, pushNotification])
 
   const onOpenTerminal = useCallback(() => {
-    if (!activeProjectId) return
+    if (!activeProjectId) {
+      pushNotification({
+        title: 'Select a project first',
+        message: 'Open or add a project to use the terminal.',
+        level: 'info',
+      })
+      return
+    }
     const state = useWorkspaceStore.getState()
     state.setBottomDockOpen(true)
-  }, [activeProjectId])
+  }, [activeProjectId, pushNotification])
 
   return (
     <div className={styles.titleBar} data-tauri-drag-region>

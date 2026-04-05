@@ -50,7 +50,7 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
     [runtimeNotices],
   )
 
-  const url = draftUrl ?? browserTab?.url ?? (tab.meta?.url as string) ?? 'https://example.com'
+  const url = draftUrl ?? browserTab?.url ?? (tab.meta?.url as string) ?? 'about:blank'
   const isUnsupportedScheme = useMemo(() => /^(file|data|chrome|devtools|mailto):/i.test(url), [url])
 
   useEffect(() => {

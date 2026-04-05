@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
-import { browserTabCreate, toBrowserTab, terminalCreate, terminalInterrupt, terminalRespawn, terminalScrollbackClear, terminalSendEof, toTerminalSession } from '@/lib/backend'
-import { useBrowserStore } from '@/stores/browser'
+import { terminalCreate, terminalInterrupt, terminalRespawn, terminalScrollbackClear, terminalSendEof, toTerminalSession } from '@/lib/backend'
+import { createAndOpenBrowserTab } from '@/lib/browserTabs'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useProjectsStore } from '@/stores/projects'
 import { useTerminalStore } from '@/stores/terminal'
@@ -140,14 +140,7 @@ export function useKeyboardShortcuts() {
         workspace.openTab(workspace.activePaneId, 'git', `${activeProject.name} Git`, activeProjectId)
       } else if (meta && e.altKey && e.key.toLowerCase() === 'b' && activeProjectId && !editable) {
         e.preventDefault()
-        void browserTabCreate(activeProjectId, 'https://localhost:3000')
-          .then((tab) => {
-            const mapped = toBrowserTab(tab)
-            const browserStore = useBrowserStore.getState()
-            browserStore.upsertTab(mapped)
-            browserStore.setActiveTab(activeProjectId, mapped.id)
-            workspace.openTab(workspace.activePaneId, 'browser', mapped.title, activeProjectId, { tabId: mapped.id, url: mapped.url })
-          })
+        void createAndOpenBrowserTab(activeProjectId)
           .catch((error: unknown) => {
             notifications.pushError('Browser tab failed', error, 'Failed to create browser tab')
           })
