@@ -98,6 +98,32 @@ pub struct CodexThreadBinding {
     pub unread: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CodexMessageRecord {
+    pub message_id: String,
+    pub project_id: String,
+    pub thread_id: String,
+    pub turn_id: Option<String>,
+    pub role: String,
+    pub content: String,
+    pub state: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct CodexMessageUpdate {
+    pub message_id: String,
+    pub project_id: String,
+    pub thread_id: String,
+    pub turn_id: Option<String>,
+    pub role: String,
+    pub content: String,
+    pub state: String,
+    pub append: bool,
+}
+
 impl CodexService {
     pub fn new(
         app: AppHandle,
@@ -296,7 +322,7 @@ impl CodexService {
         let updated_binding = {
             let mut state = self.state.lock();
             if let Some(binding) = state.threads.get_mut(&thread_id) {
-                binding.project_id = project_id;
+                binding.project_id = project_id.clone();
                 binding.status = "running".to_string();
                 binding.unread = false;
                 binding.last_turn_id = result
@@ -309,9 +335,33 @@ impl CodexService {
                 None
             }
         };
+        let turn_id = updated_binding
+            .as_ref()
+            .and_then(|binding| binding.last_turn_id.clone());
         if let Some(binding) = updated_binding {
-            self.persistence.upsert_codex_thread(binding).await?;
+            self.persistence
+                .upsert_codex_thread(binding.clone())
+                .await?;
+            let _ = self.app.emit(
+                CODEX_EVENT,
+                json!({ "type": "threadUpdated", "thread": binding }),
+            );
         }
+        let prompt_message = self
+            .persistence
+            .upsert_codex_message(new_codex_message(
+                project_id,
+                thread_id.clone(),
+                turn_id,
+                "user",
+                prompt,
+                "complete",
+            ))
+            .await?;
+        let _ = self.app.emit(
+            CODEX_EVENT,
+            json!({ "type": "messageUpserted", "message": prompt_message }),
+        );
         Ok(result)
     }
 
@@ -327,6 +377,12 @@ impl CodexService {
             })
             .cloned()
             .collect()
+    }
+
+    pub async fn thread_messages(&self, thread_id: &str) -> Result<Vec<CodexMessageRecord>> {
+        self.persistence
+            .list_codex_messages_for_thread(thread_id.to_string())
+            .await
     }
 
     pub async fn sidebar_threads(&self, project_id: &str) -> Vec<ProjectCodexSidebarItem> {
@@ -689,7 +745,18 @@ impl CodexService {
                             let _ = sender.send(result);
                         }
                     } else {
-                        if let Some(thread) = apply_notification_to_threads(&state, &value) {
+                        if let Some(outcome) = apply_notification_to_threads(&state, &value) {
+                            if let Some(message_update) = outcome.message_update {
+                                if let Ok(message) =
+                                    persistence.apply_codex_message_update(message_update).await
+                                {
+                                    let _ = app.emit(
+                                        CODEX_EVENT,
+                                        json!({ "type": "messageUpserted", "message": message }),
+                                    );
+                                }
+                            }
+                            let thread = outcome.thread;
                             let _ = persistence.upsert_codex_thread(thread.clone()).await;
                             let _ = app.emit(
                                 CODEX_EVENT,
@@ -800,10 +867,16 @@ fn mark_thread_after_denial(
     Some(thread.clone())
 }
 
+#[derive(Debug, Clone)]
+struct NotificationOutcome {
+    thread: CodexThreadBinding,
+    message_update: Option<CodexMessageUpdate>,
+}
+
 fn apply_notification_to_threads(
     state: &Arc<Mutex<CodexRuntimeState>>,
     payload: &Value,
-) -> Option<CodexThreadBinding> {
+) -> Option<NotificationOutcome> {
     let method = payload.get("method").and_then(|value| value.as_str())?;
     let params = payload.get("params").unwrap_or(payload);
     let thread_id = extract_thread_id(params)?;
@@ -819,8 +892,18 @@ fn apply_notification_to_threads(
     if let Some(turn_id) = extract_turn_id(params) {
         thread.last_turn_id = Some(turn_id);
     }
-    if let Some(message) = extract_assistant_message(params) {
-        thread.last_assistant_message = Some(message);
+    let assistant_message = extract_assistant_message(params);
+    if let Some(message) = assistant_message.clone() {
+        let next_summary = if is_delta_notification(method, params) {
+            summarize_text(&format!(
+                "{}{}",
+                thread.last_assistant_message.clone().unwrap_or_default(),
+                message
+            ))
+        } else {
+            summarize_text(&message)
+        };
+        thread.last_assistant_message = Some(next_summary);
         thread.unread = true;
     }
 
@@ -843,7 +926,25 @@ fn apply_notification_to_threads(
         thread.status = "idle".to_string();
     }
 
-    Some(thread.clone())
+    let message_update = assistant_message.map(|content| CodexMessageUpdate {
+        message_id: assistant_message_id(&thread.thread_id, thread.last_turn_id.as_deref()),
+        project_id: thread.project_id.clone(),
+        thread_id: thread.thread_id.clone(),
+        turn_id: thread.last_turn_id.clone(),
+        role: "assistant".to_string(),
+        content,
+        state: if is_final_notification(method) {
+            "complete".to_string()
+        } else {
+            "streaming".to_string()
+        },
+        append: is_delta_notification(method, params),
+    });
+
+    Some(NotificationOutcome {
+        thread: thread.clone(),
+        message_update,
+    })
 }
 
 fn extract_thread_id(payload: &Value) -> Option<String> {
@@ -894,6 +995,58 @@ fn extract_assistant_message(payload: &Value) -> Option<String> {
         }
     }
     None
+}
+
+fn is_delta_notification(method: &str, payload: &Value) -> bool {
+    (method.contains("turn.delta") || method.contains("turn/update"))
+        && payload.get("delta").is_some()
+        && payload.get("message").is_none()
+}
+
+fn is_final_notification(method: &str) -> bool {
+    method.contains("turn/completed")
+        || method.contains("turn.completed")
+        || method.contains("turn/finished")
+}
+
+fn summarize_text(text: &str) -> String {
+    text.trim().replace('\n', " ").chars().take(160).collect()
+}
+
+fn assistant_message_id(thread_id: &str, turn_id: Option<&str>) -> String {
+    match turn_id {
+        Some(turn_id) if !turn_id.is_empty() => format!("{thread_id}:{turn_id}:assistant"),
+        _ => format!("{thread_id}:assistant"),
+    }
+}
+
+fn new_codex_message(
+    project_id: String,
+    thread_id: String,
+    turn_id: Option<String>,
+    role: &str,
+    content: String,
+    state: &str,
+) -> CodexMessageRecord {
+    let now = chrono::Utc::now().to_rfc3339();
+    let message_id = match (role, turn_id.as_deref()) {
+        ("user", Some(turn_id)) if !turn_id.is_empty() => format!("{thread_id}:{turn_id}:user"),
+        ("assistant", Some(turn_id)) if !turn_id.is_empty() => {
+            format!("{thread_id}:{turn_id}:assistant")
+        }
+        _ => format!("{thread_id}:{}:{}", role, Uuid::new_v4()),
+    };
+    CodexMessageRecord {
+        message_id,
+        project_id,
+        thread_id,
+        turn_id,
+        role: role.to_string(),
+        content,
+        state: state.to_string(),
+        created_at: now.clone(),
+        updated_at: now,
+    }
 }
 
 fn extract_text_from_value(value: &Value) -> Option<String> {

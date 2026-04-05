@@ -888,6 +888,14 @@ pub async fn codex_turn_start(
 }
 
 #[tauri::command]
+pub async fn codex_thread_messages_list(
+    input: CodexThreadMessagesInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::codex::service::CodexMessageRecord>, AppError> {
+    Ok(state.codex.thread_messages(&input.thread_id).await?)
+}
+
+#[tauri::command]
 pub async fn codex_server_request_respond(
     input: CodexServerRequestRespondInput,
     state: State<'_, AppState>,

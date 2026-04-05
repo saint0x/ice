@@ -3,6 +3,7 @@ import { listen, type Event, type UnlistenFn } from '@tauri-apps/api/event'
 import type {
   BrowserTab,
   CodexApproval,
+  CodexMessage,
   CodexThread,
   FileEntry,
   GitChange,
@@ -211,6 +212,19 @@ interface CodexEventPayload {
   type: string
   thread?: CodexThreadDto
   approval?: CodexApprovalDto
+  message?: CodexMessageDto
+}
+
+interface CodexMessageDto {
+  messageId: string
+  projectId: string
+  threadId: string
+  turnId?: string | null
+  role: string
+  content: string
+  state: string
+  createdAt: string
+  updatedAt: string
 }
 
 interface BrowserTabDto {
@@ -445,6 +459,12 @@ export async function codexTurnStart(projectId: string, threadId: string, prompt
   })
 }
 
+export async function codexThreadMessagesList(threadId: string) {
+  return invoke<CodexMessageDto[]>('codex_thread_messages_list', {
+    input: { threadId },
+  })
+}
+
 export async function codexServerRequestRespond(requestId: number, result: unknown = { approved: true }) {
   return invoke<void>('codex_server_request_respond', {
     input: { requestId, result },
@@ -659,6 +679,20 @@ export function toCodexApproval(dto: CodexApprovalDto): CodexApproval {
   }
 }
 
+export function toCodexMessage(dto: CodexMessageDto): CodexMessage {
+  return {
+    id: dto.messageId,
+    threadId: dto.threadId,
+    projectId: dto.projectId,
+    turnId: dto.turnId ?? undefined,
+    role: normalizeCodexRole(dto.role),
+    content: dto.content,
+    state: dto.state === 'streaming' ? 'streaming' : 'complete',
+    createdAt: dto.createdAt,
+    updatedAt: dto.updatedAt,
+  }
+}
+
 export function toBrowserTab(dto: BrowserTabDto): BrowserTab {
   return {
     id: dto.tabId,
@@ -773,6 +807,13 @@ function normalizeCodexStatus(status: string): CodexThread['status'] {
     return status
   }
   return 'idle'
+}
+
+function normalizeCodexRole(role: string): CodexMessage['role'] {
+  if (role === 'user' || role === 'assistant' || role === 'system') {
+    return role
+  }
+  return 'assistant'
 }
 
 function toPaneLayout(dto: WorkspacePaneDto): PaneLayout {

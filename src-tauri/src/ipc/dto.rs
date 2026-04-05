@@ -364,6 +364,12 @@ pub struct CodexTurnStartInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CodexThreadMessagesInput {
+    pub thread_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CodexServerRequestRespondInput {
     pub request_id: u64,
     pub result: serde_json::Value,

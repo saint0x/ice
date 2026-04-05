@@ -1,9 +1,9 @@
-import { memo, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 import {
   MessageSquare, Loader2, Bot, ShieldAlert, ArrowRight, Check, Ban, Sparkles, AlertTriangle
 } from 'lucide-react'
 import type { CodexThread, Tab } from '@/types'
-import { codexServerRequestDeny, codexServerRequestRespond, codexThreadCreate, codexTurnStart } from '@/lib/backend'
+import { codexServerRequestDeny, codexServerRequestRespond, codexThreadCreate, codexThreadMessagesList, codexTurnStart, toCodexMessage } from '@/lib/backend'
 import { useCodexStore } from '@/stores/codex'
 import styles from './CodexSurface.module.css'
 
@@ -15,13 +15,34 @@ export const CodexSurface = memo(function CodexSurface({ tab }: Props) {
   const threadId = tab.meta?.threadId as string | undefined
   const thread = useCodexStore((s) => threadId ? s.threads.get(threadId) : undefined)
   const approvals = useCodexStore((s) => s.approvals.filter((approval) => approval.projectId === tab.projectId && (!threadId || approval.threadId === threadId)))
+  const messages = useCodexStore((s) => threadId ? s.messagesByThread.get(threadId) ?? [] : [])
   const addThread = useCodexStore((s) => s.addThread)
   const setActiveThread = useCodexStore((s) => s.setActiveThread)
   const updateThread = useCodexStore((s) => s.updateThread)
+  const hydrateMessages = useCodexStore((s) => s.hydrateMessages)
   const resolveApproval = useCodexStore((s) => s.resolveApproval)
   const [input, setInput] = useState('')
   const [approvalBusyId, setApprovalBusyId] = useState<string | null>(null)
   const [surfaceError, setSurfaceError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!threadId) return
+    let disposed = false
+    void codexThreadMessagesList(threadId)
+      .then((history) => {
+        if (!disposed) {
+          hydrateMessages(threadId, history.map(toCodexMessage))
+        }
+      })
+      .catch((error: unknown) => {
+        if (!disposed) {
+          setSurfaceError(error instanceof Error ? error.message : 'Failed to load thread history')
+        }
+      })
+    return () => {
+      disposed = true
+    }
+  }, [hydrateMessages, threadId])
 
   const statusLabel = useMemo(() => {
     if (!thread) return 'Ready'
@@ -110,16 +131,23 @@ export const CodexSurface = memo(function CodexSurface({ tab }: Props) {
           </div>
         </div>
 
-        {thread?.lastMessage ? (
-          <div className={styles.agentRow}>
-            <div className={styles.agentAvatar}>
-              <Bot size={14} />
+        {messages.length > 0 ? messages.map((message) => (
+          message.role === 'user' ? (
+            <div key={message.id} className={styles.userRow}>
+              <div className={styles.userBubble}>{message.content}</div>
             </div>
-            <div className={styles.agentContent}>
-              <div className={styles.agentBubble}>{thread.lastMessage}</div>
+          ) : (
+            <div key={message.id} className={styles.agentRow}>
+              <div className={styles.agentAvatar}>
+                <Bot size={14} />
+              </div>
+              <div className={styles.agentContent}>
+                <div className={styles.agentBubble}>{message.content}</div>
+                {message.state === 'streaming' ? <div className={styles.streamingLabel}>Streaming...</div> : null}
+              </div>
             </div>
-          </div>
-        ) : (
+          )
+        )) : (
           <div className={styles.agentRow}>
             <div className={styles.agentAvatar}>
               <Bot size={14} />

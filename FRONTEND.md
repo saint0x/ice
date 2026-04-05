@@ -16,14 +16,12 @@ Rules for this checklist:
 - [ ] Replace the iframe-backed browser renderer host with the final native browser container strategy if we outgrow the current pane-hosted renderer approach.
 - [ ] Add editor search, replace, and project-search UI on top of the now-live backend file read/write/search contracts.
 - [ ] Add whole-tree commit-history or log UX to the Git surface so the frontend fully uses the backend git mutation/readiness APIs.
-- [ ] Add persisted Codex turn/message history to the frontend once the backend exposes canonical per-thread history, instead of relying on the current thread-summary view.
 - [ ] Add deeper terminal session diagnostics actions on top of the now-live backend lifecycle contract.
 - [ ] Replace the iframe-host fallback search/download behavior with the final native browser renderer implementation once we move past the current pane-hosted renderer host.
 - [ ] Subscribe to backend events for filesystem, git, browser, terminal, and Codex updates instead of relying on local-only mutations.
 - [ ] Persist and hydrate workspace layout from the backend rather than purely local in-memory state.
 - [ ] Keep removing the last local-only helper logic in frontend stores and surfaces so startup and mutations come exclusively from backend truth.
 - [ ] Add whole-tree commit-history or log flows to [GitSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/GitSurface.tsx) on top of the now-live mutation hooks.
-- [ ] Expand Codex surfaces from thread-summary rendering to canonical multi-turn history once backend history APIs exist.
 - [ ] Add richer terminal diagnostics actions in the dock once the surface uses the full rename/resize/respawn contract.
 - [ ] Replace the current browser find-in-page fallback with native renderer-backed search/download behavior once the final browser container lands.
 
@@ -129,6 +127,7 @@ Rules for this checklist:
 - ✅ Terminal create, close, write, and respawn flows now route through backend IPC in [TerminalList.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/sidebar/TerminalList.tsx), [BottomDock.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/shell/BottomDock.tsx), and [TerminalSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/TerminalSurface.tsx).
 - ✅ Codex threads and approvals now hydrate from backend `codex_threads_list` / `codex_approvals_list`, and the frontend listens to live `app://codex` events through [useBackendIntegration.ts](/Users/deepsaint/Desktop/ice/frontend/src/hooks/useBackendIntegration.ts).
 - ✅ Codex thread creation, prompt submission, and approval approve/deny actions now route through backend IPC in [CodexSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/CodexSurface.tsx), [ChatPanel.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/shell/ChatPanel.tsx), and [ProjectSection.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/sidebar/ProjectSection.tsx).
+- ✅ Codex surfaces and the chat panel now render canonical multi-turn history from backend `codex_thread_messages_list` plus live `messageUpserted` events instead of relying on summary-only thread previews.
 - ✅ Backend persistence now tracks an explicit schema version in SQLite, which gives production migrations a canonical upgrade baseline instead of implicit table-shape assumptions.
 - ✅ The backend tree API now supports hidden-file and `.gitignore` controls, and the file-read API now distinguishes binary files from editable text.
 - ✅ The backend now exposes project-scoped filename and content search commands for the sidebar search entrypoint.

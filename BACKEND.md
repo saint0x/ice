@@ -41,7 +41,6 @@ Rules for this checklist:
 - [ ] Publish a typed shared contract for project, tree, git, browser, terminal, Codex, and approval payloads.
 - [ ] Keep pressure on frontend integration to remove remaining local-only helper mutations so backend state stays canonical across startup and runtime.
 - [ ] Finish wiring the richer git backend surface into the frontend beyond the first production mutation pass, especially log/history exploration.
-- [ ] Expose canonical Codex per-thread turn/message history so frontend chat surfaces can stop rendering summary-only thread views.
 - [ ] Finish frontend integration of the richer terminal backend surface beyond resize/respawn/rename, especially more explicit session diagnostics actions.
 - [ ] Replace the current iframe-host browser fallback path with the final native renderer implementation while preserving the existing browser bridge contracts.
 
@@ -63,7 +62,7 @@ Rules for this checklist:
 
 ### Persistence
 
-- ✅ SQLite persistence exists for projects, workspace layouts, workspace sessions, browser tabs, browser history, terminal sessions, Codex threads, Codex approvals, and app config in [db.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/persistence/db.rs).
+- ✅ SQLite persistence exists for projects, workspace layouts, workspace sessions, browser tabs, browser history, terminal sessions, Codex threads, Codex messages, Codex approvals, and app config in [db.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/persistence/db.rs).
 - ✅ Schema versioning now exists through `schema_metadata`, with a canonical backend schema version recorded during startup migrations in [db.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/persistence/db.rs).
 - ✅ Browser tab metadata and navigation history are persisted locally.
 - ✅ Terminal session metadata is persisted locally, including `is_running`.
@@ -118,6 +117,7 @@ Rules for this checklist:
 - ✅ The current frontend now uses backend git branch/fetch/pull/push controls and backend terminal rename/session actions instead of placeholder shell chrome.
 - ✅ The current frontend now uses backend branch creation plus upstream-aware publish/push flows instead of leaving those git capabilities stranded behind IPC only.
 - ✅ The current frontend now uses backend whole-tree git diff reads and backend terminal scrollback/session metadata for richer dock diagnostics instead of placeholder-only shell state.
+- ✅ The backend now persists canonical Codex per-thread message history in SQLite, exposes it through `codex_thread_messages_list`, and emits live `messageUpserted` events that the frontend uses for real multi-turn conversation rendering.
 
 ### Terminal
 

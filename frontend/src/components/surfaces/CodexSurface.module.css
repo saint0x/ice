@@ -206,6 +206,11 @@
   padding-top: 5px;
 }
 
+.streamingLabel {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
 /* ══════════════════════════════════════════
    INPUT
    ══════════════════════════════════════════ */

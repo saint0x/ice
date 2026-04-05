@@ -112,6 +112,18 @@ export interface CodexThread {
   status: 'idle' | 'running' | 'waiting_approval' | 'waitingApproval' | 'error' | 'disconnected'
 }
 
+export interface CodexMessage {
+  id: string
+  threadId: ThreadId
+  projectId: ProjectId
+  turnId?: string
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  state: 'streaming' | 'complete'
+  createdAt: string
+  updatedAt: string
+}
+
 export interface CodexApproval {
   id: string
   threadId: ThreadId

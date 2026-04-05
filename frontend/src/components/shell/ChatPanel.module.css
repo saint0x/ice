@@ -198,6 +198,11 @@
   padding-top: 5px;
 }
 
+.streamingLabel {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
 .spinner {
   animation: spin 1s linear infinite;
 }

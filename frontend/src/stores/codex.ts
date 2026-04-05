@@ -1,16 +1,19 @@
 import { create } from 'zustand'
-import type { CodexThread, CodexApproval, ThreadId, ProjectId } from '@/types'
+import type { CodexThread, CodexApproval, CodexMessage, ThreadId, ProjectId } from '@/types'
 
 interface CodexState {
   threads: Map<ThreadId, CodexThread>
   approvals: CodexApproval[]
   activeThreadId: Map<ProjectId, ThreadId | null>
+  messagesByThread: Map<ThreadId, CodexMessage[]>
 
   hydrateThreads: (threads: CodexThread[]) => void
   hydrateApprovals: (approvals: CodexApproval[]) => void
+  hydrateMessages: (threadId: ThreadId, messages: CodexMessage[]) => void
   addThread: (thread: CodexThread) => void
   setActiveThread: (projectId: ProjectId, threadId: ThreadId) => void
   updateThread: (threadId: ThreadId, patch: Partial<CodexThread>) => void
+  upsertMessage: (message: CodexMessage) => void
   addApproval: (approval: CodexApproval) => void
   resolveApproval: (id: string) => void
   clearUnread: (threadId: ThreadId) => void
@@ -20,6 +23,7 @@ export const useCodexStore = create<CodexState>((set) => ({
   threads: new Map(),
   approvals: [],
   activeThreadId: new Map(),
+  messagesByThread: new Map(),
 
   hydrateThreads: (threads) =>
     set((s) => {
@@ -40,6 +44,13 @@ export const useCodexStore = create<CodexState>((set) => ({
     }),
 
   hydrateApprovals: (approvals) => set({ approvals }),
+
+  hydrateMessages: (threadId, messages) =>
+    set((s) => {
+      const messagesByThread = new Map(s.messagesByThread)
+      messagesByThread.set(threadId, messages)
+      return { messagesByThread }
+    }),
 
   addThread: (thread) =>
     set((s) => {
@@ -67,6 +78,24 @@ export const useCodexStore = create<CodexState>((set) => ({
       if (!thread) return s
       threads.set(threadId, { ...thread, ...patch })
       return { threads }
+    }),
+
+  upsertMessage: (message) =>
+    set((s) => {
+      const messagesByThread = new Map(s.messagesByThread)
+      const current = messagesByThread.get(message.threadId) ?? []
+      const index = current.findIndex((entry) => entry.id === message.id)
+      const next = [...current]
+      if (index >= 0) {
+        next[index] = message
+      } else {
+        next.push(message)
+      }
+      next.sort((left, right) =>
+        left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id),
+      )
+      messagesByThread.set(message.threadId, next)
+      return { messagesByThread }
     }),
 
   addApproval: (approval) =>

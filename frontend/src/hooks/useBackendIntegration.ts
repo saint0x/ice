@@ -3,6 +3,7 @@ import {
   appBootstrap,
   browserTabsList,
   codexApprovalsList,
+  codexThreadMessagesList,
   codexThreadsList,
   gitStatusRead,
   listenBrowserEvents,
@@ -17,6 +18,7 @@ import {
   terminalScrollbackRead,
   toBrowserTab,
   toCodexApproval,
+  toCodexMessage,
   toCodexThread,
   toFileTree,
   toGitState,
@@ -60,8 +62,10 @@ export function useBackendIntegration() {
   const closeSession = useTerminalStore((state) => state.closeSession)
   const hydrateThreads = useCodexStore((state) => state.hydrateThreads)
   const hydrateApprovals = useCodexStore((state) => state.hydrateApprovals)
+  const hydrateMessages = useCodexStore((state) => state.hydrateMessages)
   const addThread = useCodexStore((state) => state.addThread)
   const updateThread = useCodexStore((state) => state.updateThread)
+  const upsertMessage = useCodexStore((state) => state.upsertMessage)
   const addApproval = useCodexStore((state) => state.addApproval)
   const resolveApproval = useCodexStore((state) => state.resolveApproval)
   const hydrateWorkspace = useWorkspaceStore((state) => state.hydrateWorkspace)
@@ -112,6 +116,14 @@ export function useBackendIntegration() {
       hydrateSessions(terminalSessions.map(toTerminalSession))
       hydrateThreads(codexThreads.map(toCodexThread))
       hydrateApprovals(pendingApprovals.map(toCodexApproval))
+      await Promise.all(
+        codexThreads.map(async (thread) => {
+          const history = await codexThreadMessagesList(thread.threadId)
+          if (!disposed) {
+            hydrateMessages(thread.threadId, history.map(toCodexMessage))
+          }
+        }),
+      )
       await Promise.all(
         terminalSessions.map(async (session) => {
           const scrollback = await terminalScrollbackRead(session.sessionId)
@@ -208,6 +220,10 @@ export function useBackendIntegration() {
         }
         return
       }
+      if (payload.type === 'messageUpserted' && payload.message) {
+        upsertMessage(toCodexMessage(payload.message))
+        return
+      }
       if (payload.type === 'approvalPending' && payload.approval) {
         addApproval(toCodexApproval(payload.approval))
         return
@@ -230,7 +246,7 @@ export function useBackendIntegration() {
         void projectWatchStop(projectId)
       }
     }
-  }, [addApproval, addThread, appendScrollback, closeBrowserTab, closeSession, hydrateApprovals, hydrateBrowserTabs, hydrateGitState, hydrateProjects, hydrateSessions, hydrateThreads, hydrateTree, hydrateWorkspace, resolveApproval, setScrollback, updateProject, updateThread, upsertBrowserTab, upsertSession])
+  }, [addApproval, addThread, appendScrollback, closeBrowserTab, closeSession, hydrateApprovals, hydrateBrowserTabs, hydrateGitState, hydrateMessages, hydrateProjects, hydrateSessions, hydrateThreads, hydrateTree, hydrateWorkspace, resolveApproval, setScrollback, updateProject, updateThread, upsertBrowserTab, upsertMessage, upsertSession])
 
   useEffect(() => {
     if (!hydratedRef.current) return

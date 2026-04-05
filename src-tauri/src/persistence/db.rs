@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use crate::browser::service::{BrowserHistoryEntry, BrowserTabRecord};
-use crate::codex::service::CodexThreadBinding;
+use crate::codex::service::{CodexMessageRecord, CodexThreadBinding};
 use crate::projects::models::ProjectRecord;
 use crate::security::approvals::{ApprovalAuditRecord, PendingApprovalRecord};
 use crate::terminal::service::TerminalSessionRecord;
@@ -71,6 +71,17 @@ impl PersistenceService {
               model TEXT,
               status TEXT NOT NULL,
               last_turn_id TEXT,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS codex_messages (
+              message_id TEXT PRIMARY KEY,
+              project_id TEXT NOT NULL,
+              thread_id TEXT NOT NULL,
+              turn_id TEXT,
+              role TEXT NOT NULL,
+              content TEXT NOT NULL,
+              state TEXT NOT NULL,
               created_at TEXT NOT NULL,
               updated_at TEXT NOT NULL
             );
@@ -434,10 +445,161 @@ impl PersistenceService {
         Ok(())
     }
 
+    #[cfg(test)]
+    pub fn load_codex_messages_sync(&self) -> Result<Vec<CodexMessageRecord>> {
+        let conn = self.connect()?;
+        let mut stmt = conn.prepare(
+            "
+            SELECT message_id, project_id, thread_id, turn_id, role, content, state, created_at, updated_at
+            FROM codex_messages
+            ORDER BY created_at ASC, rowid ASC
+            ",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(CodexMessageRecord {
+                message_id: row.get(0)?,
+                project_id: row.get(1)?,
+                thread_id: row.get(2)?,
+                turn_id: row.get(3)?,
+                role: row.get(4)?,
+                content: row.get(5)?,
+                state: row.get(6)?,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
+            })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    pub async fn list_codex_messages_for_thread(
+        &self,
+        thread_id: String,
+    ) -> Result<Vec<CodexMessageRecord>> {
+        let this = self.clone();
+        tokio::task::spawn_blocking(move || -> Result<Vec<CodexMessageRecord>> {
+            let conn = this.connect()?;
+            let mut stmt = conn.prepare(
+                "
+                SELECT message_id, project_id, thread_id, turn_id, role, content, state, created_at, updated_at
+                FROM codex_messages
+                WHERE thread_id = ?1
+                ORDER BY created_at ASC, rowid ASC
+                ",
+            )?;
+            let rows = stmt.query_map(params![thread_id], |row| {
+                Ok(CodexMessageRecord {
+                    message_id: row.get(0)?,
+                    project_id: row.get(1)?,
+                    thread_id: row.get(2)?,
+                    turn_id: row.get(3)?,
+                    role: row.get(4)?,
+                    content: row.get(5)?,
+                    state: row.get(6)?,
+                    created_at: row.get(7)?,
+                    updated_at: row.get(8)?,
+                })
+            })?;
+            Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+        })
+        .await?
+    }
+
+    pub async fn upsert_codex_message(
+        &self,
+        message: CodexMessageRecord,
+    ) -> Result<CodexMessageRecord> {
+        let this = self.clone();
+        tokio::task::spawn_blocking(move || -> Result<CodexMessageRecord> {
+            let conn = this.connect()?;
+            conn.execute(
+                "
+                INSERT INTO codex_messages (message_id, project_id, thread_id, turn_id, role, content, state, created_at, updated_at)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, datetime('now'))
+                ON CONFLICT(message_id) DO UPDATE SET
+                  project_id = excluded.project_id,
+                  thread_id = excluded.thread_id,
+                  turn_id = excluded.turn_id,
+                  role = excluded.role,
+                  content = excluded.content,
+                  state = excluded.state,
+                  updated_at = excluded.updated_at
+                ",
+                params![
+                    message.message_id,
+                    message.project_id,
+                    message.thread_id,
+                    message.turn_id,
+                    message.role,
+                    message.content,
+                    message.state,
+                    message.created_at,
+                ],
+            )?;
+            read_codex_message_by_id(&conn, &message.message_id)
+        })
+        .await?
+    }
+
+    pub async fn apply_codex_message_update(
+        &self,
+        update: crate::codex::service::CodexMessageUpdate,
+    ) -> Result<CodexMessageRecord> {
+        let this = self.clone();
+        tokio::task::spawn_blocking(move || -> Result<CodexMessageRecord> {
+            let conn = this.connect()?;
+            let existing = read_codex_message_optional(&conn, &update.message_id)?;
+            let next_content = if update.append {
+                format!(
+                    "{}{}",
+                    existing
+                        .as_ref()
+                        .map(|message| message.content.as_str())
+                        .unwrap_or(""),
+                    update.content
+                )
+            } else {
+                update.content.clone()
+            };
+            conn.execute(
+                "
+                INSERT INTO codex_messages (message_id, project_id, thread_id, turn_id, role, content, state, created_at, updated_at)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, datetime('now'))
+                ON CONFLICT(message_id) DO UPDATE SET
+                  project_id = excluded.project_id,
+                  thread_id = excluded.thread_id,
+                  turn_id = excluded.turn_id,
+                  role = excluded.role,
+                  content = excluded.content,
+                  state = excluded.state,
+                  updated_at = excluded.updated_at
+                ",
+                params![
+                    update.message_id,
+                    update.project_id,
+                    update.thread_id,
+                    update.turn_id,
+                    update.role,
+                    next_content,
+                    update.state,
+                    existing
+                        .as_ref()
+                        .map(|message| message.created_at.clone())
+                        .unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
+                ],
+            )?;
+            read_codex_message_by_id(&conn, &update.message_id)
+        })
+        .await?
+    }
+
     pub async fn delete_codex_threads_for_project(&self, project_id: String) -> Result<()> {
         let this = self.clone();
         tokio::task::spawn_blocking(move || -> Result<()> {
             let conn = this.connect()?;
+            conn.execute(
+                "DELETE FROM codex_messages WHERE project_id = ?1",
+                params![project_id.clone()],
+            )?;
             conn.execute(
                 "DELETE FROM codex_threads WHERE project_id = ?1",
                 params![project_id],
@@ -1123,11 +1285,45 @@ fn write_schema_version(conn: &Connection, version: i64) -> Result<()> {
     Ok(())
 }
 
+fn read_codex_message_optional(
+    conn: &Connection,
+    message_id: &str,
+) -> Result<Option<CodexMessageRecord>> {
+    conn.query_row(
+        "
+        SELECT message_id, project_id, thread_id, turn_id, role, content, state, created_at, updated_at
+        FROM codex_messages
+        WHERE message_id = ?1
+        ",
+        params![message_id],
+        |row| {
+            Ok(CodexMessageRecord {
+                message_id: row.get(0)?,
+                project_id: row.get(1)?,
+                thread_id: row.get(2)?,
+                turn_id: row.get(3)?,
+                role: row.get(4)?,
+                content: row.get(5)?,
+                state: row.get(6)?,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
+            })
+        },
+    )
+    .optional()
+    .map_err(Into::into)
+}
+
+fn read_codex_message_by_id(conn: &Connection, message_id: &str) -> Result<CodexMessageRecord> {
+    read_codex_message_optional(conn, message_id)?
+        .ok_or_else(|| anyhow::anyhow!("missing codex message {}", message_id))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{PersistenceService, CURRENT_SCHEMA_VERSION};
     use crate::browser::service::{BrowserHistoryEntry, BrowserTabRecord};
-    use crate::codex::service::CodexThreadBinding;
+    use crate::codex::service::{CodexMessageRecord, CodexThreadBinding};
     use crate::security::approvals::PendingApprovalRecord;
     use crate::terminal::service::TerminalSessionRecord;
     use crate::workspace::service::{
@@ -1284,6 +1480,26 @@ mod tests {
             vec![thread]
         );
 
+        let message = CodexMessageRecord {
+            message_id: "message-1".to_string(),
+            project_id: "project-a".to_string(),
+            thread_id: "thread-1".to_string(),
+            turn_id: Some("turn-1".to_string()),
+            role: "assistant".to_string(),
+            content: "Full response".to_string(),
+            state: "complete".to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            updated_at: "2026-01-01T00:00:00Z".to_string(),
+        };
+        let persisted_message = db
+            .upsert_codex_message(message)
+            .await
+            .expect("codex message write");
+        assert_eq!(
+            db.load_codex_messages_sync().expect("codex message read"),
+            vec![persisted_message]
+        );
+
         db.config_set("storage.root".to_string(), json!("/tmp/.ice"))
             .await
             .expect("config write");
@@ -1353,6 +1569,10 @@ mod tests {
         assert!(db
             .load_codex_threads_sync()
             .expect("codex empty")
+            .is_empty());
+        assert!(db
+            .load_codex_messages_sync()
+            .expect("codex messages empty")
             .is_empty());
         assert!(db
             .load_pending_approvals_sync()
