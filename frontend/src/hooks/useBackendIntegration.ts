@@ -26,6 +26,7 @@ import {
   toCodexThread,
   toFileTree,
   toGitState,
+  toGitMutationEvent,
   toProject,
   toTerminalSession,
   toWorkspaceChromePersist,
@@ -56,6 +57,7 @@ export function useBackendIntegration() {
   const updateProject = useProjectsStore((state) => state.updateProject)
   const hydrateTree = useFilesStore((state) => state.hydrateTree)
   const hydrateGitState = useGitStore((state) => state.hydrateGitState)
+  const recordGitMutation = useGitStore((state) => state.recordMutation)
   const hydrateBrowserTabs = useBrowserStore((state) => state.hydrateTabs)
   const hydrateBrowserSidebarItems = useBrowserStore((state) => state.hydrateSidebarItems)
   const upsertBrowserTab = useBrowserStore((state) => state.upsertTab)
@@ -189,6 +191,10 @@ export function useBackendIntegration() {
       if (!payload.summary) return
       hydrateGitState(payload.projectId, toGitState(payload.summary))
       updateProject(payload.projectId, { branch: payload.summary.branch ?? 'detached' })
+      const mutation = toGitMutationEvent(payload)
+      if (mutation) {
+        recordGitMutation(mutation)
+      }
     }).then((unlisten) => {
       gitUnlisten = unlisten
     })
@@ -285,7 +291,7 @@ export function useBackendIntegration() {
         void projectWatchStop(projectId)
       }
     }
-  }, [addApproval, addThread, appendScrollback, clearScrollback, closeBrowserTab, closeSession, hydrateApprovals, hydrateBrowserSidebarItems, hydrateBrowserTabs, hydrateCodexSidebarItems, hydrateGitState, hydrateMessages, hydrateProjects, hydrateSessions, hydrateThreads, hydrateTree, hydrateWorkspace, resolveApproval, setScrollback, updateProject, updateThread, upsertBrowserTab, upsertMessage, upsertSession])
+  }, [addApproval, addThread, appendScrollback, clearScrollback, closeBrowserTab, closeSession, hydrateApprovals, hydrateBrowserSidebarItems, hydrateBrowserTabs, hydrateCodexSidebarItems, hydrateGitState, hydrateMessages, hydrateProjects, hydrateSessions, hydrateThreads, hydrateTree, hydrateWorkspace, recordGitMutation, resolveApproval, setScrollback, updateProject, updateThread, upsertBrowserTab, upsertMessage, upsertSession])
 
   useEffect(() => {
     if (!hydratedRef.current) return

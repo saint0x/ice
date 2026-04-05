@@ -73,6 +73,38 @@ export interface GitState {
   behind: number
 }
 
+export type GitMutationAction =
+  | 'stage'
+  | 'unstage'
+  | 'restore'
+  | 'commit'
+  | 'checkout'
+  | 'fetch'
+  | 'pull'
+  | 'push'
+
+export interface GitMutationContext {
+  paths?: string[]
+  staged?: boolean
+  worktree?: boolean
+  branchName?: string
+  createdBranch?: boolean
+  startPoint?: string
+  remote?: string
+  branch?: string
+  setUpstream?: boolean
+  commitMessage?: string
+}
+
+export interface GitMutationEvent {
+  type: 'mutationCompleted'
+  projectId: ProjectId
+  action: GitMutationAction
+  context: GitMutationContext
+  summary: GitState
+  receivedAt: string
+}
+
 export interface BrowserTab {
   id: string
   projectId: ProjectId

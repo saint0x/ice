@@ -181,6 +181,48 @@
   font-size: var(--text-xs);
 }
 
+.mutationBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px var(--sp-5);
+  background: color-mix(in srgb, var(--color-info) 10%, var(--bg-surface));
+  border-bottom: 1px solid color-mix(in srgb, var(--color-info) 22%, transparent);
+}
+
+.mutationCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.mutationTitle {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.mutationDetail {
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.mutationDismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: var(--bg-element);
+  color: var(--text-primary);
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
 .modeBar {
   display: flex;
   gap: 8px;

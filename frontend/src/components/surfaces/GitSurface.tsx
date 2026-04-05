@@ -2,7 +2,7 @@ import { memo, useEffect, useMemo, useState } from 'react'
 import {
   GitBranch, ArrowUp, ArrowDown, Circle, Plus, Minus, Check, Loader2, RotateCcw, ArrowUpToLine, ArrowDownToLine, AlertTriangle, RefreshCcw, CloudDownload, CloudUpload, GitCommitHorizontal, History, FileCode2,
 } from 'lucide-react'
-import type { Tab } from '@/types'
+import type { GitMutationEvent, Tab } from '@/types'
 import {
   gitBranchCheckout,
   gitBranchesList,
@@ -47,6 +47,7 @@ const STATUS_COLOR: Record<string, string> = {
 
 export const GitSurface = memo(function GitSurface({ tab }: Props) {
   const state = useGitStore((s) => s.gitState.get(tab.projectId))
+  const lastMutation = useGitStore((s) => s.lastMutation.get(tab.projectId))
   const hydrateGitState = useGitStore((s) => s.hydrateGitState)
   const [commitMessage, setCommitMessage] = useState('')
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
@@ -77,6 +78,7 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
     activeHooks: string[]
   } | null>(null)
   const [surfaceError, setSurfaceError] = useState<string | null>(null)
+  const [dismissedMutationAt, setDismissedMutationAt] = useState<string | null>(null)
   const [historyEntries, setHistoryEntries] = useState<Array<{
     commit: string
     shortCommit: string
@@ -213,6 +215,17 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
   }, [state, tab.projectId, viewMode])
 
   useEffect(() => {
+    if (!lastMutation) return
+    if (lastMutation.action === 'commit') {
+      setViewMode('history')
+    }
+    if (lastMutation.action === 'checkout') {
+      setSelectedHistoryCommit(null)
+      setSelectedCommitDiff('')
+    }
+  }, [lastMutation])
+
+  useEffect(() => {
     if (viewMode !== 'history' || !selectedHistoryCommit) {
       setSelectedCommitDiff('')
       return
@@ -256,6 +269,10 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
     staged.length === 0 ||
     !readiness?.authorConfigured ||
     !readiness?.commitMessageValid
+
+  const visibleMutation = lastMutation && lastMutation.receivedAt !== dismissedMutationAt
+    ? lastMutation
+    : null
 
   const applySummary = (summary: Awaited<ReturnType<typeof gitStagePaths>>) => {
     hydrateGitState(tab.projectId, toGitState(summary))
@@ -441,6 +458,21 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
           <span>{surfaceError}</span>
         </div>
       )}
+      {visibleMutation ? (
+        <div className={styles.mutationBanner}>
+          <div className={styles.mutationCopy}>
+            <span className={styles.mutationTitle}>{formatMutationTitle(visibleMutation.action)}</span>
+            <span className={styles.mutationDetail}>{formatMutationDetail(visibleMutation)}</span>
+          </div>
+          <button
+            className={styles.mutationDismiss}
+            type="button"
+            onClick={() => setDismissedMutationAt(visibleMutation.receivedAt)}
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
       <div className={styles.modeBar}>
         <button
           className={`${styles.modeBtn} ${viewMode === 'changes' ? styles.modeBtnActive : ''}`}
@@ -671,6 +703,62 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
     </div>
   )
 })
+
+function formatMutationTitle(action: string) {
+  switch (action) {
+    case 'stage':
+      return 'Staged changes'
+    case 'unstage':
+      return 'Unstaged changes'
+    case 'restore':
+      return 'Restored changes'
+    case 'commit':
+      return 'Commit created'
+    case 'checkout':
+      return 'Checked out branch'
+    case 'fetch':
+      return 'Fetched remote refs'
+    case 'pull':
+      return 'Pulled latest changes'
+    case 'push':
+      return 'Pushed branch state'
+    default:
+      return 'Git state updated'
+  }
+}
+
+function formatMutationDetail(event: GitMutationEvent) {
+  const { action, context, summary } = event
+  const pathCount = context.paths?.length ?? 0
+  switch (action) {
+    case 'stage':
+    case 'unstage':
+    case 'restore':
+      return pathCount > 0
+        ? `${pathCount} path${pathCount === 1 ? '' : 's'} affected on ${summary.branch}.`
+        : `Working tree updated on ${summary.branch}.`
+    case 'commit':
+      return context.commitMessage
+        ? `"${context.commitMessage}" on ${summary.branch}.`
+        : `Commit completed on ${summary.branch}.`
+    case 'checkout':
+      return context.branchName
+        ? `${context.branchName}${context.createdBranch ? ' created and checked out' : ' is now active'}.`
+        : `Branch switched to ${summary.branch}.`
+    case 'fetch':
+      return summary.behind > 0
+        ? `${summary.behind} incoming commit${summary.behind === 1 ? '' : 's'} available on ${summary.branch}.`
+        : `Remote refs refreshed for ${summary.branch}.`
+    case 'pull':
+      return `Branch ${summary.branch} is now up to date locally.`
+    case 'push':
+      return context.setUpstream
+        ? `Published ${summary.branch} and set upstream tracking.`
+        : `Pushed ${summary.branch} to its upstream.`
+    default:
+      return `Branch ${summary.branch} refreshed.`
+  }
+}
 
 function formatHistoryTime(value: string) {
   const date = new Date(value)

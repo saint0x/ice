@@ -88,6 +88,7 @@ Rules for this checklist:
 - ✅ Whole-tree staged and unstaged diff payload reads now exist alongside per-file diffs through `git_diff_tree_read`.
 - ✅ Commit readiness now exposes author config, commit-message validation, hooks path, and active hooks so the frontend can explain blocked commits before execution.
 - ✅ Structured git mutation events now emit through `app://git` as `mutationCompleted`, with typed action/context payloads for stage, unstage, restore, commit, checkout, fetch, pull, and push outcomes.
+- ✅ The current frontend now consumes those structured `mutationCompleted` git events directly, so the Git surface reflects concrete backend mutation outcomes instead of inferring intent from status-only refreshes.
 - ✅ Native git history and commit-show contracts now exist through typed backend commands, so the frontend can render real recent commits and inspect commit diffs without shelling out locally.
 - ✅ The frontend now also uses backend file search, health/runtime diagnostics, approval audit, and project snapshot contracts for existing utility tabs and quick actions instead of decorative-only project controls.
 

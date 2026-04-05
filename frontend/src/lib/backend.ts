@@ -4,6 +4,9 @@ import type {
   BrowserTab,
   CodexApproval,
   CodexMessage,
+  GitMutationAction,
+  GitMutationContext,
+  GitMutationEvent,
   ProjectBrowserSidebarItem,
   ProjectCodexSidebarItem,
   CodexThread,
@@ -175,6 +178,8 @@ interface WorkspaceSessionPersistDto {
 interface GitEventPayload {
   type: string
   projectId: string
+  action?: GitMutationAction
+  context?: GitMutationContext
   summary?: GitStatusSummaryDto
 }
 
@@ -812,6 +817,20 @@ export function toGitState(dto: GitStatusSummaryDto): GitState {
     ahead: dto.ahead,
     behind: dto.behind,
     changes: dto.changes,
+  }
+}
+
+export function toGitMutationEvent(payload: GitEventPayload): GitMutationEvent | null {
+  if (payload.type !== 'mutationCompleted' || !payload.summary || !payload.action) {
+    return null
+  }
+  return {
+    type: 'mutationCompleted',
+    projectId: payload.projectId,
+    action: payload.action,
+    context: payload.context ?? {},
+    summary: toGitState(payload.summary),
+    receivedAt: new Date().toISOString(),
   }
 }
 

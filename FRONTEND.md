@@ -21,8 +21,6 @@ Rules for this checklist:
 
 ### Git
 
-- [ ] Subscribe to `app://git` `mutationCompleted` events so the UI can distinguish stage, unstage, restore, commit, checkout, fetch, pull, and push outcomes without inferring intent from a generic status refresh.
-
 ### Browser
 
 - [ ] Improve renderer metadata capture beyond the current native-host URL/loading/title/favicon sync, especially blocked-frame fallbacks.
@@ -92,6 +90,7 @@ Rules for this checklist:
 - ✅ The existing title-bar and project utility actions now open real backend-backed workbench tabs for files, project search, diagnostics, and debug state instead of decorative placeholders.
 - ✅ Demo/default startup entities have been removed from project, git, terminal, Codex, and workspace stores so the shell now waits for canonical backend hydration instead of rendering fake placeholder state.
 - ✅ The Git surface now stages, unstages, restores, reads diffs, and commits through backend git IPC with commit-readiness feedback instead of placeholder-only controls.
+- ✅ The Git surface now consumes backend `app://git` `mutationCompleted` events so exact stage, unstage, restore, commit, checkout, fetch, pull, and push outcomes are reflected as real mutation feedback instead of a generic refresh.
 - ✅ Codex surfaces now have real thread selection, unread clearing, approval execution, and stronger runtime-status presentation without inventing fake history the backend does not persist.
 - ✅ Codex surfaces and the chat panel now share one production conversation renderer, keep approval context structured, render real live streaming updates, and expose expandable request details instead of flattening approval payloads into generic text.
 - ✅ Terminal surfaces now keep xterm mounted across scrollback updates, send resize back to the backend PTY, and expose explicit respawn UI instead of silently restarting dead sessions.
