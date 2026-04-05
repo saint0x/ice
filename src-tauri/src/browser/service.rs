@@ -364,6 +364,7 @@ impl BrowserService {
             &native_webview_label,
             WebviewUrl::External(parse_browser_url(&record.url)?),
         )
+        .initialization_script(browser_runtime_init_script(tab_id))
         .on_navigation(move |url| {
             navigation_service.handle_native_navigation(&navigation_tab_id, url.clone());
             true
@@ -481,6 +482,17 @@ impl BrowserService {
             .get(tab_id)
             .cloned()
             .ok_or_else(|| anyhow!("no renderer session attached"))?;
+        let webview = self
+            .app
+            .get_webview(&session.native_webview_label)
+            .ok_or_else(|| anyhow!("native browser renderer not found"))?;
+        let eval_script = format!(
+            "window.__ICE_BROWSER__?.findInPage({query}, {forward}, {find_next});",
+            query = serde_json::to_string(&query)?,
+            forward = if forward { "true" } else { "false" },
+            find_next = if find_next { "true" } else { "false" },
+        );
+        webview.eval(eval_script)?;
         let _ = self.app.emit(
             BROWSER_EVENT,
             serde_json::json!({
@@ -909,6 +921,158 @@ fn parse_browser_url(value: &str) -> Result<url::Url> {
         return Ok(url);
     }
     url::Url::parse(&format!("https://{value}")).map_err(Into::into)
+}
+
+fn browser_runtime_init_script(tab_id: &str) -> String {
+    let tab_id = serde_json::to_string(tab_id).unwrap_or_else(|_| "\"\"".to_string());
+    format!(
+        r#"
+(() => {{
+  const TAB_ID = {tab_id};
+  const invoke = (command, args) => {{
+    try {{
+      return window.__TAURI_INTERNALS__.invoke(command, args).catch(() => null);
+    }} catch (_) {{
+      return Promise.resolve(null);
+    }}
+  }};
+
+  const absoluteHref = (href) => {{
+    if (!href) return null;
+    try {{
+      return new URL(href, window.location.href).toString();
+    }} catch (_) {{
+      return null;
+    }}
+  }};
+
+  const reportMetadata = () => {{
+    const icon = Array.from(document.querySelectorAll('link[rel~="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"]'))
+      .map((node) => absoluteHref(node.getAttribute('href')))
+      .find(Boolean) ?? null;
+    return invoke('browser_tab_renderer_state_set', {{
+      input: {{
+        tabId: TAB_ID,
+        url: window.location.href,
+        title: document.title || undefined,
+        faviconUrl: icon,
+        securityOrigin: window.location.origin || null,
+        isSecure: window.location.protocol === 'https:' || window.location.protocol === 'about:' || window.location.protocol === 'tauri:'
+      }}
+    }});
+  }};
+
+  const browserState = {{
+    query: '',
+    ranges: [],
+    activeIndex: -1
+  }};
+
+  const selectRange = (range) => {{
+    const selection = window.getSelection();
+    if (!selection) return;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    const element = range.startContainer.parentElement;
+    if (element && typeof element.scrollIntoView === 'function') {{
+      element.scrollIntoView({{ block: 'center', inline: 'nearest', behavior: 'smooth' }});
+    }}
+  }};
+
+  const collectRanges = (query) => {{
+    if (!document.body || !query) return [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {{
+      acceptNode(node) {{
+        const parent = node.parentElement;
+        if (!parent) return NodeFilter.FILTER_REJECT;
+        const tag = parent.tagName;
+        if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT' || tag === 'TEXTAREA') {{
+          return NodeFilter.FILTER_REJECT;
+        }}
+        const value = node.nodeValue ?? '';
+        return value.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+      }}
+    }});
+    const needle = query.toLowerCase();
+    const ranges = [];
+    while (walker.nextNode()) {{
+      const node = walker.currentNode;
+      const haystack = (node.nodeValue ?? '').toLowerCase();
+      let fromIndex = 0;
+      while (fromIndex < haystack.length) {{
+        const index = haystack.indexOf(needle, fromIndex);
+        if (index === -1) break;
+        const range = document.createRange();
+        range.setStart(node, index);
+        range.setEnd(node, index + query.length);
+        ranges.push(range);
+        fromIndex = index + query.length;
+      }}
+    }}
+    return ranges;
+  }};
+
+  const reportFindResult = (query, matches, activeMatchOrdinal) => invoke('browser_find_in_page_report', {{
+    input: {{
+      tabId: TAB_ID,
+      query,
+      matches,
+      activeMatchOrdinal,
+      finalUpdate: true
+    }}
+  }});
+
+  window.__ICE_BROWSER__ = {{
+    reportMetadata,
+    findInPage(query, forward = true, findNext = false) {{
+      const normalizedQuery = String(query ?? '').trim();
+      if (!normalizedQuery) {{
+        browserState.query = '';
+        browserState.ranges = [];
+        browserState.activeIndex = -1;
+        return reportFindResult('', 0, 0);
+      }}
+      if (browserState.query !== normalizedQuery || !findNext) {{
+        browserState.query = normalizedQuery;
+        browserState.ranges = collectRanges(normalizedQuery);
+        browserState.activeIndex = browserState.ranges.length > 0 ? 0 : -1;
+      }} else if (browserState.ranges.length > 0) {{
+        const delta = forward ? 1 : -1;
+        browserState.activeIndex =
+          (browserState.activeIndex + delta + browserState.ranges.length) % browserState.ranges.length;
+      }}
+      if (browserState.activeIndex >= 0 && browserState.ranges[browserState.activeIndex]) {{
+        selectRange(browserState.ranges[browserState.activeIndex]);
+      }}
+      return reportFindResult(
+        normalizedQuery,
+        browserState.ranges.length,
+        browserState.activeIndex >= 0 ? browserState.activeIndex + 1 : 0
+      );
+    }}
+  }};
+
+  const observer = new MutationObserver(() => {{
+    void reportMetadata();
+  }});
+  const watchMetadata = () => {{
+    if (document.head) {{
+      observer.observe(document.head, {{ childList: true, subtree: true, attributes: true }});
+    }}
+  }};
+  if (document.readyState === 'loading') {{
+    document.addEventListener('DOMContentLoaded', () => {{
+      watchMetadata();
+      void reportMetadata();
+    }}, {{ once: true }});
+  }} else {{
+    watchMetadata();
+    void reportMetadata();
+  }}
+  window.addEventListener('load', () => void reportMetadata());
+}})();
+"#,
+    )
 }
 
 #[cfg(test)]

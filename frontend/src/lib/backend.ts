@@ -247,6 +247,8 @@ interface BrowserEventPayload {
   type: string
   tab?: BrowserTabDto
   tabId?: string
+  result?: BrowserFindInPageResultDto
+  request?: BrowserExternalOpenRequestDto | BrowserDownloadRequestDto
 }
 
 interface BrowserExternalOpenRequestDto {
@@ -280,6 +282,14 @@ interface BrowserFindInPageResultDto {
   matches: number
   activeMatchOrdinal: number
   finalUpdate: boolean
+}
+
+interface BrowserDownloadRequestDto {
+  tabId: string
+  projectId: string
+  url: string
+  suggestedFilename?: string | null
+  mimeType?: string | null
 }
 
 export async function appBootstrap() {

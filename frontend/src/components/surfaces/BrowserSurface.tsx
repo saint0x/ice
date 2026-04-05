@@ -6,7 +6,7 @@ import {
   browserRendererBoundsSet,
   browserRendererDetach,
   browserFindInPage,
-  browserFindInPageReport,
+  listenBrowserEvents,
   browserTabBack,
   browserTabForward,
   browserTabNavigate,
@@ -29,6 +29,7 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
   const [draftUrl, setDraftUrl] = useState<string | null>(null)
   const [findQuery, setFindQuery] = useState('')
   const [findResult, setFindResult] = useState<string | null>(null)
+  const [downloadNotice, setDownloadNotice] = useState<string | null>(null)
   const [surfaceError, setSurfaceError] = useState<string | null>(null)
   const viewportRef = useRef<HTMLDivElement>(null)
 
@@ -82,6 +83,34 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
     }
   }, [browserTabId, browserTab?.url])
 
+  useEffect(() => {
+    if (!browserTabId) return
+    let disposed = false
+    let unlisten: (() => void) | undefined
+    void listenBrowserEvents((payload) => {
+      if (disposed) return
+      if (payload.type === 'findInPageResult' && payload.result?.tabId === browserTabId) {
+        setFindResult(
+          payload.result.matches > 0
+            ? `${payload.result.activeMatchOrdinal}/${payload.result.matches} matches`
+            : 'No matches',
+        )
+        return
+      }
+      if (payload.type === 'downloadRequested' && payload.request?.tabId === browserTabId) {
+        const filename = 'suggestedFilename' in payload.request ? payload.request.suggestedFilename : null
+        const label = filename || payload.request.url
+        setDownloadNotice(`Download requested: ${label}`)
+      }
+    }).then((dispose) => {
+      unlisten = dispose
+    })
+    return () => {
+      disposed = true
+      unlisten?.()
+    }
+  }, [browserTabId])
+
   const runFindInPage = async (mode: 'first' | 'next') => {
     if (!browserTabId) return
     const query = findQuery.trim()
@@ -96,14 +125,6 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
       forward: true,
       findNext: mode === 'next',
     })
-    await browserFindInPageReport({
-      tabId: browserTabId,
-      query,
-      matches: 0,
-      activeMatchOrdinal: 0,
-      finalUpdate: true,
-    }).catch(() => {})
-    setFindResult('Native find hooks are next')
   }
 
   return (
@@ -226,6 +247,18 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
           <div className={styles.errorBanner}>
             <AlertTriangle size={12} />
             <span>{surfaceError}</span>
+          </div>
+        )}
+        {downloadNotice && (
+          <div className={styles.downloadBanner}>
+            <span>{downloadNotice}</span>
+            <button
+              className={styles.downloadDismiss}
+              onClick={() => setDownloadNotice(null)}
+              aria-label="Dismiss download notice"
+            >
+              <X size={11} />
+            </button>
           </div>
         )}
         <div

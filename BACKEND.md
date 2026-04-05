@@ -34,7 +34,7 @@ Rules for this checklist:
 
 ### Frontend Contract Support
 
-- [ ] Add deeper native-browser feature coverage on top of the new child-webview host, especially download handling polish, new-window policy, and native find-in-page execution.
+- [ ] Add deeper native-browser feature coverage on top of the new child-webview host, especially download handling polish and stricter new-window policy controls.
 - [ ] Add richer editor conflict-resolution flows on top of the existing version-token backend guard so stale-save errors can be resolved intentionally in the UI.
 - [ ] Publish a typed shared contract for project, tree, git, browser, terminal, Codex, and approval payloads.
 - [ ] Keep pressure on frontend integration to remove remaining local-only helper mutations so backend state stays canonical across startup and runtime.
@@ -102,6 +102,7 @@ Rules for this checklist:
 - ✅ Browser renderer bridge commands now exist for renderer attach/detach, renderer session lookup, find-in-page requests/results, and download requests without coupling the rest of the backend to a specific native browser implementation.
 - ✅ Project-level browser restore policy now exists as backend state, with canonical per-project get/set commands under the project service.
 - ✅ The current frontend now uses the browser renderer bridge for a pane-hosted native child-webview host, with runtime-managed attach/detach and bounds synchronization through backend browser IPC.
+- ✅ Native browser panes now inject a runtime script that reports favicon metadata and executes real in-page text search inside the mounted child webview instead of fabricating search results in the React shell.
 - ✅ The current frontend now also uses the production file IO backend for editor reads and saves, including binary-file detection and optimistic version-token save enforcement.
 - ✅ The current frontend no longer seeds fake startup projects, git state, terminal sessions, Codex threads, or workspace tabs before backend hydration.
 - ✅ The current frontend now uses backend git mutation and readiness commands for stage, unstage, restore, commit, and per-file diff inspection in the Git surface.

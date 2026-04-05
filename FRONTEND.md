@@ -15,13 +15,12 @@ Rules for this checklist:
 - [ ] Add editor search, replace, and project-search UI on top of the now-live backend file read/write/search contracts.
 - [ ] Add whole-tree commit-history or log UX to the Git surface so the frontend fully uses the backend git mutation/readiness APIs.
 - [ ] Add deeper terminal session diagnostics actions on top of the now-live backend lifecycle contract.
-- [ ] Finish native browser find/download UX on top of the new child-webview host instead of the current honest placeholder result path.
+- [ ] Finish native browser download UX on top of the new child-webview host, including action handling beyond the current backend-driven request notice.
 - [ ] Subscribe to backend events for filesystem, git, browser, terminal, and Codex updates instead of relying on local-only mutations.
 - [ ] Persist and hydrate workspace layout from the backend rather than purely local in-memory state.
 - [ ] Keep removing the last local-only helper logic in frontend stores and surfaces so startup and mutations come exclusively from backend truth.
 - [ ] Add whole-tree commit-history or log flows to [GitSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/GitSurface.tsx) on top of the now-live mutation hooks.
 - [ ] Add richer terminal diagnostics actions in the dock once the surface uses the full rename/resize/respawn contract.
-- [ ] Replace the current browser find-in-page placeholder result path with native renderer-backed search behavior.
 
 ### Filesystem / Editor
 
@@ -39,9 +38,8 @@ Rules for this checklist:
 
 ### Browser
 
-- [ ] Improve renderer metadata capture beyond the current native-host URL/loading/title sync, especially favicon, downloads, and blocked-frame fallbacks.
+- [ ] Improve renderer metadata capture beyond the current native-host URL/loading/title/favicon sync, especially downloads and blocked-frame fallbacks.
 - [ ] Add conflict-resolution UX for backend save-token mismatches instead of showing the raw backend error banner.
-- [ ] Route in-page search through a native renderer execution path instead of the current placeholder browser-find reporting result.
 - [ ] Route download intent from the renderer through `browser_download_request` instead of opening ad hoc OS dialogs directly.
 
 ### Terminal
@@ -106,12 +104,13 @@ Rules for this checklist:
 - ✅ Browser tabs now hydrate from backend `browser_tabs_list`, stay live from `app://browser`, and render per-project sidebar rows through [BrowserList.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/sidebar/BrowserList.tsx) plus [browser.ts](/Users/deepsaint/Desktop/ice/frontend/src/stores/browser.ts).
 - ✅ Title bar browser creation and browser-surface address/nav actions now route through backend browser IPC in [TitleBar.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/shell/TitleBar.tsx) and [BrowserSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/BrowserSurface.tsx).
 - ✅ The browser surface is now a pane-hosted native child-webview host that attaches/detaches through the backend browser bridge and syncs runtime bounds through backend IPC.
+- ✅ Browser find-in-page now executes inside the native child-webview runtime and returns real match counts plus active selection state through backend browser events instead of frontend-fabricated results.
 - ✅ The editor surface now reads real file contents from the backend, blocks binary-file text editing, saves through backend `file_write_text`, and honors backend version-token save guards.
 - ✅ Demo/default startup entities have been removed from project, git, terminal, Codex, and workspace stores so the shell now waits for canonical backend hydration instead of rendering fake placeholder state.
 - ✅ The Git surface now stages, unstages, restores, reads diffs, and commits through backend git IPC with commit-readiness feedback instead of placeholder-only controls.
 - ✅ Codex surfaces now have real thread selection, unread clearing, approval execution, and stronger runtime-status presentation without inventing fake history the backend does not persist.
 - ✅ Terminal surfaces now keep xterm mounted across scrollback updates, send resize back to the backend PTY, and expose explicit respawn UI instead of silently restarting dead sessions.
-- ✅ Browser surfaces now route open-external through the backend browser contract, and the native host now drives URL/title/load-state updates back into canonical backend browser state.
+- ✅ Browser surfaces now route open-external through the backend browser contract, and the native host now drives URL/title/load-state/favicon updates back into canonical backend browser state.
 - ✅ Browser sidebar rows and browser-surface chrome now use backend `browser_tab_pin_set` for pinned-tab state instead of local-only affordances.
 - ✅ The browser sidebar now uses backend `project_browser_restore_policy_get/set` for per-project restore behavior instead of keeping restore behavior implicit.
 - ✅ Browser and Codex sidebar sections now consume canonical backend `project_browser_sidebar` and `project_codex_sidebar` projections instead of recomputing those rows from full local stores.
