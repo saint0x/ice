@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
@@ -11,12 +12,14 @@ use tauri::{
 use uuid::Uuid;
 
 use crate::app::events::BROWSER_EVENT;
+use crate::app::state::AppState;
 use crate::persistence::db::PersistenceService;
 use crate::projects::models::ProjectBrowserSidebarItem;
 
 pub struct BrowserService {
     app: AppHandle,
     persistence: Arc<PersistenceService>,
+    browser_root: PathBuf,
     tabs: RwLock<HashMap<String, BrowserTabState>>,
     renderers: RwLock<HashMap<String, BrowserRendererSession>>,
 }
@@ -93,6 +96,9 @@ pub struct BrowserDownloadRequest {
     pub url: String,
     pub suggested_filename: Option<String>,
     pub mime_type: Option<String>,
+    pub destination_path: Option<String>,
+    pub completed: bool,
+    pub success: Option<bool>,
 }
 
 #[derive(Debug, Clone)]
@@ -115,7 +121,11 @@ pub struct BrowserRendererUpdate {
 }
 
 impl BrowserService {
-    pub fn new(app: AppHandle, persistence: Arc<PersistenceService>) -> Self {
+    pub fn new(
+        app: AppHandle,
+        persistence: Arc<PersistenceService>,
+        browser_root: PathBuf,
+    ) -> Self {
         let history = persistence
             .load_browser_history_sync()
             .unwrap_or_default()
@@ -156,6 +166,7 @@ impl BrowserService {
         Self {
             app,
             persistence,
+            browser_root,
             tabs: RwLock::new(tabs),
             renderers: RwLock::new(HashMap::new()),
         }
@@ -538,6 +549,9 @@ impl BrowserService {
         url: String,
         suggested_filename: Option<String>,
         mime_type: Option<String>,
+        destination_path: Option<String>,
+        completed: bool,
+        success: Option<bool>,
     ) -> Result<BrowserDownloadRequest> {
         let tab = self
             .tabs
@@ -552,10 +566,16 @@ impl BrowserService {
             url,
             suggested_filename,
             mime_type,
+            destination_path,
+            completed,
+            success,
         };
         let _ = self.app.emit(
             BROWSER_EVENT,
-            serde_json::json!({ "type": "downloadRequested", "request": request.clone() }),
+            serde_json::json!({
+                "type": if request.completed { "downloadFinished" } else { "downloadRequested" },
+                "request": request.clone()
+            }),
         );
         Ok(request)
     }
@@ -796,42 +816,59 @@ impl BrowserService {
     }
 
     fn handle_native_download(&self, tab_id: &str, event: tauri::webview::DownloadEvent<'_>) {
-        if let tauri::webview::DownloadEvent::Requested { url, .. } = event {
-            let _ = tauri::async_runtime::block_on(self.request_download(
-                tab_id,
-                url.to_string(),
-                None,
-                None,
-            ));
+        match event {
+            tauri::webview::DownloadEvent::Requested { url, destination } => {
+                let target = self.allocate_download_target(url.as_str());
+                *destination = target.clone();
+                let suggested_filename = target
+                    .file_name()
+                    .map(|name| name.to_string_lossy().to_string());
+                let _ = tauri::async_runtime::block_on(self.request_download(
+                    tab_id,
+                    url.to_string(),
+                    suggested_filename,
+                    None,
+                    Some(target.to_string_lossy().to_string()),
+                    false,
+                    None,
+                ));
+            }
+            tauri::webview::DownloadEvent::Finished { url, path, success } => {
+                let destination_path = path.map(|value| value.to_string_lossy().to_string());
+                let suggested_filename = destination_path.as_ref().and_then(|value| {
+                    PathBuf::from(value)
+                        .file_name()
+                        .map(|name| name.to_string_lossy().to_string())
+                });
+                let _ = tauri::async_runtime::block_on(self.request_download(
+                    tab_id,
+                    url.to_string(),
+                    suggested_filename,
+                    None,
+                    destination_path,
+                    true,
+                    Some(success),
+                ));
+            }
+            _ => {}
         }
     }
 
     fn handle_native_new_window(&self, tab_id: &str, url: String) {
-        let _ = tauri::async_runtime::block_on(self.request_open_external_from_url(tab_id, url));
-    }
-
-    async fn request_open_external_from_url(
-        &self,
-        tab_id: &str,
-        url: String,
-    ) -> Result<BrowserExternalOpenRequest> {
-        let tab = self
+        let Some(project_id) = self
             .tabs
             .read()
             .get(tab_id)
-            .ok_or_else(|| anyhow!("unknown browser tab"))?
-            .record
-            .clone();
-        let request = BrowserExternalOpenRequest {
-            tab_id: tab.tab_id,
-            project_id: tab.project_id,
-            url,
+            .map(|state| state.record.project_id.clone())
+        else {
+            return;
         };
-        let _ = self.app.emit(
-            BROWSER_EVENT,
-            serde_json::json!({ "type": "openExternalRequested", "request": request.clone() }),
-        );
-        Ok(request)
+        if let Some(state) = self.app.try_state::<AppState>() {
+            let browser = Arc::clone(&state.browser);
+            tauri::async_runtime::spawn(async move {
+                let _ = browser.create_tab(project_id, Some(url), None).await;
+            });
+        }
     }
 
     fn persist_current_state(&self, tab_id: &str, record: BrowserTabRecord) {
@@ -862,6 +899,35 @@ impl BrowserService {
             NativeBrowserAction::Reload => webview.reload()?,
         }
         Ok(())
+    }
+
+    fn allocate_download_target(&self, url: &str) -> PathBuf {
+        let downloads_dir = self.browser_root.join("downloads");
+        let _ = std::fs::create_dir_all(&downloads_dir);
+        let candidate_name = download_file_name(url);
+        let mut candidate = downloads_dir.join(&candidate_name);
+        if !candidate.exists() {
+            return candidate;
+        }
+        let stem = candidate
+            .file_stem()
+            .map(|value| value.to_string_lossy().to_string())
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| "download".to_string());
+        let ext = candidate
+            .extension()
+            .map(|value| value.to_string_lossy().to_string());
+        for index in 1..10_000 {
+            let next_name = match &ext {
+                Some(ext) if !ext.is_empty() => format!("{stem}-{index}.{ext}"),
+                _ => format!("{stem}-{index}"),
+            };
+            candidate = downloads_dir.join(next_name);
+            if !candidate.exists() {
+                return candidate;
+            }
+        }
+        downloads_dir.join(format!("download-{}.bin", uuid::Uuid::new_v4()))
     }
 }
 
@@ -921,6 +987,32 @@ fn parse_browser_url(value: &str) -> Result<url::Url> {
         return Ok(url);
     }
     url::Url::parse(&format!("https://{value}")).map_err(Into::into)
+}
+
+fn download_file_name(url: &str) -> String {
+    let parsed = url::Url::parse(url).ok();
+    let from_path = parsed
+        .as_ref()
+        .and_then(|value| value.path_segments())
+        .and_then(|segments| segments.last())
+        .filter(|segment| !segment.is_empty())
+        .map(|segment| segment.to_string());
+    sanitize_download_name(from_path.unwrap_or_else(|| "download.bin".to_string()))
+}
+
+fn sanitize_download_name(value: String) -> String {
+    let cleaned = value
+        .chars()
+        .map(|ch| match ch {
+            'a'..='z' | 'A'..='Z' | '0'..='9' | '.' | '-' | '_' => ch,
+            _ => '_',
+        })
+        .collect::<String>();
+    if cleaned.is_empty() {
+        "download.bin".to_string()
+    } else {
+        cleaned
+    }
 }
 
 fn browser_runtime_init_script(tab_id: &str) -> String {

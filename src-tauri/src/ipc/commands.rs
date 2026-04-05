@@ -692,6 +692,9 @@ pub async fn browser_download_request(
             input.url,
             input.suggested_filename,
             input.mime_type,
+            None,
+            false,
+            None,
         )
         .await?)
 }

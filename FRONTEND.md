@@ -15,7 +15,6 @@ Rules for this checklist:
 - [ ] Add editor search, replace, and project-search UI on top of the now-live backend file read/write/search contracts.
 - [ ] Add whole-tree commit-history or log UX to the Git surface so the frontend fully uses the backend git mutation/readiness APIs.
 - [ ] Add deeper terminal session diagnostics actions on top of the now-live backend lifecycle contract.
-- [ ] Finish native browser download UX on top of the new child-webview host, including action handling beyond the current backend-driven request notice.
 - [ ] Subscribe to backend events for filesystem, git, browser, terminal, and Codex updates instead of relying on local-only mutations.
 - [ ] Persist and hydrate workspace layout from the backend rather than purely local in-memory state.
 - [ ] Keep removing the last local-only helper logic in frontend stores and surfaces so startup and mutations come exclusively from backend truth.
@@ -38,9 +37,8 @@ Rules for this checklist:
 
 ### Browser
 
-- [ ] Improve renderer metadata capture beyond the current native-host URL/loading/title/favicon sync, especially downloads and blocked-frame fallbacks.
+- [ ] Improve renderer metadata capture beyond the current native-host URL/loading/title/favicon sync, especially blocked-frame fallbacks.
 - [ ] Add conflict-resolution UX for backend save-token mismatches instead of showing the raw backend error banner.
-- [ ] Route download intent from the renderer through `browser_download_request` instead of opening ad hoc OS dialogs directly.
 
 ### Terminal
 
@@ -105,6 +103,7 @@ Rules for this checklist:
 - ✅ Title bar browser creation and browser-surface address/nav actions now route through backend browser IPC in [TitleBar.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/shell/TitleBar.tsx) and [BrowserSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/BrowserSurface.tsx).
 - ✅ The browser surface is now a pane-hosted native child-webview host that attaches/detaches through the backend browser bridge and syncs runtime bounds through backend IPC.
 - ✅ Browser find-in-page now executes inside the native child-webview runtime and returns real match counts plus active selection state through backend browser events instead of frontend-fabricated results.
+- ✅ Browser downloads now surface real backend-driven requested/finished notices with canonical destination paths under `~/.ice/browser/downloads`, and popup/new-window requests now materialize as in-app browser tabs.
 - ✅ The editor surface now reads real file contents from the backend, blocks binary-file text editing, saves through backend `file_write_text`, and honors backend version-token save guards.
 - ✅ Demo/default startup entities have been removed from project, git, terminal, Codex, and workspace stores so the shell now waits for canonical backend hydration instead of rendering fake placeholder state.
 - ✅ The Git surface now stages, unstages, restores, reads diffs, and commits through backend git IPC with commit-readiness feedback instead of placeholder-only controls.

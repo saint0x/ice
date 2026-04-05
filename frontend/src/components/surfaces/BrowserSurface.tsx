@@ -99,8 +99,23 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
       }
       if (payload.type === 'downloadRequested' && payload.request?.tabId === browserTabId) {
         const filename = 'suggestedFilename' in payload.request ? payload.request.suggestedFilename : null
+        const destination = 'destinationPath' in payload.request ? payload.request.destinationPath : null
         const label = filename || payload.request.url
-        setDownloadNotice(`Download requested: ${label}`)
+        setDownloadNotice(
+          destination
+            ? `Downloading ${label} to ${destination}`
+            : `Download requested: ${label}`,
+        )
+        return
+      }
+      if (payload.type === 'downloadFinished' && payload.request?.tabId === browserTabId) {
+        const destination = 'destinationPath' in payload.request ? payload.request.destinationPath : null
+        const success = 'success' in payload.request ? payload.request.success : null
+        setDownloadNotice(
+          success
+            ? `Download finished${destination ? `: ${destination}` : ''}`
+            : `Download failed${destination ? `: ${destination}` : ''}`,
+        )
       }
     }).then((dispose) => {
       unlisten = dispose

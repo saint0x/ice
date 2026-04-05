@@ -290,6 +290,9 @@ interface BrowserDownloadRequestDto {
   url: string
   suggestedFilename?: string | null
   mimeType?: string | null
+  destinationPath?: string | null
+  completed: boolean
+  success?: boolean | null
 }
 
 export async function appBootstrap() {
