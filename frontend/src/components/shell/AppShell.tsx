@@ -4,6 +4,7 @@ import { Sidebar } from '@/components/sidebar/Sidebar'
 import { PaneGrid } from '@/components/panes/PaneGrid'
 import { BottomDock } from './BottomDock'
 import { ChatPanel } from './ChatPanel'
+import { ToastViewport } from './ToastViewport'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useBackendIntegration } from '@/hooks/useBackendIntegration'
@@ -22,6 +23,7 @@ export const AppShell = memo(function AppShell() {
       <div className={styles.body}>
         <Sidebar />
         <div className={styles.main}>
+          <ToastViewport />
           <PaneGrid />
           {bottomDockOpen && <BottomDock />}
         </div>

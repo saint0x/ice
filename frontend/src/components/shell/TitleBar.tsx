@@ -7,6 +7,7 @@ import { useWorkspaceStore } from '@/stores/workspace'
 import { useProjectsStore } from '@/stores/projects'
 import { browserTabCreate, toBrowserTab } from '@/lib/backend'
 import { useBrowserStore } from '@/stores/browser'
+import { useNotificationsStore } from '@/stores/notifications'
 import { useThemeStore, THEMES } from '@/stores/theme'
 import type { ThemeId } from '@/stores/theme'
 import styles from './TitleBar.module.css'
@@ -26,6 +27,7 @@ export const TitleBar = memo(function TitleBar() {
   const activeProject = useProjectsStore((s) => activeProjectId ? s.projects.get(activeProjectId) : undefined)
   const themeId = useThemeStore((s) => s.themeId)
   const setTheme = useThemeStore((s) => s.setTheme)
+  const pushError = useNotificationsStore((s) => s.pushError)
 
   const [themeMenuOpen, setThemeMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -53,13 +55,17 @@ export const TitleBar = memo(function TitleBar() {
 
   const onOpenBrowser = useCallback(() => {
     if (!activeProjectId || !activeProject) return
-    void browserTabCreate(activeProjectId, 'https://localhost:3000').then((tab) => {
-      const mapped = toBrowserTab(tab)
-      upsertBrowserTab(mapped)
-      setActiveBrowserTab(activeProjectId, mapped.id)
-      openTab(activePaneId, 'browser', mapped.title, activeProjectId, { tabId: mapped.id, url: mapped.url })
-    })
-  }, [activePaneId, activeProject, activeProjectId, openTab, setActiveBrowserTab, upsertBrowserTab])
+    void browserTabCreate(activeProjectId, 'https://localhost:3000')
+      .then((tab) => {
+        const mapped = toBrowserTab(tab)
+        upsertBrowserTab(mapped)
+        setActiveBrowserTab(activeProjectId, mapped.id)
+        openTab(activePaneId, 'browser', mapped.title, activeProjectId, { tabId: mapped.id, url: mapped.url })
+      })
+      .catch((error: unknown) => {
+        pushError('Browser tab failed', error, 'Failed to create browser tab')
+      })
+  }, [activePaneId, activeProject, activeProjectId, openTab, pushError, setActiveBrowserTab, upsertBrowserTab])
 
   const onOpenTerminal = useCallback(() => {
     if (!activeProjectId) return

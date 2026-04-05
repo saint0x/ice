@@ -3,6 +3,7 @@ import { ChevronDown, ChevronUp, Plus, Terminal, RotateCcw, PencilLine, Check, X
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useTerminalStore } from '@/stores/terminal'
 import { useProjectsStore } from '@/stores/projects'
+import { useNotificationsStore } from '@/stores/notifications'
 import { TerminalSurface } from '@/components/surfaces/TerminalSurface'
 import { terminalClose, terminalCreate, terminalDiagnosticsRead, terminalRename, terminalRespawn, terminalScrollbackClear, terminalScrollbackRead, toTerminalDiagnostics, toTerminalSession } from '@/lib/backend'
 import styles from './BottomDock.module.css'
@@ -23,6 +24,7 @@ export const BottomDock = memo(function BottomDock() {
   const upsertDiagnostics = useTerminalStore((s) => s.upsertDiagnostics)
   const renameSession = useTerminalStore((s) => s.renameSession)
   const clearScrollback = useTerminalStore((s) => s.clearScrollback)
+  const pushError = useNotificationsStore((s) => s.pushError)
   const resizeRef = useRef<{ startY: number; startH: number } | null>(null)
   const [renameDraft, setRenameDraft] = useState('')
   const [isRenaming, setIsRenaming] = useState(false)
@@ -93,7 +95,9 @@ export const BottomDock = memo(function BottomDock() {
       })
       .catch((error: unknown) => {
         if (!disposed) {
-          setSurfaceError(error instanceof Error ? error.message : 'Failed to load terminal diagnostics')
+          const message = error instanceof Error ? error.message : 'Failed to load terminal diagnostics'
+          setSurfaceError(message)
+          pushError('Terminal diagnostics failed', error, message)
           setIsDiagnosticsLoading(false)
         }
       })
@@ -101,7 +105,7 @@ export const BottomDock = memo(function BottomDock() {
     return () => {
       disposed = true
     }
-  }, [activeSession, upsertDiagnostics])
+  }, [activeSession, pushError, upsertDiagnostics])
 
   const onRenameCommit = async () => {
     if (!activeSession || !renameDraft.trim()) {
@@ -117,7 +121,9 @@ export const BottomDock = memo(function BottomDock() {
       renameSession(mapped.id, mapped.title)
       setIsRenaming(false)
     } catch (error) {
-      setSurfaceError(error instanceof Error ? error.message : 'Failed to rename terminal')
+      const message = error instanceof Error ? error.message : 'Failed to rename terminal'
+      setSurfaceError(message)
+      pushError('Terminal rename failed', error, message)
     }
   }
 
@@ -129,7 +135,9 @@ export const BottomDock = memo(function BottomDock() {
       const updated = await terminalRespawn(activeSession.id)
       upsertSession(toTerminalSession(updated))
     } catch (error) {
-      setSurfaceError(error instanceof Error ? error.message : 'Failed to restart terminal')
+      const message = error instanceof Error ? error.message : 'Failed to restart terminal'
+      setSurfaceError(message)
+      pushError('Terminal restart failed', error, message)
     } finally {
       setIsRestarting(false)
     }
@@ -146,7 +154,9 @@ export const BottomDock = memo(function BottomDock() {
       const diagnosticsRecord = await terminalDiagnosticsRead(activeSession.id)
       upsertDiagnostics(toTerminalDiagnostics(diagnosticsRecord))
     } catch (error) {
-      setSurfaceError(error instanceof Error ? error.message : 'Failed to clear terminal history')
+      const message = error instanceof Error ? error.message : 'Failed to clear terminal history'
+      setSurfaceError(message)
+      pushError('Terminal history clear failed', error, message)
     } finally {
       setIsClearingHistory(false)
     }
@@ -158,7 +168,9 @@ export const BottomDock = memo(function BottomDock() {
       const scrollback = await terminalScrollbackRead(activeSession.id)
       await navigator.clipboard.writeText(scrollback.content)
     } catch (error) {
-      setSurfaceError(error instanceof Error ? error.message : 'Failed to copy terminal history')
+      const message = error instanceof Error ? error.message : 'Failed to copy terminal history'
+      setSurfaceError(message)
+      pushError('Terminal history copy failed', error, message)
     }
   }
 

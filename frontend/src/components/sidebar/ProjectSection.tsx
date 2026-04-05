@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import type { Project, SidebarSection } from '@/types'
 import { codexThreadCreate, projectRemove, terminalCreate, toCodexThread, toTerminalSession } from '@/lib/backend'
+import { useNotificationsStore } from '@/stores/notifications'
 import { useProjectsStore } from '@/stores/projects'
 import { useGitStore } from '@/stores/git'
 import { useTerminalStore } from '@/stores/terminal'
@@ -44,6 +45,7 @@ export const ProjectSection = memo(function ProjectSection({ project }: Props) {
   const activePaneId = useWorkspaceStore((s) => s.activePaneId)
   const setBottomDockOpen = useWorkspaceStore((s) => s.setBottomDockOpen)
   const setChatPanelOpen = useWorkspaceStore((s) => s.setChatPanelOpen)
+  const pushError = useNotificationsStore((s) => s.pushError)
   const isActive = project.id === activeProjectId
   const [surfaceError, setSurfaceError] = useState<string | null>(null)
 
@@ -84,12 +86,18 @@ export const ProjectSection = memo(function ProjectSection({ project }: Props) {
       setActiveProject(project.id)
       if (type === 'codex') {
         setChatPanelOpen(true)
-        void codexThreadCreate(project.id).then((thread) => {
-          const mapped = toCodexThread(thread)
-          addThread(mapped)
-          setActiveThread(project.id, mapped.id)
-          openTab(activePaneId, 'codex', mapped.title, project.id, { threadId: mapped.id })
-        })
+        void codexThreadCreate(project.id)
+          .then((thread) => {
+            const mapped = toCodexThread(thread)
+            addThread(mapped)
+            setActiveThread(project.id, mapped.id)
+            openTab(activePaneId, 'codex', mapped.title, project.id, { threadId: mapped.id })
+          })
+          .catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : 'Failed to create Codex thread'
+            setSurfaceError(message)
+            pushError('Codex thread failed', error, message)
+          })
       } else if (type === 'search') {
         openTab(activePaneId, 'settings', `${project.name} Search`, project.id, { tool: 'search' })
       } else if (type === 'diagnostics') {
@@ -98,13 +106,19 @@ export const ProjectSection = memo(function ProjectSection({ project }: Props) {
         openTab(activePaneId, 'settings', `${project.name} Debug`, project.id, { tool: 'debug' })
       } else if (type === 'terminal') {
         setBottomDockOpen(true)
-        const session = await terminalCreate(project.id)
-        const mapped = toTerminalSession(session)
-        upsertSession(mapped)
-        setActiveSession(project.id, mapped.id)
+        try {
+          const session = await terminalCreate(project.id)
+          const mapped = toTerminalSession(session)
+          upsertSession(mapped)
+          setActiveSession(project.id, mapped.id)
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Failed to create terminal'
+          setSurfaceError(message)
+          pushError('Terminal launch failed', error, message)
+        }
       }
     },
-    [activePaneId, addThread, openTab, project.id, project.name, setActiveProject, setActiveSession, setActiveThread, setBottomDockOpen, setChatPanelOpen, upsertSession]
+    [activePaneId, addThread, openTab, project.id, project.name, pushError, setActiveProject, setActiveSession, setActiveThread, setBottomDockOpen, setChatPanelOpen, upsertSession]
   )
 
   const onRemoveProject = useCallback(async () => {
@@ -113,9 +127,11 @@ export const ProjectSection = memo(function ProjectSection({ project }: Props) {
       await projectRemove(project.id)
       removeProject(project.id)
     } catch (error) {
-      setSurfaceError(error instanceof Error ? error.message : 'Failed to remove project')
+      const message = error instanceof Error ? error.message : 'Failed to remove project'
+      setSurfaceError(message)
+      pushError('Project removal failed', error, message)
     }
-  }, [project.id, removeProject])
+  }, [project.id, pushError, removeProject])
 
   const getBadge = (section: SidebarSection): string | undefined => {
     if (section === 'git' && gitChangeCount > 0) return String(gitChangeCount)

@@ -38,7 +38,6 @@ Rules for this checklist:
 - [ ] Add keyboard shortcuts for core pane, tab, terminal, and project actions beyond current starter bindings.
 - [ ] Add focus ring and active-pane synchronization between sidebar, tab bar, and surface content.
 - [ ] Add empty, loading, and failure states for every backend-driven surface.
-- [ ] Add error toasts / banners for backend command failures.
 
 ### Verification
 
@@ -103,6 +102,7 @@ Rules for this checklist:
 - ✅ Terminal surfaces and dock diagnostics now also use backend interrupt, EOF, and scrollback-clear actions instead of leaving those operational controls outside the shell.
 - ✅ Terminal dock and terminal surface now consume a canonical backend `terminal_diagnostics_read` contract for exit state, startup command, env overrides, and persisted history context instead of reconstructing diagnostics from partial session rows.
 - ✅ Dedicated terminal keyboard shortcuts now route through the same backend terminal contracts for create, interrupt, EOF, clear-history, and respawn flows instead of leaving those operations button-only.
+- ✅ The shell now has a canonical app-level toast/notification path for backend command failures, and major backend-driven surfaces route operational errors into it without losing their local contextual banners.
 - ✅ Codex threads and approvals now hydrate from backend `codex_threads_list` / `codex_approvals_list`, and the frontend listens to live `app://codex` events through [useBackendIntegration.ts](/Users/deepsaint/Desktop/ice/frontend/src/hooks/useBackendIntegration.ts).
 - ✅ Codex thread creation, prompt submission, and approval approve/deny actions now route through backend IPC in [CodexSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/CodexSurface.tsx), [ChatPanel.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/shell/ChatPanel.tsx), and [ProjectSection.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/sidebar/ProjectSection.tsx).
 - ✅ Codex surfaces and the chat panel now render canonical multi-turn history from backend `codex_thread_messages_list` plus live `messageUpserted` events instead of relying on summary-only thread previews.

@@ -1,6 +1,7 @@
 import { memo, useState } from 'react'
 import { FolderPlus, GripVertical } from 'lucide-react'
 import { projectAdd, projectReorder, toProject } from '@/lib/backend'
+import { useNotificationsStore } from '@/stores/notifications'
 import { useProjectsStore } from '@/stores/projects'
 import { ProjectSection } from './ProjectSection'
 import styles from './ProjectStack.module.css'
@@ -11,6 +12,7 @@ export const ProjectStack = memo(function ProjectStack() {
   const addProject = useProjectsStore((s) => s.addProject)
   const reorderProjects = useProjectsStore((s) => s.reorderProjects)
   const setActiveProject = useProjectsStore((s) => s.setActiveProject)
+  const pushError = useNotificationsStore((s) => s.pushError)
   const [newProjectPath, setNewProjectPath] = useState('')
   const [isAdding, setIsAdding] = useState(false)
   const [surfaceError, setSurfaceError] = useState<string | null>(null)
@@ -28,7 +30,9 @@ export const ProjectStack = memo(function ProjectStack() {
     try {
       await projectReorder(nextOrder)
     } catch (error) {
-      setSurfaceError(error instanceof Error ? error.message : 'Failed to reorder projects')
+      const message = error instanceof Error ? error.message : 'Failed to reorder projects'
+      setSurfaceError(message)
+      pushError('Project reorder failed', error, message)
     }
   }
 
@@ -44,7 +48,9 @@ export const ProjectStack = memo(function ProjectStack() {
       setActiveProject(mapped.id)
       setNewProjectPath('')
     } catch (error) {
-      setSurfaceError(error instanceof Error ? error.message : 'Failed to add project')
+      const message = error instanceof Error ? error.message : 'Failed to add project'
+      setSurfaceError(message)
+      pushError('Project add failed', error, message)
     } finally {
       setIsAdding(false)
     }

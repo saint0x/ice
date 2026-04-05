@@ -3,6 +3,7 @@ import { Loader2, RotateCcw, TerminalSquare, Hand, CornerDownLeft, History, Gaug
 import type { TerminalSession } from '@/types'
 import { terminalDiagnosticsRead, terminalInterrupt, terminalResize, terminalRespawn, terminalSendEof, terminalWrite, toTerminalDiagnostics, toTerminalSession } from '@/lib/backend'
 import { useThemeStore } from '@/stores/theme'
+import { useNotificationsStore } from '@/stores/notifications'
 import { useTerminalStore } from '@/stores/terminal'
 import styles from './TerminalSurface.module.css'
 
@@ -48,6 +49,7 @@ export const TerminalSurface = memo(function TerminalSurface({ session }: Props)
   const upsertSession = useTerminalStore((s) => s.upsertSession)
   const diagnostics = useTerminalStore((s) => s.diagnostics.get(session.id))
   const upsertDiagnostics = useTerminalStore((s) => s.upsertDiagnostics)
+  const pushError = useNotificationsStore((s) => s.pushError)
   const scrollbackRef = useRef('')
   const [isRespawning, setIsRespawning] = useState(false)
   const [surfaceError, setSurfaceError] = useState<string | null>(null)
@@ -133,14 +135,16 @@ export const TerminalSurface = memo(function TerminalSurface({ session }: Props)
       })
       .catch((error: unknown) => {
         if (!disposed) {
-          setSurfaceError(error instanceof Error ? error.message : 'Failed to load terminal diagnostics')
+          const message = error instanceof Error ? error.message : 'Failed to load terminal diagnostics'
+          setSurfaceError(message)
+          pushError('Terminal diagnostics failed', error, message)
           setIsDiagnosticsLoading(false)
         }
       })
     return () => {
       disposed = true
     }
-  }, [session.id, upsertDiagnostics])
+  }, [pushError, session.id, upsertDiagnostics])
 
   // Update terminal theme when app theme changes
   useEffect(() => {
@@ -161,7 +165,9 @@ export const TerminalSurface = memo(function TerminalSurface({ session }: Props)
       const record = await terminalRespawn(session.id)
       upsertSession(toTerminalSession(record))
     } catch (error) {
-      setSurfaceError(error instanceof Error ? error.message : 'Failed to restart terminal')
+      const message = error instanceof Error ? error.message : 'Failed to restart terminal'
+      setSurfaceError(message)
+      pushError('Terminal restart failed', error, message)
     } finally {
       setIsRespawning(false)
     }
@@ -172,7 +178,9 @@ export const TerminalSurface = memo(function TerminalSurface({ session }: Props)
     try {
       await terminalInterrupt(session.id)
     } catch (error) {
-      setSurfaceError(error instanceof Error ? error.message : 'Failed to send interrupt')
+      const message = error instanceof Error ? error.message : 'Failed to send interrupt'
+      setSurfaceError(message)
+      pushError('Terminal interrupt failed', error, message)
     }
   }
 
@@ -181,7 +189,9 @@ export const TerminalSurface = memo(function TerminalSurface({ session }: Props)
     try {
       await terminalSendEof(session.id)
     } catch (error) {
-      setSurfaceError(error instanceof Error ? error.message : 'Failed to send EOF')
+      const message = error instanceof Error ? error.message : 'Failed to send EOF'
+      setSurfaceError(message)
+      pushError('Terminal EOF failed', error, message)
     }
   }
 

@@ -15,6 +15,7 @@ import {
   toBrowserTab,
 } from '@/lib/backend'
 import { useBrowserStore } from '@/stores/browser'
+import { useNotificationsStore } from '@/stores/notifications'
 import styles from './BrowserSurface.module.css'
 
 interface Props {
@@ -27,6 +28,7 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
   const upsertBrowserTab = useBrowserStore((s) => s.upsertTab)
   const runtimeNotices = useBrowserStore((s) => browserTabId ? s.runtimeNotices.get(browserTabId) ?? [] : [])
   const dismissRuntimeNotice = useBrowserStore((s) => s.dismissRuntimeNotice)
+  const pushError = useNotificationsStore((s) => s.pushError)
   const [draftUrl, setDraftUrl] = useState<string | null>(null)
   const [findQuery, setFindQuery] = useState('')
   const [surfaceError, setSurfaceError] = useState<string | null>(null)
@@ -52,14 +54,16 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
     void browserRendererAttach(browserTabId, rendererId, tab.id)
       .catch((error: unknown) => {
         if (!disposed) {
-          setSurfaceError(error instanceof Error ? error.message : 'Failed to attach native browser renderer')
+          const message = error instanceof Error ? error.message : 'Failed to attach native browser renderer'
+          setSurfaceError(message)
+          pushError('Browser renderer attach failed', error, message)
         }
       })
     return () => {
       disposed = true
       void browserRendererDetach(browserTabId)
     }
-  }, [browserTabId, rendererId, tab.id])
+  }, [browserTabId, pushError, rendererId, tab.id])
 
   useEffect(() => {
     if (!browserTabId || !viewportRef.current) return
@@ -73,7 +77,9 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
       void browserRendererBoundsSet(browserTabId, rect.left, rect.top, rect.width, rect.height)
         .catch((error: unknown) => {
           if (!disposed) {
-            setSurfaceError(error instanceof Error ? error.message : 'Failed to position native browser renderer')
+            const message = error instanceof Error ? error.message : 'Failed to position native browser renderer'
+            setSurfaceError(message)
+            pushError('Browser renderer bounds failed', error, message)
           }
         })
     }
@@ -88,7 +94,7 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
       observer.disconnect()
       window.removeEventListener('resize', syncBounds)
     }
-  }, [browserTabId, browserTab?.url])
+  }, [browserTabId, browserTab?.url, pushError])
 
   const runFindInPage = async (mode: 'first' | 'next') => {
     if (!browserTabId) return
@@ -151,7 +157,9 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
                   window.open(request.url, '_blank', 'noopener,noreferrer')
                 })
                 .catch((error: unknown) => {
-                  setSurfaceError(error instanceof Error ? error.message : 'Failed to open external browser')
+                  const message = error instanceof Error ? error.message : 'Failed to open external browser'
+                  setSurfaceError(message)
+                  pushError('External browser open failed', error, message)
                 })
             }}
           >

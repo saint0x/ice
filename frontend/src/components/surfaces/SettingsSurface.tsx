@@ -13,6 +13,7 @@ import {
   toTerminalSession,
 } from '@/lib/backend'
 import { useWorkspaceStore } from '@/stores/workspace'
+import { useNotificationsStore } from '@/stores/notifications'
 import { useTerminalStore } from '@/stores/terminal'
 import { useFilesStore } from '@/stores/files'
 import { FileTree } from '@/components/sidebar/FileTree'
@@ -31,6 +32,7 @@ export const SettingsSurface = memo(function SettingsSurface({ tab }: Props) {
   const upsertSession = useTerminalStore((state) => state.upsertSession)
   const setActiveSession = useTerminalStore((state) => state.setActiveSession)
   const tree = useFilesStore((state) => state.trees.get(tab.projectId) ?? [])
+  const pushError = useNotificationsStore((state) => state.pushError)
 
   const [query, setQuery] = useState('')
   const [pathResults, setPathResults] = useState<string[]>([])
@@ -77,7 +79,9 @@ export const SettingsSurface = memo(function SettingsSurface({ tab }: Props) {
 
     void load().catch((error: unknown) => {
       if (!disposed) {
-        setSurfaceError(error instanceof Error ? error.message : 'Failed to load utility surface')
+        const message = error instanceof Error ? error.message : 'Failed to load utility surface'
+        setSurfaceError(message)
+        pushError('Utility surface failed', error, message)
         setIsLoading(false)
       }
     })
@@ -85,7 +89,7 @@ export const SettingsSurface = memo(function SettingsSurface({ tab }: Props) {
     return () => {
       disposed = true
     }
-  }, [tab.projectId, tool])
+  }, [pushError, tab.projectId, tool])
 
   const treeStats = useMemo(() => {
     let files = 0
@@ -121,7 +125,9 @@ export const SettingsSurface = memo(function SettingsSurface({ tab }: Props) {
       setPathResults(paths.paths)
       setTextResults(text.matches)
     } catch (error) {
-      setSurfaceError(error instanceof Error ? error.message : 'Search failed')
+      const message = error instanceof Error ? error.message : 'Search failed'
+      setSurfaceError(message)
+      pushError('Project search failed', error, message)
     } finally {
       setIsLoading(false)
     }
@@ -141,7 +147,9 @@ export const SettingsSurface = memo(function SettingsSurface({ tab }: Props) {
       upsertSession(mapped)
       setActiveSession(tab.projectId, mapped.id)
     } catch (error) {
-      setSurfaceError(error instanceof Error ? error.message : 'Failed to create terminal')
+      const message = error instanceof Error ? error.message : 'Failed to create terminal'
+      setSurfaceError(message)
+      pushError('Terminal launch failed', error, message)
     } finally {
       setIsLoading(false)
     }
