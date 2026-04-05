@@ -15,16 +15,16 @@ Rules for this checklist:
 
 - [ ] Replace the iframe-backed browser renderer host with the final native browser container strategy if we outgrow the current pane-hosted renderer approach.
 - [ ] Add editor search, replace, and project-search UI on top of the now-live backend file read/write/search contracts.
-- [ ] Add native whole-tree diff views to the Git surface so the frontend fully uses the backend git mutation/readiness APIs.
+- [ ] Add branch creation and upstream-setting UX to the Git surface so the frontend fully uses the backend git mutation/readiness APIs.
 - [ ] Add persisted Codex turn/message history to the frontend once the backend exposes canonical per-thread history, instead of relying on the current thread-summary view.
-- [ ] Add explicit terminal diagnostics/history surfaces on top of the now-live backend lifecycle contract.
+- [ ] Add deeper terminal session diagnostics actions on top of the now-live backend lifecycle contract.
 - [ ] Replace the iframe-host fallback search/download behavior with the final native browser renderer implementation once we move past the current pane-hosted renderer host.
 - [ ] Subscribe to backend events for filesystem, git, browser, terminal, and Codex updates instead of relying on local-only mutations.
 - [ ] Persist and hydrate workspace layout from the backend rather than purely local in-memory state.
 - [ ] Keep removing the last local-only helper logic in frontend stores and surfaces so startup and mutations come exclusively from backend truth.
-- [ ] Add whole-tree diff views to [GitSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/GitSurface.tsx) on top of the now-live mutation hooks.
+- [ ] Add branch creation and upstream-setting flows to [GitSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/GitSurface.tsx) on top of the now-live mutation hooks.
 - [ ] Expand Codex surfaces from thread-summary rendering to canonical multi-turn history once backend history APIs exist.
-- [ ] Add richer session diagnostics/history in the dock once the surface uses the full rename/resize/respawn contract.
+- [ ] Add richer terminal diagnostics actions in the dock once the surface uses the full rename/resize/respawn contract.
 - [ ] Replace the current browser find-in-page fallback with native renderer-backed search/download behavior once the final browser container lands.
 
 ### Filesystem / Editor
@@ -38,9 +38,7 @@ Rules for this checklist:
 - [ ] Add stage / unstage / commit interactions in [GitSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/GitSurface.tsx).
 - [ ] Use `git_commit_readiness` to preflight author config and message validity before enabling the final commit action.
 - [ ] Add file-level diff rendering and change selection flows.
-- [ ] Use `git_diff_tree_read` for staged and unstaged change groups so the frontend does not have to fan out per-file diff requests just to render the git surface.
 - [ ] Use `git_restore_paths` for discard/revert actions instead of local-only row removal.
-- [ ] Use `git_diff_tree_read` for staged and unstaged change groups so the Git surface can move beyond per-file diff requests.
 - [ ] Subscribe to `app://git` `mutationCompleted` events so the UI can distinguish stage, unstage, restore, commit, checkout, fetch, pull, and push outcomes without inferring intent from a generic status refresh.
 
 ### Browser
@@ -124,6 +122,7 @@ Rules for this checklist:
 - ✅ Terminal surfaces now keep xterm mounted across scrollback updates, send resize back to the backend PTY, and expose explicit respawn UI instead of silently restarting dead sessions.
 - ✅ Browser surfaces now route open-external and find-in-page through the backend browser contract, with renderer-host fallback reporting instead of dead controls.
 - ✅ The Git surface now uses backend branch/fetch/pull/push controls, and the terminal dock now uses backend rename plus richer active-session metadata.
+- ✅ The Git surface now uses backend `git_diff_tree_read` for staged and unstaged whole-tree diff views, and the terminal dock now exposes persisted scrollback plus session diagnostics from backend state.
 - ✅ Terminal sessions and scrollback now hydrate from backend `terminal_list` / `terminal_scrollback_read`, and the frontend listens to live `app://terminal` events through [useBackendIntegration.ts](/Users/deepsaint/Desktop/ice/frontend/src/hooks/useBackendIntegration.ts).
 - ✅ Terminal create, close, write, and respawn flows now route through backend IPC in [TerminalList.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/sidebar/TerminalList.tsx), [BottomDock.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/shell/BottomDock.tsx), and [TerminalSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/TerminalSurface.tsx).
 - ✅ Codex threads and approvals now hydrate from backend `codex_threads_list` / `codex_approvals_list`, and the frontend listens to live `app://codex` events through [useBackendIntegration.ts](/Users/deepsaint/Desktop/ice/frontend/src/hooks/useBackendIntegration.ts).

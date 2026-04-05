@@ -161,6 +161,15 @@
   padding: var(--sp-2) 0;
 }
 
+.groupHeaderRow,
+.diffHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-right: var(--sp-5);
+}
+
 .groupHeader {
   font-size: 10px;
   font-weight: var(--weight-semibold);
@@ -168,6 +177,28 @@
   letter-spacing: 0.5px;
   color: var(--text-muted);
   padding: var(--sp-2) var(--sp-5);
+}
+
+.groupDiffBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: var(--bg-element);
+  color: var(--text-muted);
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.groupDiffBtn:hover {
+  color: var(--text-primary);
+}
+
+.groupDiffBtnActive {
+  background: var(--bg-element-selected);
+  color: var(--text-primary);
 }
 
 .changeRow {

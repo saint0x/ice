@@ -9,6 +9,7 @@ import {
   gitCommit,
   gitCommitReadiness,
   gitDiffRead,
+  gitDiffTreeRead,
   gitFetch,
   gitPull,
   gitPush,
@@ -23,6 +24,8 @@ import styles from './GitSurface.module.css'
 interface Props {
   tab: Tab
 }
+
+type DiffMode = 'selected' | 'staged-tree' | 'unstaged-tree'
 
 const STATUS_ICON: Record<string, typeof Circle> = {
   modified: Circle,
@@ -47,6 +50,7 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
   const [selectedDiff, setSelectedDiff] = useState<string>('')
   const [isDiffLoading, setIsDiffLoading] = useState(false)
   const [isMutating, setIsMutating] = useState(false)
+  const [diffMode, setDiffMode] = useState<DiffMode>('selected')
   const [branches, setBranches] = useState<Array<{
     name: string
     reference: string
@@ -89,16 +93,35 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
   }, [commitMessage, state, tab.projectId])
 
   useEffect(() => {
-    if (!state || !selectedChange) {
+    if (!state) {
       setSelectedDiff('')
       return
     }
+
+    if (diffMode === 'selected' && !selectedChange) {
+      setSelectedDiff('')
+      return
+    }
+
     let disposed = false
     setIsDiffLoading(true)
-    void gitDiffRead(tab.projectId, selectedChange.path, selectedChange.staged)
+    const request = diffMode === 'selected'
+      ? gitDiffRead(tab.projectId, selectedChange!.path, selectedChange!.staged).then((result) => result.diff)
+      : gitDiffTreeRead(tab.projectId, diffMode === 'staged-tree').then((records) => {
+        if (records.length === 0) {
+          return diffMode === 'staged-tree'
+            ? 'No staged diff output.'
+            : 'No unstaged diff output.'
+        }
+        return records
+          .map((record) => `diff -- ${record.path}${record.staged ? ' (staged)' : ' (unstaged)'}\n${record.diff}`)
+          .join('\n\n')
+      })
+
+    void request
       .then((result) => {
         if (!disposed) {
-          setSelectedDiff(result.diff)
+          setSelectedDiff(result)
           setIsDiffLoading(false)
         }
       })
@@ -112,7 +135,7 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
     return () => {
       disposed = true
     }
-  }, [selectedChange, state, tab.projectId])
+  }, [diffMode, selectedChange, state, tab.projectId])
 
   useEffect(() => {
     if (!state) return
@@ -278,14 +301,29 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
       <div className={styles.changes}>
         {staged.length > 0 && (
           <div className={styles.group}>
-            <div className={styles.groupHeader}>Staged ({staged.length})</div>
+            <div className={styles.groupHeaderRow}>
+              <div className={styles.groupHeader}>Staged ({staged.length})</div>
+              <button
+                className={`${styles.groupDiffBtn} ${diffMode === 'staged-tree' ? styles.groupDiffBtnActive : ''}`}
+                onClick={() => {
+                  setSelectedKey(null)
+                  setDiffMode('staged-tree')
+                }}
+                type="button"
+              >
+                View all
+              </button>
+            </div>
             {staged.map((c) => {
               const Icon = STATUS_ICON[c.status] ?? Circle
               return (
                 <div
                   key={c.path}
                   className={`${styles.changeRow} ${selectedKey === changeKey(c.path, c.staged) ? styles.selected : ''}`}
-                  onClick={() => setSelectedKey(changeKey(c.path, c.staged))}
+                  onClick={() => {
+                    setSelectedKey(changeKey(c.path, c.staged))
+                    setDiffMode('selected')
+                  }}
                 >
                   <Icon size={11} style={{ color: STATUS_COLOR[c.status] }} />
                   <span className={styles.changePath}>{c.path}</span>
@@ -311,14 +349,29 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
         )}
         {unstaged.length > 0 && (
           <div className={styles.group}>
-            <div className={styles.groupHeader}>Changed ({unstaged.length})</div>
+            <div className={styles.groupHeaderRow}>
+              <div className={styles.groupHeader}>Changed ({unstaged.length})</div>
+              <button
+                className={`${styles.groupDiffBtn} ${diffMode === 'unstaged-tree' ? styles.groupDiffBtnActive : ''}`}
+                onClick={() => {
+                  setSelectedKey(null)
+                  setDiffMode('unstaged-tree')
+                }}
+                type="button"
+              >
+                View all
+              </button>
+            </div>
             {unstaged.map((c) => {
               const Icon = STATUS_ICON[c.status] ?? Circle
               return (
                 <div
                   key={c.path}
                   className={`${styles.changeRow} ${selectedKey === changeKey(c.path, c.staged) ? styles.selected : ''}`}
-                  onClick={() => setSelectedKey(changeKey(c.path, c.staged))}
+                  onClick={() => {
+                    setSelectedKey(changeKey(c.path, c.staged))
+                    setDiffMode('selected')
+                  }}
                 >
                   <Icon size={11} style={{ color: STATUS_COLOR[c.status] }} />
                   <span className={styles.changePath}>{c.path}</span>
@@ -358,8 +411,25 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
           </div>
         )}
         <div className={styles.diffPanel}>
-          <div className={styles.diffHeader}>Diff</div>
-          {selectedChange ? (
+          <div className={styles.diffHeaderRow}>
+            <div className={styles.diffHeader}>
+              {diffMode === 'selected'
+                ? 'Diff'
+                : diffMode === 'staged-tree'
+                  ? 'Staged Tree Diff'
+                  : 'Unstaged Tree Diff'}
+            </div>
+            {diffMode !== 'selected' ? (
+              <button
+                className={styles.groupDiffBtn}
+                onClick={() => setDiffMode('selected')}
+                type="button"
+              >
+                Back to file
+              </button>
+            ) : null}
+          </div>
+          {diffMode !== 'selected' || selectedChange ? (
             isDiffLoading ? (
               <div className={styles.diffEmpty}>
                 <Loader2 size={14} className={styles.spinner} />

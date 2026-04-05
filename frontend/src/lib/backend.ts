@@ -332,6 +332,12 @@ export async function gitDiffRead(projectId: string, path: string, staged?: bool
   })
 }
 
+export async function gitDiffTreeRead(projectId: string, staged?: boolean) {
+  return invoke<GitDiffRecordDto[]>('git_diff_tree_read', {
+    input: { projectId, staged },
+  })
+}
+
 export async function fileRead(projectId: string, path: string) {
   return invoke<FileReadResultDto>('file_read', {
     input: { projectId, path },

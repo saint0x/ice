@@ -40,9 +40,9 @@ Rules for this checklist:
 - [ ] Add richer editor conflict-resolution flows on top of the existing version-token backend guard so stale-save errors can be resolved intentionally in the UI.
 - [ ] Publish a typed shared contract for project, tree, git, browser, terminal, Codex, and approval payloads.
 - [ ] Keep pressure on frontend integration to remove remaining local-only helper mutations so backend state stays canonical across startup and runtime.
-- [ ] Finish wiring the richer git backend surface into the frontend beyond the first production mutation pass, especially whole-tree diff exploration.
+- [ ] Finish wiring the richer git backend surface into the frontend beyond the first production mutation pass, especially branch creation and upstream-setting flows.
 - [ ] Expose canonical Codex per-thread turn/message history so frontend chat surfaces can stop rendering summary-only thread views.
-- [ ] Finish frontend integration of the richer terminal backend surface beyond resize/respawn/rename, especially more explicit session diagnostics/history views.
+- [ ] Finish frontend integration of the richer terminal backend surface beyond resize/respawn/rename, especially more explicit session diagnostics actions.
 - [ ] Replace the current iframe-host browser fallback path with the final native renderer implementation while preserving the existing browser bridge contracts.
 
 ### Testing / Release
@@ -114,6 +114,7 @@ Rules for this checklist:
 - ✅ The current frontend terminal surface now uses the backend resize contract and explicit respawn flow, instead of remounting xterm on every scrollback update or silently auto-respawning dead sessions.
 - ✅ The current frontend browser surface now uses backend open-external and find-in-page reporting contracts, with the iframe renderer host acting as an interim fallback until the final native browser container lands.
 - ✅ The current frontend now uses backend git branch/fetch/pull/push controls and backend terminal rename/session actions instead of placeholder shell chrome.
+- ✅ The current frontend now uses backend whole-tree git diff reads and backend terminal scrollback/session metadata for richer dock diagnostics instead of placeholder-only shell state.
 
 ### Terminal
 

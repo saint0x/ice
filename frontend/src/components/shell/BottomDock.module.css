@@ -199,6 +199,73 @@
   flex: 1;
   overflow: hidden;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.diagnosticsStrip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-variant);
+  background: color-mix(in srgb, var(--bg-surface) 75%, var(--bg-panel));
+  overflow-x: auto;
+}
+
+.diagnosticItem,
+.diagnosticBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--bg-element);
+}
+
+.diagnosticItem span,
+.diagnosticBadge span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.diagnosticBadge {
+  color: var(--text-primary);
+}
+
+.historyPanel {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-variant);
+  background: var(--bg-surface);
+}
+
+.historyHeader {
+  padding: 8px 12px 0;
+  font-size: 10px;
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.historyPreview,
+.historyEmpty {
+  margin: 0;
+  padding: 8px 12px 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.historyEmpty {
+  font-family: var(--font-sans);
 }
 
 .empty {
