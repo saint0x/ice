@@ -4,7 +4,10 @@ use std::sync::Arc;
 use anyhow::{anyhow, Result};
 use parking_lot::RwLock;
 use serde::Serialize;
-use tauri::{AppHandle, Emitter};
+use tauri::{
+    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Rect, Size, WebviewBuilder,
+    WebviewUrl, Window,
+};
 use uuid::Uuid;
 
 use crate::app::events::BROWSER_EVENT;
@@ -57,7 +60,19 @@ pub struct BrowserRendererSession {
     pub tab_id: String,
     pub renderer_id: String,
     pub pane_id: Option<String>,
+    pub window_label: String,
+    pub native_webview_label: String,
     pub attached: bool,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct BrowserRendererBounds {
+    pub tab_id: String,
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -230,6 +245,10 @@ impl BrowserService {
             BROWSER_EVENT,
             serde_json::json!({ "type": "tabNavigated", "tab": state.record.clone() }),
         );
+        self.sync_native_host(
+            tab_id,
+            NativeBrowserAction::Navigate(state.record.url.clone()),
+        )?;
         Ok(state.record)
     }
 
@@ -314,18 +333,70 @@ impl BrowserService {
     }
 
     pub async fn attach_renderer(
-        &self,
+        self: &Arc<Self>,
         tab_id: &str,
         renderer_id: String,
         pane_id: Option<String>,
+        window: Window,
     ) -> Result<BrowserRendererSession> {
-        if !self.tabs.read().contains_key(tab_id) {
-            return Err(anyhow!("unknown browser tab"));
+        let record = self
+            .tabs
+            .read()
+            .get(tab_id)
+            .ok_or_else(|| anyhow!("unknown browser tab"))?
+            .record
+            .clone();
+        if self.renderers.read().contains_key(tab_id) {
+            self.detach_renderer(tab_id).await?;
         }
+        let native_webview_label = native_webview_label(tab_id, &renderer_id);
+        let navigation_service = Arc::clone(self);
+        let navigation_tab_id = tab_id.to_string();
+        let page_load_service = Arc::clone(self);
+        let page_load_tab_id = tab_id.to_string();
+        let title_service = Arc::clone(self);
+        let title_tab_id = tab_id.to_string();
+        let download_service = Arc::clone(self);
+        let download_tab_id = tab_id.to_string();
+        let new_window_service = Arc::clone(self);
+        let new_window_tab_id = tab_id.to_string();
+        let builder = WebviewBuilder::new(
+            &native_webview_label,
+            WebviewUrl::External(parse_browser_url(&record.url)?),
+        )
+        .on_navigation(move |url| {
+            navigation_service.handle_native_navigation(&navigation_tab_id, url.clone());
+            true
+        })
+        .on_page_load(move |_, payload| {
+            page_load_service.handle_native_page_load(
+                &page_load_tab_id,
+                payload.url().to_string(),
+                payload.event() == tauri::webview::PageLoadEvent::Finished,
+            );
+        })
+        .on_document_title_changed(move |_, title| {
+            title_service.handle_native_title_changed(&title_tab_id, title);
+        })
+        .on_download(move |_, event| {
+            download_service.handle_native_download(&download_tab_id, event);
+            true
+        })
+        .on_new_window(move |url, _features| {
+            new_window_service.handle_native_new_window(&new_window_tab_id, url.to_string());
+            tauri::webview::NewWindowResponse::Deny
+        });
+        window.add_child(
+            builder,
+            LogicalPosition::new(0.0, 0.0),
+            LogicalSize::new(1.0, 1.0),
+        )?;
         let session = BrowserRendererSession {
             tab_id: tab_id.to_string(),
             renderer_id,
             pane_id,
+            window_label: window.label().to_string(),
+            native_webview_label,
             attached: true,
         };
         self.renderers
@@ -344,6 +415,9 @@ impl BrowserService {
             .write()
             .remove(tab_id)
             .ok_or_else(|| anyhow!("no renderer session attached"))?;
+        if let Some(webview) = self.app.get_webview(&session.native_webview_label) {
+            let _ = webview.close();
+        }
         let _ = self.app.emit(
             BROWSER_EVENT,
             serde_json::json!({ "type": "rendererDetached", "session": session }),
@@ -353,6 +427,38 @@ impl BrowserService {
 
     pub async fn renderer_session(&self, tab_id: &str) -> Option<BrowserRendererSession> {
         self.renderers.read().get(tab_id).cloned()
+    }
+
+    pub async fn set_renderer_bounds(
+        &self,
+        tab_id: &str,
+        x: f64,
+        y: f64,
+        width: f64,
+        height: f64,
+    ) -> Result<BrowserRendererBounds> {
+        let session = self
+            .renderers
+            .read()
+            .get(tab_id)
+            .cloned()
+            .ok_or_else(|| anyhow!("no renderer session attached"))?;
+        let webview = self
+            .app
+            .get_webview(&session.native_webview_label)
+            .ok_or_else(|| anyhow!("native browser renderer not found"))?;
+        webview.set_bounds(Rect {
+            position: LogicalPosition::new(x, y).into(),
+            size: Size::Logical(LogicalSize::new(width, height)),
+        })?;
+        webview.show()?;
+        Ok(BrowserRendererBounds {
+            tab_id: tab_id.to_string(),
+            x,
+            y,
+            width,
+            height,
+        })
     }
 
     pub async fn request_find_in_page(
@@ -443,11 +549,15 @@ impl BrowserService {
     }
 
     pub async fn go_back(&self, tab_id: &str) -> Result<BrowserTabRecord> {
-        self.step_history(tab_id, -1).await
+        let record = self.step_history(tab_id, -1).await?;
+        self.sync_native_host(tab_id, NativeBrowserAction::Navigate(record.url.clone()))?;
+        Ok(record)
     }
 
     pub async fn go_forward(&self, tab_id: &str) -> Result<BrowserTabRecord> {
-        self.step_history(tab_id, 1).await
+        let record = self.step_history(tab_id, 1).await?;
+        self.sync_native_host(tab_id, NativeBrowserAction::Navigate(record.url.clone()))?;
+        Ok(record)
     }
 
     pub async fn reload(&self, tab_id: &str) -> Result<BrowserTabRecord> {
@@ -461,10 +571,14 @@ impl BrowserService {
             BROWSER_EVENT,
             serde_json::json!({ "type": "tabReloaded", "tab": record.clone() }),
         );
+        self.sync_native_host(tab_id, NativeBrowserAction::Reload)?;
         Ok(record)
     }
 
     pub async fn close_tab(&self, tab_id: &str) -> Result<()> {
+        if self.renderers.read().contains_key(tab_id) {
+            self.detach_renderer(tab_id).await?;
+        }
         self.tabs
             .write()
             .remove(tab_id)
@@ -573,7 +687,7 @@ impl BrowserService {
             let current = tab.history[tab.current_index].clone();
             tab.record.url = current.url.clone();
             tab.record.title = current.title;
-            tab.record.is_loading = false;
+            tab.record.is_loading = true;
             tab.record.security_origin = browser_security_origin(&current.url);
             tab.record.is_secure = is_secure_url(&current.url);
             refresh_record_navigation(tab);
@@ -603,6 +717,145 @@ impl BrowserService {
         };
         Ok(Some(updated))
     }
+
+    fn handle_native_navigation(&self, tab_id: &str, url: url::Url) {
+        let url_string = url.to_string();
+        let updated = self.update_tab(tab_id, |state| {
+            if state.record.url != url_string {
+                state.history.truncate(state.current_index + 1);
+                let position = state.history.len();
+                let title = infer_title_from_url(&url_string);
+                state.history.push(BrowserHistoryEntry {
+                    tab_id: state.record.tab_id.clone(),
+                    position,
+                    url: url_string.clone(),
+                    title: title.clone(),
+                });
+                state.current_index = position;
+                state.record.title = title;
+            }
+            state.record.url = url_string.clone();
+            state.record.is_loading = true;
+            state.record.security_origin = browser_security_origin(&url_string);
+            state.record.is_secure = is_secure_url(&url_string);
+            refresh_record_navigation(state);
+        });
+        if let Ok(Some(record)) = updated {
+            self.persist_current_state(tab_id, record.clone());
+            let _ = self.app.emit(
+                BROWSER_EVENT,
+                serde_json::json!({ "type": "tabNavigated", "tab": record }),
+            );
+        }
+    }
+
+    fn handle_native_page_load(&self, tab_id: &str, url: String, finished: bool) {
+        if let Ok(Some(record)) = self.update_tab(tab_id, |state| {
+            state.record.url = url.clone();
+            state.record.is_loading = !finished;
+            state.record.security_origin = browser_security_origin(&url);
+            state.record.is_secure = is_secure_url(&url);
+            refresh_record_navigation(state);
+        }) {
+            self.persist_current_state(tab_id, record.clone());
+            let _ = self.app.emit(
+                BROWSER_EVENT,
+                serde_json::json!({ "type": "tabLoadStateChanged", "tab": record }),
+            );
+        }
+    }
+
+    fn handle_native_title_changed(&self, tab_id: &str, title: String) {
+        if title.trim().is_empty() {
+            return;
+        }
+        if let Ok(Some(record)) = self.update_tab(tab_id, |state| {
+            state.record.title = title.clone();
+            if let Some(current) = state.history.get_mut(state.current_index) {
+                current.title = title.clone();
+            }
+        }) {
+            self.persist_current_state(tab_id, record.clone());
+            let _ = self.app.emit(
+                BROWSER_EVENT,
+                serde_json::json!({ "type": "tabUpdated", "tab": record }),
+            );
+        }
+    }
+
+    fn handle_native_download(&self, tab_id: &str, event: tauri::webview::DownloadEvent<'_>) {
+        if let tauri::webview::DownloadEvent::Requested { url, .. } = event {
+            let _ = tauri::async_runtime::block_on(self.request_download(
+                tab_id,
+                url.to_string(),
+                None,
+                None,
+            ));
+        }
+    }
+
+    fn handle_native_new_window(&self, tab_id: &str, url: String) {
+        let _ = tauri::async_runtime::block_on(self.request_open_external_from_url(tab_id, url));
+    }
+
+    async fn request_open_external_from_url(
+        &self,
+        tab_id: &str,
+        url: String,
+    ) -> Result<BrowserExternalOpenRequest> {
+        let tab = self
+            .tabs
+            .read()
+            .get(tab_id)
+            .ok_or_else(|| anyhow!("unknown browser tab"))?
+            .record
+            .clone();
+        let request = BrowserExternalOpenRequest {
+            tab_id: tab.tab_id,
+            project_id: tab.project_id,
+            url,
+        };
+        let _ = self.app.emit(
+            BROWSER_EVENT,
+            serde_json::json!({ "type": "openExternalRequested", "request": request.clone() }),
+        );
+        Ok(request)
+    }
+
+    fn persist_current_state(&self, tab_id: &str, record: BrowserTabRecord) {
+        let history = self
+            .tabs
+            .read()
+            .get(tab_id)
+            .map(|state| state.history.clone())
+            .unwrap_or_default();
+        let persistence = Arc::clone(&self.persistence);
+        let tab_id = tab_id.to_string();
+        tauri::async_runtime::spawn(async move {
+            let _ = persistence.upsert_browser_tab(record).await;
+            let _ = persistence.replace_browser_history(tab_id, history).await;
+        });
+    }
+
+    fn sync_native_host(&self, tab_id: &str, action: NativeBrowserAction) -> Result<()> {
+        let Some(session) = self.renderers.read().get(tab_id).cloned() else {
+            return Ok(());
+        };
+        let webview = self
+            .app
+            .get_webview(&session.native_webview_label)
+            .ok_or_else(|| anyhow!("native browser renderer not found"))?;
+        match action {
+            NativeBrowserAction::Navigate(url) => webview.navigate(parse_browser_url(&url)?)?,
+            NativeBrowserAction::Reload => webview.reload()?,
+        }
+        Ok(())
+    }
+}
+
+enum NativeBrowserAction {
+    Navigate(String),
+    Reload,
 }
 
 fn infer_title_from_url(url: &str) -> String {
@@ -631,6 +884,31 @@ fn is_secure_url(url: &str) -> bool {
 fn refresh_record_navigation(state: &mut BrowserTabState) {
     state.record.can_go_back = state.current_index > 0;
     state.record.can_go_forward = state.current_index + 1 < state.history.len();
+}
+
+fn native_webview_label(tab_id: &str, renderer_id: &str) -> String {
+    format!(
+        "browser-{}-{}",
+        sanitize_label(tab_id),
+        sanitize_label(renderer_id)
+    )
+}
+
+fn sanitize_label(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| match ch {
+            'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '/' | ':' | '_' => ch,
+            _ => '_',
+        })
+        .collect()
+}
+
+fn parse_browser_url(value: &str) -> Result<url::Url> {
+    if let Ok(url) = url::Url::parse(value) {
+        return Ok(url);
+    }
+    url::Url::parse(&format!("https://{value}")).map_err(Into::into)
 }
 
 #[cfg(test)]

@@ -193,6 +193,16 @@ pub struct BrowserRendererAttachInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct BrowserRendererBoundsInput {
+    pub tab_id: String,
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BrowserFindInPageInput {
     pub tab_id: String,
     pub query: String,

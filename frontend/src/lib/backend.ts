@@ -558,6 +558,18 @@ export async function browserRendererAttach(tabId: string, rendererId: string, p
   })
 }
 
+export async function browserRendererBoundsSet(
+  tabId: string,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) {
+  return invoke('browser_renderer_bounds_set', {
+    input: { tabId, x, y, width, height },
+  })
+}
+
 export async function browserRendererDetach(tabId: string) {
   return invoke<void>('browser_renderer_detach', { tabId })
 }

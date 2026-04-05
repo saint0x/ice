@@ -76,6 +76,7 @@ pub fn run() {
             commands::browser_tab_renderer_state_set,
             commands::browser_tab_open_external,
             commands::browser_renderer_attach,
+            commands::browser_renderer_bounds_set,
             commands::browser_renderer_detach,
             commands::browser_renderer_session_get,
             commands::browser_find_in_page,

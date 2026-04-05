@@ -17,8 +17,6 @@ Rules for this checklist:
 
 ### Browser
 
-- [ ] Decide and implement the final Tauri-native browser container strategy for pane-hosted browsing.
-
 ### Terminal
 
 - [ ] Add terminal event schema docs for the frontend, including `sessionCreated`, `data`, `sessionExited`, `sessionReadError`, and `sessionClosed`.
@@ -36,14 +34,12 @@ Rules for this checklist:
 
 ### Frontend Contract Support
 
-- [ ] Replace the remaining frontend browser viewport placeholder with the final native renderer host.
+- [ ] Add deeper native-browser feature coverage on top of the new child-webview host, especially download handling polish, new-window policy, and native find-in-page execution.
 - [ ] Add richer editor conflict-resolution flows on top of the existing version-token backend guard so stale-save errors can be resolved intentionally in the UI.
 - [ ] Publish a typed shared contract for project, tree, git, browser, terminal, Codex, and approval payloads.
 - [ ] Keep pressure on frontend integration to remove remaining local-only helper mutations so backend state stays canonical across startup and runtime.
 - [ ] Finish wiring the richer git backend surface into the frontend beyond the first production mutation pass, especially log/history exploration.
 - [ ] Finish frontend integration of the richer terminal backend surface beyond resize/respawn/rename, especially more explicit session diagnostics actions.
-- [ ] Replace the current iframe-host browser fallback path with the final native renderer implementation while preserving the existing browser bridge contracts.
-
 ### Testing / Release
 
 - [ ] Expand Fozzy scenarios further into browser navigation and Codex recovery flows.
@@ -105,13 +101,13 @@ Rules for this checklist:
 - ✅ Renderer-facing browser sync commands now exist for pinning, tab metadata updates, and open-external requests without hard-coding a specific browser engine into the backend contract.
 - ✅ Browser renderer bridge commands now exist for renderer attach/detach, renderer session lookup, find-in-page requests/results, and download requests without coupling the rest of the backend to a specific native browser implementation.
 - ✅ Project-level browser restore policy now exists as backend state, with canonical per-project get/set commands under the project service.
-- ✅ The current frontend now uses the browser renderer bridge for a pane-hosted renderer host, attaching/detaching sessions and syncing renderer state back through backend browser IPC.
+- ✅ The current frontend now uses the browser renderer bridge for a pane-hosted native child-webview host, with runtime-managed attach/detach and bounds synchronization through backend browser IPC.
 - ✅ The current frontend now also uses the production file IO backend for editor reads and saves, including binary-file detection and optimistic version-token save enforcement.
 - ✅ The current frontend no longer seeds fake startup projects, git state, terminal sessions, Codex threads, or workspace tabs before backend hydration.
 - ✅ The current frontend now uses backend git mutation and readiness commands for stage, unstage, restore, commit, and per-file diff inspection in the Git surface.
 - ✅ The current frontend Codex surfaces now execute approvals, clear unread state, switch active threads correctly, and present runtime status without inventing message history the backend does not expose.
 - ✅ The current frontend terminal surface now uses the backend resize contract and explicit respawn flow, instead of remounting xterm on every scrollback update or silently auto-respawning dead sessions.
-- ✅ The current frontend browser surface now uses backend open-external and find-in-page reporting contracts, with the iframe renderer host acting as an interim fallback until the final native browser container lands.
+- ✅ The backend now owns the native browser renderer lifecycle for mounted browser panes, including child-webview creation, native navigation/reload synchronization, title/load-state updates, and new-window/download event bridging.
 - ✅ The current frontend now uses backend browser pin-state commands in both the sidebar and the browser surface instead of local-only browser tab chrome.
 - ✅ The current frontend now uses backend per-project browser restore-policy state instead of treating browser session restore behavior as an implicit local choice.
 - ✅ The current frontend now uses backend git branch/fetch/pull/push controls and backend terminal rename/session actions instead of placeholder shell chrome.

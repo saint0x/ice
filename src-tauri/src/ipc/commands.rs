@@ -609,11 +609,23 @@ pub async fn browser_tab_open_external(
 #[tauri::command]
 pub async fn browser_renderer_attach(
     input: BrowserRendererAttachInput,
+    window: tauri::Window,
     state: State<'_, AppState>,
 ) -> Result<crate::browser::service::BrowserRendererSession, AppError> {
     Ok(state
         .browser
-        .attach_renderer(&input.tab_id, input.renderer_id, input.pane_id)
+        .attach_renderer(&input.tab_id, input.renderer_id, input.pane_id, window)
+        .await?)
+}
+
+#[tauri::command]
+pub async fn browser_renderer_bounds_set(
+    input: BrowserRendererBoundsInput,
+    state: State<'_, AppState>,
+) -> Result<crate::browser::service::BrowserRendererBounds, AppError> {
+    Ok(state
+        .browser
+        .set_renderer_bounds(&input.tab_id, input.x, input.y, input.width, input.height)
         .await?)
 }
 

@@ -197,6 +197,8 @@ export function useBackendIntegration() {
         (payload.type === 'tabCreated' ||
           payload.type === 'tabNavigated' ||
           payload.type === 'tabPinChanged' ||
+          payload.type === 'tabUpdated' ||
+          payload.type === 'tabLoadStateChanged' ||
           payload.type === 'tabRendererStateChanged' ||
           payload.type === 'tabHistoryChanged' ||
           payload.type === 'tabReloaded') &&

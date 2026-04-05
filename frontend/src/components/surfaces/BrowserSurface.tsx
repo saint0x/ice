@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, RotateCw, Lock, Globe, ExternalLink, Search, X, 
 import type { Tab } from '@/types'
 import {
   browserRendererAttach,
+  browserRendererBoundsSet,
   browserRendererDetach,
   browserFindInPage,
   browserFindInPageReport,
@@ -12,7 +13,6 @@ import {
   browserTabOpenExternal,
   browserTabPinSet,
   browserTabReload,
-  browserTabRendererStateSet,
   toBrowserTab,
 } from '@/lib/backend'
 import { useBrowserStore } from '@/stores/browser'
@@ -30,21 +30,57 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
   const [findQuery, setFindQuery] = useState('')
   const [findResult, setFindResult] = useState<string | null>(null)
   const [surfaceError, setSurfaceError] = useState<string | null>(null)
-  const iframeRef = useRef<HTMLIFrameElement>(null)
+  const viewportRef = useRef<HTMLDivElement>(null)
 
   const rendererId = useMemo(() => (
-    browserTabId ? `renderer-${browserTabId}` : undefined
-  ), [browserTabId])
+    browserTabId ? `renderer-${browserTabId}-${tab.id}` : undefined
+  ), [browserTabId, tab.id])
 
   const url = draftUrl ?? browserTab?.url ?? (tab.meta?.url as string) ?? 'https://example.com'
 
   useEffect(() => {
     if (!browserTabId || !rendererId) return
+    let disposed = false
     void browserRendererAttach(browserTabId, rendererId, tab.id)
+      .catch((error: unknown) => {
+        if (!disposed) {
+          setSurfaceError(error instanceof Error ? error.message : 'Failed to attach native browser renderer')
+        }
+      })
     return () => {
+      disposed = true
       void browserRendererDetach(browserTabId)
     }
   }, [browserTabId, rendererId, tab.id])
+
+  useEffect(() => {
+    if (!browserTabId || !viewportRef.current) return
+    const element = viewportRef.current
+    let disposed = false
+
+    const syncBounds = () => {
+      if (disposed) return
+      const rect = element.getBoundingClientRect()
+      if (rect.width < 1 || rect.height < 1) return
+      void browserRendererBoundsSet(browserTabId, rect.left, rect.top, rect.width, rect.height)
+        .catch((error: unknown) => {
+          if (!disposed) {
+            setSurfaceError(error instanceof Error ? error.message : 'Failed to position native browser renderer')
+          }
+        })
+    }
+
+    const animationFrame = window.requestAnimationFrame(syncBounds)
+    const observer = new ResizeObserver(syncBounds)
+    observer.observe(element)
+    window.addEventListener('resize', syncBounds)
+    return () => {
+      disposed = true
+      window.cancelAnimationFrame(animationFrame)
+      observer.disconnect()
+      window.removeEventListener('resize', syncBounds)
+    }
+  }, [browserTabId, browserTab?.url])
 
   const runFindInPage = async (mode: 'first' | 'next') => {
     if (!browserTabId) return
@@ -60,46 +96,14 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
       forward: true,
       findNext: mode === 'next',
     })
-    try {
-      const targetWindow = iframeRef.current?.contentWindow
-      const targetDocument = iframeRef.current?.contentDocument
-      if (!targetWindow || !targetDocument) {
-        throw new Error('Browser renderer is unavailable')
-      }
-      const haystack = targetDocument.body?.innerText ?? ''
-      const matches = countMatches(haystack, query)
-      const targetWindowWithFind = targetWindow as Window & {
-        find?: (
-          searchString: string,
-          caseSensitive?: boolean,
-          backwards?: boolean,
-          wrapAround?: boolean,
-          wholeWord?: boolean,
-          searchInFrames?: boolean,
-          showDialog?: boolean,
-        ) => boolean
-      }
-      const found = typeof targetWindowWithFind.find === 'function'
-        ? targetWindowWithFind.find(query, false, false, mode === 'next', false, false, false)
-        : matches > 0
-      const result = await browserFindInPageReport({
-        tabId: browserTabId,
-        query,
-        matches,
-        activeMatchOrdinal: found ? 1 : 0,
-        finalUpdate: true,
-      })
-      setFindResult(result.matches > 0 ? `${result.activeMatchOrdinal}/${result.matches} matches` : 'No matches')
-    } catch {
-      await browserFindInPageReport({
-        tabId: browserTabId,
-        query,
-        matches: 0,
-        activeMatchOrdinal: 0,
-        finalUpdate: true,
-      }).catch(() => {})
-      setFindResult('Find unavailable for this page')
-    }
+    await browserFindInPageReport({
+      tabId: browserTabId,
+      query,
+      matches: 0,
+      activeMatchOrdinal: 0,
+      finalUpdate: true,
+    }).catch(() => {})
+    setFindResult('Native find hooks are next')
   }
 
   return (
@@ -224,31 +228,10 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
             <span>{surfaceError}</span>
           </div>
         )}
-        <iframe
-          ref={iframeRef}
-          key={browserTabId ?? tab.id}
-          className={styles.frame}
-          src={browserTab?.url ?? url}
-          title={browserTab?.title ?? tab.title}
-          sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-downloads"
-          referrerPolicy="strict-origin-when-cross-origin"
-          onLoad={() => {
-            if (!browserTabId) return
-            const currentUrl = iframeRef.current?.src ?? browserTab?.url ?? url
-            const isSecure =
-              currentUrl.startsWith('https://') ||
-              currentUrl.startsWith('about:') ||
-              currentUrl.startsWith('tauri://')
-            const securityOrigin = safeBrowserOrigin(currentUrl)
-            void browserTabRendererStateSet({
-              tabId: browserTabId,
-              url: currentUrl,
-              title: browserTab?.title ?? tab.title,
-              isLoading: false,
-              securityOrigin,
-              isSecure,
-            }).then((next) => upsertBrowserTab(toBrowserTab(next))).catch(() => {})
-          }}
+        <div
+          ref={viewportRef}
+          className={styles.nativeViewport}
+          aria-label={browserTab?.title ?? tab.title}
         />
         <div className={styles.overlay}>
           <Globe size={12} className={styles.overlayIcon} />
@@ -260,18 +243,3 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
     </div>
   )
 })
-
-function safeBrowserOrigin(url: string): string | null {
-  try {
-    return new URL(url).origin
-  } catch {
-    return null
-  }
-}
-
-function countMatches(haystack: string, needle: string) {
-  if (!needle) return 0
-  const pattern = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const matches = haystack.match(new RegExp(pattern, 'gi'))
-  return matches?.length ?? 0
-}
