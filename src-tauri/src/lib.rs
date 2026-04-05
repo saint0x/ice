@@ -70,6 +70,8 @@ pub fn run() {
             commands::git_push,
             commands::git_diff_read,
             commands::git_diff_tree_read,
+            commands::git_history_read,
+            commands::git_commit_show,
             commands::browser_tab_create,
             commands::browser_tab_navigate,
             commands::browser_tab_pin_set,

@@ -44,6 +44,26 @@ pub struct GitBranchRecord {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct GitHistoryEntry {
+    pub commit: String,
+    pub short_commit: String,
+    pub author_name: String,
+    pub author_email: String,
+    pub authored_at: String,
+    pub refs: Vec<String>,
+    pub summary: String,
+    pub body: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitCommitShowRecord {
+    pub commit: String,
+    pub diff: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct GitStatusSummary {
     pub branch: Option<String>,
     pub ahead: usize,
@@ -464,6 +484,52 @@ impl GitService {
         Ok(diffs)
     }
 
+    pub async fn read_history(
+        &self,
+        project: &ProjectRecord,
+        limit: usize,
+        reference: Option<&str>,
+    ) -> Result<Vec<GitHistoryEntry>> {
+        let limit = limit.clamp(1, 200);
+        let limit_string = limit.to_string();
+        let mut args = vec![
+            "log",
+            "--date=iso-strict",
+            "--decorate=short",
+            "--pretty=format:%H%x1f%h%x1f%an%x1f%ae%x1f%aI%x1f%D%x1f%s%x1f%b%x1e",
+            "-n",
+            limit_string.as_str(),
+        ];
+        if let Some(reference) = reference.filter(|value| !value.trim().is_empty()) {
+            args.push(reference);
+        }
+        let output = run_git(&project.root_path, &args).await?;
+        Ok(parse_history(&output))
+    }
+
+    pub async fn show_commit(
+        &self,
+        project: &ProjectRecord,
+        commit: &str,
+    ) -> Result<GitCommitShowRecord> {
+        let diff = run_git(
+            &project.root_path,
+            &[
+                "show",
+                "--stat=80",
+                "--no-ext-diff",
+                "--no-color",
+                "--date=iso-strict",
+                commit,
+            ],
+        )
+        .await?;
+        Ok(GitCommitShowRecord {
+            commit: commit.to_string(),
+            diff,
+        })
+    }
+
     pub fn schedule_status_refresh(app: AppHandle, project_id: String, root_path: String) {
         tokio::spawn(async move {
             if let Ok(summary) = read_status_for_root(&root_path).await {
@@ -730,9 +796,53 @@ fn normalize_optional(value: Option<&str>) -> Option<String> {
     }
 }
 
+fn parse_history(raw: &str) -> Vec<GitHistoryEntry> {
+    raw.split('\x1e')
+        .filter_map(|record| {
+            let trimmed = record.trim();
+            if trimmed.is_empty() {
+                return None;
+            }
+            let mut fields = trimmed.split('\x1f');
+            let commit = fields.next()?.trim().to_string();
+            let short_commit = fields.next()?.trim().to_string();
+            let author_name = fields.next()?.trim().to_string();
+            let author_email = fields.next()?.trim().to_string();
+            let authored_at = fields.next()?.trim().to_string();
+            let refs = fields
+                .next()
+                .map(|value| {
+                    value
+                        .split(',')
+                        .map(str::trim)
+                        .filter(|value| !value.is_empty())
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            let summary = fields.next()?.trim().to_string();
+            let body = fields
+                .next()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToString::to_string);
+            Some(GitHistoryEntry {
+                commit,
+                short_commit,
+                author_name,
+                author_email,
+                authored_at,
+                refs,
+                summary,
+                body,
+            })
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{ensure_paths, parse_status, GitMutationAction, GitMutationContext};
+    use super::{ensure_paths, parse_history, parse_status, GitMutationAction, GitMutationContext};
 
     #[test]
     fn parse_status_counts_staged_and_untracked_changes() {
@@ -763,5 +873,18 @@ mod tests {
     fn git_mutation_action_serializes_to_camel_case() {
         let value = serde_json::to_value(GitMutationAction::Pull).unwrap();
         assert_eq!(value, serde_json::json!("pull"));
+    }
+
+    #[test]
+    fn parse_history_reads_commit_records() {
+        let history = parse_history(
+            "abc123\x1fab12\x1fSaint\x1fsaint@example.com\x1f2026-04-05T10:00:00-04:00\x1fHEAD -> main, origin/main\x1fAdd backend history\x1fDetailed body\x1e",
+        );
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].commit, "abc123");
+        assert_eq!(history[0].short_commit, "ab12");
+        assert_eq!(history[0].refs, vec!["HEAD -> main", "origin/main"]);
+        assert_eq!(history[0].summary, "Add backend history");
+        assert_eq!(history[0].body.as_deref(), Some("Detailed body"));
     }
 }

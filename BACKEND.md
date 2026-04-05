@@ -37,7 +37,6 @@ Rules for this checklist:
 - [ ] Add richer editor conflict-resolution flows on top of the existing version-token backend guard so stale-save errors can be resolved intentionally in the UI.
 - [ ] Publish a typed shared contract for project, tree, git, browser, terminal, Codex, and approval payloads.
 - [ ] Keep pressure on frontend integration to remove remaining local-only helper mutations so backend state stays canonical across startup and runtime.
-- [ ] Finish wiring the richer git backend surface into the frontend beyond the first production mutation pass, especially log/history exploration.
 - [ ] Finish frontend integration of the richer terminal backend surface beyond resize/respawn/rename, especially more explicit session diagnostics actions.
 ### Testing / Release
 
@@ -90,6 +89,7 @@ Rules for this checklist:
 - ✅ Whole-tree staged and unstaged diff payload reads now exist alongside per-file diffs through `git_diff_tree_read`.
 - ✅ Commit readiness now exposes author config, commit-message validation, hooks path, and active hooks so the frontend can explain blocked commits before execution.
 - ✅ Structured git mutation events now emit through `app://git` as `mutationCompleted`, with typed action/context payloads for stage, unstage, restore, commit, checkout, fetch, pull, and push outcomes.
+- ✅ Native git history and commit-show contracts now exist through typed backend commands, so the frontend can render real recent commits and inspect commit diffs without shelling out locally.
 
 ### Browser
 

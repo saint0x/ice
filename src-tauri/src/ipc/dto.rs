@@ -350,6 +350,21 @@ pub struct GitDiffTreeInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct GitHistoryInput {
+    pub project_id: String,
+    pub limit: Option<usize>,
+    pub reference: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitCommitShowInput {
+    pub project_id: String,
+    pub commit: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CodexLoginStartInput {
     pub mode: Option<String>,
     pub api_key: Option<String>,

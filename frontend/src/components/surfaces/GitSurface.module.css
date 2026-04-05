@@ -181,9 +181,98 @@
   font-size: var(--text-xs);
 }
 
+.modeBar {
+  display: flex;
+  gap: 8px;
+  padding: 10px var(--sp-5);
+  border-bottom: 1px solid var(--border-variant);
+}
+
+.modeBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: var(--bg-element);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.modeBtnActive {
+  background: var(--bg-element-selected);
+  color: var(--text-primary);
+}
+
 .changes {
   flex: 1;
   overflow: auto;
+}
+
+.historyLayout {
+  display: grid;
+  grid-template-columns: minmax(240px, 340px) 1fr;
+  min-height: 0;
+  flex: 1;
+}
+
+.historyList {
+  border-right: 1px solid var(--border-variant);
+  overflow: auto;
+}
+
+.historyRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 12px var(--sp-5);
+  text-align: left;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.historyRow:hover {
+  background: var(--bg-ghost-hover);
+}
+
+.historyTopline,
+.historyMeta,
+.historyRefs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.historySummary {
+  flex: 1;
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+  font-weight: var(--weight-medium);
+}
+
+.historySha,
+.historyDetailMeta {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.historyMeta {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.historyRefBadge {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--bg-element);
+  color: var(--text-muted);
+  font-size: 10px;
 }
 
 .group {
@@ -313,6 +402,15 @@
   line-height: 1.5;
 }
 
+.commitBody {
+  padding: 0 var(--sp-5) var(--sp-4);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .diffEmpty {
   display: flex;
   align-items: center;
@@ -341,5 +439,16 @@
 
   to {
     transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 980px) {
+  .historyLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .historyList {
+    border-right: 0;
+    border-bottom: 1px solid var(--border-variant);
   }
 }

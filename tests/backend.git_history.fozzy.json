@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "name": "backend-git-history",
+  "steps": [
+    {
+      "type": "trace_event",
+      "name": "verify_git_history_contract",
+      "fields": {
+        "target": "src-tauri/git-history"
+      }
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test git::service::tests::parse_history_reads_commit_records -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test git::service::tests::parse_history_reads_commit_records -- --exact"
+      ],
+      "expect_exit": 0
+    }
+  ]
+}

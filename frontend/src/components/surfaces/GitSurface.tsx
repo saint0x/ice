@@ -1,16 +1,18 @@
 import { memo, useEffect, useMemo, useState } from 'react'
 import {
-  GitBranch, ArrowUp, ArrowDown, Circle, Plus, Minus, Check, Loader2, RotateCcw, ArrowUpToLine, ArrowDownToLine, AlertTriangle, RefreshCcw, CloudDownload, CloudUpload, GitCommitHorizontal,
+  GitBranch, ArrowUp, ArrowDown, Circle, Plus, Minus, Check, Loader2, RotateCcw, ArrowUpToLine, ArrowDownToLine, AlertTriangle, RefreshCcw, CloudDownload, CloudUpload, GitCommitHorizontal, History, FileCode2,
 } from 'lucide-react'
 import type { Tab } from '@/types'
 import {
   gitBranchCheckout,
   gitBranchesList,
   gitCommit,
+  gitCommitShow,
   gitCommitReadiness,
   gitDiffRead,
   gitDiffTreeRead,
   gitFetch,
+  gitHistoryRead,
   gitPull,
   gitPush,
   gitRestorePaths,
@@ -26,6 +28,7 @@ interface Props {
 }
 
 type DiffMode = 'selected' | 'staged-tree' | 'unstaged-tree'
+type ViewMode = 'changes' | 'history'
 
 const STATUS_ICON: Record<string, typeof Circle> = {
   modified: Circle,
@@ -51,6 +54,7 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
   const [isDiffLoading, setIsDiffLoading] = useState(false)
   const [isMutating, setIsMutating] = useState(false)
   const [diffMode, setDiffMode] = useState<DiffMode>('selected')
+  const [viewMode, setViewMode] = useState<ViewMode>('changes')
   const [branches, setBranches] = useState<Array<{
     name: string
     reference: string
@@ -73,6 +77,20 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
     activeHooks: string[]
   } | null>(null)
   const [surfaceError, setSurfaceError] = useState<string | null>(null)
+  const [historyEntries, setHistoryEntries] = useState<Array<{
+    commit: string
+    shortCommit: string
+    authorName: string
+    authorEmail: string
+    authoredAt: string
+    refs: string[]
+    summary: string
+    body?: string | null
+  }>>([])
+  const [selectedHistoryCommit, setSelectedHistoryCommit] = useState<string | null>(null)
+  const [selectedCommitDiff, setSelectedCommitDiff] = useState<string>('')
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false)
+  const [isCommitDiffLoading, setIsCommitDiffLoading] = useState(false)
   const selectedChange = useMemo(() => {
     if (!state || !selectedKey) return null
     return state.changes.find((change) => changeKey(change.path, change.staged) === selectedKey) ?? null
@@ -80,6 +98,10 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
   const currentBranchRecord = useMemo(
     () => branches.find((branch) => branch.current) ?? null,
     [branches],
+  )
+  const selectedHistoryEntry = useMemo(
+    () => historyEntries.find((entry) => entry.commit === selectedHistoryCommit) ?? null,
+    [historyEntries, selectedHistoryCommit],
   )
 
   useEffect(() => {
@@ -166,6 +188,55 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
       disposed = true
     }
   }, [state, tab.projectId])
+
+  useEffect(() => {
+    if (!state || viewMode !== 'history') return
+    let disposed = false
+    setIsHistoryLoading(true)
+    void gitHistoryRead(tab.projectId, 50, state.branch)
+      .then((entries) => {
+        if (!disposed) {
+          setHistoryEntries(entries)
+          setSelectedHistoryCommit((current) => current ?? entries[0]?.commit ?? null)
+          setIsHistoryLoading(false)
+        }
+      })
+      .catch((error: unknown) => {
+        if (!disposed) {
+          setSurfaceError(error instanceof Error ? error.message : 'Failed to load git history')
+          setIsHistoryLoading(false)
+        }
+      })
+    return () => {
+      disposed = true
+    }
+  }, [state, tab.projectId, viewMode])
+
+  useEffect(() => {
+    if (viewMode !== 'history' || !selectedHistoryCommit) {
+      setSelectedCommitDiff('')
+      return
+    }
+    let disposed = false
+    setIsCommitDiffLoading(true)
+    void gitCommitShow(tab.projectId, selectedHistoryCommit)
+      .then((result) => {
+        if (!disposed) {
+          setSelectedCommitDiff(result.diff)
+          setIsCommitDiffLoading(false)
+        }
+      })
+      .catch((error: unknown) => {
+        if (!disposed) {
+          setSurfaceError(error instanceof Error ? error.message : 'Failed to load commit details')
+          setSelectedCommitDiff('')
+          setIsCommitDiffLoading(false)
+        }
+      })
+    return () => {
+      disposed = true
+    }
+  }, [selectedHistoryCommit, tab.projectId, viewMode])
 
   if (!state) return <div className={styles.empty}>No git state</div>
 
@@ -370,6 +441,87 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
           <span>{surfaceError}</span>
         </div>
       )}
+      <div className={styles.modeBar}>
+        <button
+          className={`${styles.modeBtn} ${viewMode === 'changes' ? styles.modeBtnActive : ''}`}
+          onClick={() => setViewMode('changes')}
+          type="button"
+        >
+          <FileCode2 size={12} />
+          <span>Changes</span>
+        </button>
+        <button
+          className={`${styles.modeBtn} ${viewMode === 'history' ? styles.modeBtnActive : ''}`}
+          onClick={() => setViewMode('history')}
+          type="button"
+        >
+          <History size={12} />
+          <span>History</span>
+        </button>
+      </div>
+      {viewMode === 'history' ? (
+        <div className={styles.historyLayout}>
+          <div className={styles.historyList}>
+            <div className={styles.groupHeader}>Recent Commits</div>
+            {isHistoryLoading ? (
+              <div className={styles.diffEmpty}>
+                <Loader2 size={14} className={styles.spinner} />
+                <span>Loading commit history...</span>
+              </div>
+            ) : historyEntries.length > 0 ? (
+              historyEntries.map((entry) => (
+                <button
+                  key={entry.commit}
+                  className={`${styles.historyRow} ${selectedHistoryCommit === entry.commit ? styles.selected : ''}`}
+                  onClick={() => setSelectedHistoryCommit(entry.commit)}
+                  type="button"
+                >
+                  <div className={styles.historyTopline}>
+                    <span className={styles.historySummary}>{entry.summary}</span>
+                    <span className={styles.historySha}>{entry.shortCommit}</span>
+                  </div>
+                  <div className={styles.historyMeta}>
+                    <span>{entry.authorName}</span>
+                    <span>{formatHistoryTime(entry.authoredAt)}</span>
+                  </div>
+                  {entry.refs.length > 0 ? (
+                    <div className={styles.historyRefs}>
+                      {entry.refs.map((ref) => (
+                        <span key={ref} className={styles.historyRefBadge}>{ref}</span>
+                      ))}
+                    </div>
+                  ) : null}
+                </button>
+              ))
+            ) : (
+              <div className={styles.diffEmpty}>No commits found for this branch.</div>
+            )}
+          </div>
+          <div className={styles.diffPanel}>
+            <div className={styles.diffHeaderRow}>
+              <div className={styles.diffHeader}>Commit Detail</div>
+              {selectedHistoryEntry ? (
+                <span className={styles.historyDetailMeta}>{selectedHistoryEntry.authorEmail}</span>
+              ) : null}
+            </div>
+            {selectedHistoryEntry?.body ? (
+              <div className={styles.commitBody}>{selectedHistoryEntry.body}</div>
+            ) : null}
+            {selectedHistoryCommit ? (
+              isCommitDiffLoading ? (
+                <div className={styles.diffEmpty}>
+                  <Loader2 size={14} className={styles.spinner} />
+                  <span>Loading commit diff...</span>
+                </div>
+              ) : (
+                <pre className={styles.diffContent}>{selectedCommitDiff || 'No diff output for this commit.'}</pre>
+              )
+            ) : (
+              <div className={styles.diffEmpty}>Select a commit to inspect its diff and metadata.</div>
+            )}
+          </div>
+        </div>
+      ) : (
       <div className={styles.changes}>
         {staged.length > 0 && (
           <div className={styles.group}>
@@ -515,9 +667,23 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
           )}
         </div>
       </div>
+      )}
     </div>
   )
 })
+
+function formatHistoryTime(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date)
+}
 
 function changeKey(path: string, staged: boolean) {
   return `${staged ? 'staged' : 'unstaged'}:${path}`

@@ -543,6 +543,31 @@ pub async fn git_diff_tree_read(
 }
 
 #[tauri::command]
+pub async fn git_history_read(
+    input: GitHistoryInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::git::service::GitHistoryEntry>, AppError> {
+    let project = state.projects.require_project(&input.project_id).await?;
+    Ok(state
+        .git
+        .read_history(
+            &project,
+            input.limit.unwrap_or(40),
+            input.reference.as_deref(),
+        )
+        .await?)
+}
+
+#[tauri::command]
+pub async fn git_commit_show(
+    input: GitCommitShowInput,
+    state: State<'_, AppState>,
+) -> Result<crate::git::service::GitCommitShowRecord, AppError> {
+    let project = state.projects.require_project(&input.project_id).await?;
+    Ok(state.git.show_commit(&project, &input.commit).await?)
+}
+
+#[tauri::command]
 pub async fn browser_tab_create(
     input: BrowserTabCreateInput,
     state: State<'_, AppState>,

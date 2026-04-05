@@ -118,6 +118,22 @@ interface GitDiffRecordDto {
   diff: string
 }
 
+interface GitHistoryEntryDto {
+  commit: string
+  shortCommit: string
+  authorName: string
+  authorEmail: string
+  authoredAt: string
+  refs: string[]
+  summary: string
+  body?: string | null
+}
+
+interface GitCommitShowDto {
+  commit: string
+  diff: string
+}
+
 interface GitBranchRecordDto {
   name: string
   reference: string
@@ -383,6 +399,18 @@ export async function gitDiffRead(projectId: string, path: string, staged?: bool
 export async function gitDiffTreeRead(projectId: string, staged?: boolean) {
   return invoke<GitDiffRecordDto[]>('git_diff_tree_read', {
     input: { projectId, staged },
+  })
+}
+
+export async function gitHistoryRead(projectId: string, limit = 40, reference?: string) {
+  return invoke<GitHistoryEntryDto[]>('git_history_read', {
+    input: { projectId, limit, reference },
+  })
+}
+
+export async function gitCommitShow(projectId: string, commit: string) {
+  return invoke<GitCommitShowDto>('git_commit_show', {
+    input: { projectId, commit },
   })
 }
 
