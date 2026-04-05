@@ -46,7 +46,6 @@ Rules for this checklist:
 - [ ] Replace the placeholder browser viewport in [BrowserSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/BrowserSurface.tsx) with the real Tauri-native browser rendering strategy.
 - [ ] Improve renderer metadata capture beyond the current iframe-safe URL/loading/security sync, especially page title, favicon, downloads, and blocked-frame fallbacks.
 - [ ] Add conflict-resolution UX for backend save-token mismatches instead of showing the raw backend error banner.
-- [ ] Use `browser_tab_pin_set` for pinned tabs and `browser_tab_open_external` for “open in external browser” affordances.
 - [ ] Use `browser_renderer_attach` / `browser_renderer_detach` when the pane-hosted native browser surface mounts and unmounts.
 - [ ] Route in-page search through `browser_find_in_page` and feed renderer results back through `browser_find_in_page_report`.
 - [ ] Route download intent from the renderer through `browser_download_request` instead of opening ad hoc OS dialogs directly.
@@ -121,6 +120,7 @@ Rules for this checklist:
 - ✅ Codex surfaces now have real thread selection, unread clearing, approval execution, and stronger runtime-status presentation without inventing fake history the backend does not persist.
 - ✅ Terminal surfaces now keep xterm mounted across scrollback updates, send resize back to the backend PTY, and expose explicit respawn UI instead of silently restarting dead sessions.
 - ✅ Browser surfaces now route open-external and find-in-page through the backend browser contract, with renderer-host fallback reporting instead of dead controls.
+- ✅ Browser sidebar rows and browser-surface chrome now use backend `browser_tab_pin_set` for pinned-tab state instead of local-only affordances.
 - ✅ The Git surface now uses backend branch/fetch/pull/push controls, and the terminal dock now uses backend rename plus richer active-session metadata.
 - ✅ The Git surface now uses backend `git_diff_tree_read` for staged and unstaged whole-tree diff views, and the terminal dock now exposes persisted scrollback plus session diagnostics from backend state.
 - ✅ Terminal sessions and scrollback now hydrate from backend `terminal_list` / `terminal_scrollback_read`, and the frontend listens to live `app://terminal` events through [useBackendIntegration.ts](/Users/deepsaint/Desktop/ice/frontend/src/hooks/useBackendIntegration.ts).

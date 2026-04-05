@@ -471,6 +471,12 @@ export async function browserTabNavigate(tabId: string, url: string, title?: str
   })
 }
 
+export async function browserTabPinSet(tabId: string, isPinned: boolean) {
+  return invoke<BrowserTabDto>('browser_tab_pin_set', {
+    input: { tabId, isPinned },
+  })
+}
+
 export async function browserTabBack(tabId: string) {
   return invoke<BrowserTabDto>('browser_tab_back', { tabId })
 }

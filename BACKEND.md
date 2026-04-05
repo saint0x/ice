@@ -113,6 +113,7 @@ Rules for this checklist:
 - ✅ The current frontend Codex surfaces now execute approvals, clear unread state, switch active threads correctly, and present runtime status without inventing message history the backend does not expose.
 - ✅ The current frontend terminal surface now uses the backend resize contract and explicit respawn flow, instead of remounting xterm on every scrollback update or silently auto-respawning dead sessions.
 - ✅ The current frontend browser surface now uses backend open-external and find-in-page reporting contracts, with the iframe renderer host acting as an interim fallback until the final native browser container lands.
+- ✅ The current frontend now uses backend browser pin-state commands in both the sidebar and the browser surface instead of local-only browser tab chrome.
 - ✅ The current frontend now uses backend git branch/fetch/pull/push controls and backend terminal rename/session actions instead of placeholder shell chrome.
 - ✅ The current frontend now uses backend whole-tree git diff reads and backend terminal scrollback/session metadata for richer dock diagnostics instead of placeholder-only shell state.
 

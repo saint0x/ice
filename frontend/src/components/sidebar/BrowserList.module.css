@@ -34,21 +34,29 @@
   color: var(--color-info);
 }
 
-.closeBtn,
+.pinIcon {
+  opacity: 0.8;
+}
+
+.iconBtn,
 .addBtn {
   border: 0;
   background: transparent;
   color: inherit;
 }
 
-.closeBtn {
+.iconBtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   opacity: 0.72;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
 }
 
-.closeBtn:hover {
+.iconBtn:hover {
+  background: var(--bg-ghost-hover);
   opacity: 1;
 }
 

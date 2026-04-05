@@ -1,7 +1,7 @@
 import { memo, useMemo } from 'react'
-import { Globe, Plus, X, Lock, Circle } from 'lucide-react'
+import { Globe, Plus, X, Lock, Circle, Pin } from 'lucide-react'
 import type { ProjectId } from '@/types'
-import { browserTabClose, browserTabCreate, toBrowserTab } from '@/lib/backend'
+import { browserTabClose, browserTabCreate, browserTabPinSet, toBrowserTab } from '@/lib/backend'
 import { useBrowserStore } from '@/stores/browser'
 import { useWorkspaceStore } from '@/stores/workspace'
 import styles from './BrowserList.module.css'
@@ -36,9 +36,22 @@ export const BrowserList = memo(function BrowserList({ projectId }: { projectId:
         >
           {tab.isSecure ? <Lock size={12} /> : <Globe size={12} />}
           <span className={styles.title}>{tab.title}</span>
+          {tab.isPinned && <Pin size={10} className={styles.pinIcon} />}
           {tab.isLoading && <Circle size={6} className={styles.loading} />}
           <button
-            className={styles.closeBtn}
+            className={styles.iconBtn}
+            onClick={(event) => {
+              event.stopPropagation()
+              void browserTabPinSet(tab.id, !tab.isPinned).then((next) => {
+                upsertTab(toBrowserTab(next))
+              })
+            }}
+            aria-label={tab.isPinned ? 'Unpin browser tab' : 'Pin browser tab'}
+          >
+            <Pin size={10} />
+          </button>
+          <button
+            className={styles.iconBtn}
             onClick={(event) => {
               event.stopPropagation()
               closeTab(tab.id)

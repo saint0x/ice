@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, RotateCw, Lock, Globe, ExternalLink, Search, X, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, ArrowRight, RotateCw, Lock, Globe, ExternalLink, Search, X, AlertTriangle, Pin } from 'lucide-react'
 import type { Tab } from '@/types'
 import {
   browserRendererAttach,
@@ -10,6 +10,7 @@ import {
   browserTabForward,
   browserTabNavigate,
   browserTabOpenExternal,
+  browserTabPinSet,
   browserTabReload,
   browserTabRendererStateSet,
   toBrowserTab,
@@ -152,6 +153,18 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
             }}
           >
             <ExternalLink size={13} />
+          </button>
+          <button
+            className={styles.navBtn}
+            aria-label={browserTab?.isPinned ? 'Unpin tab' : 'Pin tab'}
+            onClick={() => {
+              if (!browserTabId || !browserTab) return
+              void browserTabPinSet(browserTabId, !browserTab.isPinned).then((next) => {
+                upsertBrowserTab(toBrowserTab(next))
+              })
+            }}
+          >
+            <Pin size={13} fill={browserTab?.isPinned ? 'currentColor' : 'none'} />
           </button>
         </div>
         <div className={styles.addressBar}>
