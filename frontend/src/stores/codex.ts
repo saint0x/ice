@@ -1,15 +1,17 @@
 import { create } from 'zustand'
-import type { CodexThread, CodexApproval, CodexMessage, ThreadId, ProjectId } from '@/types'
+import type { CodexThread, CodexApproval, CodexMessage, ProjectCodexSidebarItem, ThreadId, ProjectId } from '@/types'
 
 interface CodexState {
   threads: Map<ThreadId, CodexThread>
   approvals: CodexApproval[]
   activeThreadId: Map<ProjectId, ThreadId | null>
   messagesByThread: Map<ThreadId, CodexMessage[]>
+  sidebarItems: Map<ProjectId, ProjectCodexSidebarItem[]>
 
   hydrateThreads: (threads: CodexThread[]) => void
   hydrateApprovals: (approvals: CodexApproval[]) => void
   hydrateMessages: (threadId: ThreadId, messages: CodexMessage[]) => void
+  hydrateSidebarItems: (projectId: ProjectId, items: ProjectCodexSidebarItem[]) => void
   addThread: (thread: CodexThread) => void
   setActiveThread: (projectId: ProjectId, threadId: ThreadId) => void
   updateThread: (threadId: ThreadId, patch: Partial<CodexThread>) => void
@@ -24,6 +26,7 @@ export const useCodexStore = create<CodexState>((set) => ({
   approvals: [],
   activeThreadId: new Map(),
   messagesByThread: new Map(),
+  sidebarItems: new Map(),
 
   hydrateThreads: (threads) =>
     set((s) => {
@@ -50,6 +53,13 @@ export const useCodexStore = create<CodexState>((set) => ({
       const messagesByThread = new Map(s.messagesByThread)
       messagesByThread.set(threadId, messages)
       return { messagesByThread }
+    }),
+
+  hydrateSidebarItems: (projectId, items) =>
+    set((s) => {
+      const sidebarItems = new Map(s.sidebarItems)
+      sidebarItems.set(projectId, items)
+      return { sidebarItems }
     }),
 
   addThread: (thread) =>

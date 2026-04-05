@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
 import { Globe, Plus, X, Lock, Circle, Pin } from 'lucide-react'
 import type { ProjectId } from '@/types'
 import {
@@ -15,7 +15,7 @@ import { useWorkspaceStore } from '@/stores/workspace'
 import styles from './BrowserList.module.css'
 
 export const BrowserList = memo(function BrowserList({ projectId }: { projectId: ProjectId }) {
-  const allTabs = useBrowserStore((s) => s.tabs)
+  const sidebarItems = useBrowserStore((s) => s.sidebarItems.get(projectId) ?? [])
   const activeTabId = useBrowserStore((s) => s.activeTabId.get(projectId))
   const setActiveTab = useBrowserStore((s) => s.setActiveTab)
   const upsertTab = useBrowserStore((s) => s.upsertTab)
@@ -23,14 +23,6 @@ export const BrowserList = memo(function BrowserList({ projectId }: { projectId:
   const openTab = useWorkspaceStore((s) => s.openTab)
   const activePaneId = useWorkspaceStore((s) => s.activePaneId)
   const [restorePolicy, setRestorePolicy] = useState<BrowserRestorePolicy | null>(null)
-
-  const tabs = useMemo(() => {
-    const result = []
-    for (const tab of allTabs.values()) {
-      if (tab.projectId === projectId) result.push(tab)
-    }
-    return result
-  }, [allTabs, projectId])
 
   useEffect(() => {
     let disposed = false
@@ -72,13 +64,13 @@ export const BrowserList = memo(function BrowserList({ projectId }: { projectId:
           <option value="all">All tabs</option>
         </select>
       </div>
-      {tabs.map((tab) => (
+      {sidebarItems.map((tab) => (
         <div
-          key={tab.id}
-          className={`${styles.row} ${tab.id === activeTabId ? styles.active : ''}`}
+          key={tab.tabId}
+          className={`${styles.row} ${tab.tabId === activeTabId ? styles.active : ''}`}
           onClick={() => {
-            setActiveTab(projectId, tab.id)
-            openTab(activePaneId, 'browser', tab.title, projectId, { tabId: tab.id, url: tab.url })
+            setActiveTab(projectId, tab.tabId)
+            openTab(activePaneId, 'browser', tab.title, projectId, { tabId: tab.tabId, url: tab.url })
           }}
         >
           {tab.isSecure ? <Lock size={12} /> : <Globe size={12} />}
@@ -89,7 +81,7 @@ export const BrowserList = memo(function BrowserList({ projectId }: { projectId:
             className={styles.iconBtn}
             onClick={(event) => {
               event.stopPropagation()
-              void browserTabPinSet(tab.id, !tab.isPinned).then((next) => {
+              void browserTabPinSet(tab.tabId, !tab.isPinned).then((next) => {
                 upsertTab(toBrowserTab(next))
               })
             }}
@@ -101,8 +93,8 @@ export const BrowserList = memo(function BrowserList({ projectId }: { projectId:
             className={styles.iconBtn}
             onClick={(event) => {
               event.stopPropagation()
-              closeTab(tab.id)
-              void browserTabClose(tab.id)
+              closeTab(tab.tabId)
+              void browserTabClose(tab.tabId)
             }}
             aria-label="Close browser tab"
           >

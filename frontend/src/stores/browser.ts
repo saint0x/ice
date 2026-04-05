@@ -1,11 +1,13 @@
 import { create } from 'zustand'
-import type { BrowserTab, ProjectId } from '@/types'
+import type { BrowserTab, ProjectBrowserSidebarItem, ProjectId } from '@/types'
 
 interface BrowserState {
   tabs: Map<string, BrowserTab>
   activeTabId: Map<ProjectId, string | null>
+  sidebarItems: Map<ProjectId, ProjectBrowserSidebarItem[]>
 
   hydrateTabs: (tabs: BrowserTab[]) => void
+  hydrateSidebarItems: (projectId: ProjectId, items: ProjectBrowserSidebarItem[]) => void
   upsertTab: (tab: BrowserTab) => void
   closeTab: (tabId: string) => void
   setActiveTab: (projectId: ProjectId, tabId: string) => void
@@ -14,6 +16,7 @@ interface BrowserState {
 export const useBrowserStore = create<BrowserState>((set) => ({
   tabs: new Map(),
   activeTabId: new Map(),
+  sidebarItems: new Map(),
 
   hydrateTabs: (tabs) =>
     set((s) => {
@@ -31,6 +34,13 @@ export const useBrowserStore = create<BrowserState>((set) => ({
         }
       }
       return { tabs: nextTabs, activeTabId: nextActiveTabId }
+    }),
+
+  hydrateSidebarItems: (projectId, items) =>
+    set((s) => {
+      const sidebarItems = new Map(s.sidebarItems)
+      sidebarItems.set(projectId, items)
+      return { sidebarItems }
     }),
 
   upsertTab: (tab) =>

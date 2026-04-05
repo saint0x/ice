@@ -47,7 +47,6 @@ Rules for this checklist:
 - [ ] Use `browser_renderer_attach` / `browser_renderer_detach` when the pane-hosted native browser surface mounts and unmounts.
 - [ ] Route in-page search through `browser_find_in_page` and feed renderer results back through `browser_find_in_page_report`.
 - [ ] Route download intent from the renderer through `browser_download_request` instead of opening ad hoc OS dialogs directly.
-- [ ] Use `project_browser_sidebar` for sidebar browser rows instead of recomputing them from the full browser tab store.
 
 ### Terminal
 
@@ -60,7 +59,6 @@ Rules for this checklist:
 
 - [ ] Render real streaming turn output in [CodexSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/CodexSurface.tsx).
 - [ ] Add approval prompts bound to backend pending approvals, using approval `category` and `riskLevel` for intent-specific UI.
-- [ ] Use `project_codex_sidebar` for project-scoped sidebar thread previews instead of recomputing them from the full thread store.
 
 ### Multi-Project UX
 
@@ -120,6 +118,7 @@ Rules for this checklist:
 - ✅ Browser surfaces now route open-external and find-in-page through the backend browser contract, with renderer-host fallback reporting instead of dead controls.
 - ✅ Browser sidebar rows and browser-surface chrome now use backend `browser_tab_pin_set` for pinned-tab state instead of local-only affordances.
 - ✅ The browser sidebar now uses backend `project_browser_restore_policy_get/set` for per-project restore behavior instead of keeping restore behavior implicit.
+- ✅ Browser and Codex sidebar sections now consume canonical backend `project_browser_sidebar` and `project_codex_sidebar` projections instead of recomputing those rows from full local stores.
 - ✅ The Git surface now supports backend branch creation and upstream-aware publish/push flows instead of treating branch sync as a fixed current-branch-only action bar.
 - ✅ The Git surface now uses backend branch/fetch/pull/push controls, and the terminal dock now uses backend rename plus richer active-session metadata.
 - ✅ The Git surface now uses backend `git_diff_tree_read` for staged and unstaged whole-tree diff views, and the terminal dock now exposes persisted scrollback plus session diagnostics from backend state.

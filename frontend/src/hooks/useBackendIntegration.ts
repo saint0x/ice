@@ -3,6 +3,8 @@ import {
   appBootstrap,
   browserTabsList,
   codexApprovalsList,
+  projectBrowserSidebar,
+  projectCodexSidebar,
   codexThreadMessagesList,
   codexThreadsList,
   gitStatusRead,
@@ -19,6 +21,8 @@ import {
   toBrowserTab,
   toCodexApproval,
   toCodexMessage,
+  toProjectBrowserSidebarItem,
+  toProjectCodexSidebarItem,
   toCodexThread,
   toFileTree,
   toGitState,
@@ -53,6 +57,7 @@ export function useBackendIntegration() {
   const hydrateTree = useFilesStore((state) => state.hydrateTree)
   const hydrateGitState = useGitStore((state) => state.hydrateGitState)
   const hydrateBrowserTabs = useBrowserStore((state) => state.hydrateTabs)
+  const hydrateBrowserSidebarItems = useBrowserStore((state) => state.hydrateSidebarItems)
   const upsertBrowserTab = useBrowserStore((state) => state.upsertTab)
   const closeBrowserTab = useBrowserStore((state) => state.closeTab)
   const hydrateSessions = useTerminalStore((state) => state.hydrateSessions)
@@ -63,6 +68,7 @@ export function useBackendIntegration() {
   const hydrateThreads = useCodexStore((state) => state.hydrateThreads)
   const hydrateApprovals = useCodexStore((state) => state.hydrateApprovals)
   const hydrateMessages = useCodexStore((state) => state.hydrateMessages)
+  const hydrateCodexSidebarItems = useCodexStore((state) => state.hydrateSidebarItems)
   const addThread = useCodexStore((state) => state.addThread)
   const updateThread = useCodexStore((state) => state.updateThread)
   const upsertMessage = useCodexStore((state) => state.upsertMessage)
@@ -94,6 +100,20 @@ export function useBackendIntegration() {
       const nodes = await projectTreeReadNested(projectId)
       if (!disposed) {
         hydrateTree(projectId, toFileTree(nodes))
+      }
+    }
+
+    const refreshBrowserSidebar = async (projectId: string) => {
+      const items = await projectBrowserSidebar(projectId)
+      if (!disposed) {
+        hydrateBrowserSidebarItems(projectId, items.map(toProjectBrowserSidebarItem))
+      }
+    }
+
+    const refreshCodexSidebar = async (projectId: string) => {
+      const items = await projectCodexSidebar(projectId)
+      if (!disposed) {
+        hydrateCodexSidebarItems(projectId, items.map(toProjectCodexSidebarItem))
       }
     }
 
@@ -135,15 +155,19 @@ export function useBackendIntegration() {
 
       await Promise.all(
         data.projects.map(async (project) => {
-          const [tree, git] = await Promise.all([
+          const [tree, git, browserSidebarItems, codexSidebarItems] = await Promise.all([
             projectTreeReadNested(project.id),
             gitStatusRead(project.id),
+            projectBrowserSidebar(project.id),
+            projectCodexSidebar(project.id),
             projectWatchStart(project.id),
           ])
           if (disposed) return
           watchedProjects.add(project.id)
           hydrateTree(project.id, toFileTree(tree))
           hydrateGitState(project.id, toGitState(git))
+          hydrateBrowserSidebarItems(project.id, browserSidebarItems.map(toProjectBrowserSidebarItem))
+          hydrateCodexSidebarItems(project.id, codexSidebarItems.map(toProjectCodexSidebarItem))
           updateProject(project.id, { branch: git.branch ?? 'detached' })
         }),
       )
@@ -179,6 +203,7 @@ export function useBackendIntegration() {
         payload.tab
       ) {
         upsertBrowserTab(toBrowserTab(payload.tab))
+        void refreshBrowserSidebar(payload.tab.projectId)
         return
       }
       if (payload.type === 'tabClosed' && payload.tabId) {
@@ -218,18 +243,22 @@ export function useBackendIntegration() {
         } else {
           updateThread(thread.id, thread)
         }
+        void refreshCodexSidebar(thread.projectId)
         return
       }
       if (payload.type === 'messageUpserted' && payload.message) {
         upsertMessage(toCodexMessage(payload.message))
+        void refreshCodexSidebar(payload.message.projectId)
         return
       }
       if (payload.type === 'approvalPending' && payload.approval) {
         addApproval(toCodexApproval(payload.approval))
+        void refreshCodexSidebar(payload.approval.projectId)
         return
       }
       if (payload.type === 'approvalBlocked' && payload.approval) {
         resolveApproval(String(payload.approval.requestId))
+        void refreshCodexSidebar(payload.approval.projectId)
       }
     }).then((unlisten) => {
       codexUnlisten = unlisten
@@ -246,7 +275,7 @@ export function useBackendIntegration() {
         void projectWatchStop(projectId)
       }
     }
-  }, [addApproval, addThread, appendScrollback, closeBrowserTab, closeSession, hydrateApprovals, hydrateBrowserTabs, hydrateGitState, hydrateMessages, hydrateProjects, hydrateSessions, hydrateThreads, hydrateTree, hydrateWorkspace, resolveApproval, setScrollback, updateProject, updateThread, upsertBrowserTab, upsertMessage, upsertSession])
+  }, [addApproval, addThread, appendScrollback, closeBrowserTab, closeSession, hydrateApprovals, hydrateBrowserSidebarItems, hydrateBrowserTabs, hydrateCodexSidebarItems, hydrateGitState, hydrateMessages, hydrateProjects, hydrateSessions, hydrateThreads, hydrateTree, hydrateWorkspace, resolveApproval, setScrollback, updateProject, updateThread, upsertBrowserTab, upsertMessage, upsertSession])
 
   useEffect(() => {
     if (!hydratedRef.current) return

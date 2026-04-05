@@ -4,6 +4,8 @@ import type {
   BrowserTab,
   CodexApproval,
   CodexMessage,
+  ProjectBrowserSidebarItem,
+  ProjectCodexSidebarItem,
   CodexThread,
   FileEntry,
   GitChange,
@@ -253,6 +255,23 @@ interface BrowserExternalOpenRequestDto {
   url: string
 }
 
+interface ProjectBrowserSidebarItemDto {
+  tabId: string
+  title: string
+  url: string
+  isPinned: boolean
+  isLoading: boolean
+  isSecure: boolean
+}
+
+interface ProjectCodexSidebarItemDto {
+  threadId: string
+  title: string
+  status: string
+  unread: boolean
+  lastAssistantMessage?: string | null
+}
+
 export type BrowserRestorePolicy = 'none' | 'pinned' | 'all'
 
 interface BrowserFindInPageResultDto {
@@ -491,6 +510,14 @@ export async function projectBrowserRestorePolicySet(projectId: string, policy: 
   })
 }
 
+export async function projectBrowserSidebar(projectId: string) {
+  return invoke<ProjectBrowserSidebarItemDto[]>('project_browser_sidebar', { projectId })
+}
+
+export async function projectCodexSidebar(projectId: string) {
+  return invoke<ProjectCodexSidebarItemDto[]>('project_codex_sidebar', { projectId })
+}
+
 export async function browserTabCreate(projectId: string, url?: string, title?: string) {
   return invoke<BrowserTabDto>('browser_tab_create', {
     input: { projectId, url, title },
@@ -706,6 +733,27 @@ export function toBrowserTab(dto: BrowserTabDto): BrowserTab {
     faviconUrl: dto.faviconUrl ?? undefined,
     securityOrigin: dto.securityOrigin ?? undefined,
     isSecure: dto.isSecure,
+  }
+}
+
+export function toProjectBrowserSidebarItem(dto: ProjectBrowserSidebarItemDto): ProjectBrowserSidebarItem {
+  return {
+    tabId: dto.tabId,
+    title: dto.title,
+    url: dto.url,
+    isPinned: dto.isPinned,
+    isLoading: dto.isLoading,
+    isSecure: dto.isSecure,
+  }
+}
+
+export function toProjectCodexSidebarItem(dto: ProjectCodexSidebarItemDto): ProjectCodexSidebarItem {
+  return {
+    threadId: dto.threadId,
+    title: dto.title,
+    status: normalizeCodexStatus(dto.status),
+    unread: dto.unread,
+    lastAssistantMessage: dto.lastAssistantMessage ?? undefined,
   }
 }
 

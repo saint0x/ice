@@ -87,6 +87,15 @@ export interface BrowserTab {
   isSecure: boolean
 }
 
+export interface ProjectBrowserSidebarItem {
+  tabId: string
+  title: string
+  url: string
+  isPinned: boolean
+  isLoading: boolean
+  isSecure: boolean
+}
+
 export interface TerminalSession {
   id: TerminalId
   projectId: ProjectId
@@ -110,6 +119,14 @@ export interface CodexThread {
   lastMessage?: string
   unread: boolean
   status: 'idle' | 'running' | 'waiting_approval' | 'waitingApproval' | 'error' | 'disconnected'
+}
+
+export interface ProjectCodexSidebarItem {
+  threadId: ThreadId
+  title: string
+  status: CodexThread['status']
+  unread: boolean
+  lastAssistantMessage?: string
 }
 
 export interface CodexMessage {

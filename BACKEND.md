@@ -169,6 +169,7 @@ Rules for this checklist:
 - ✅ The current frontend can now hydrate projects, workspace state, nested file trees, and git state directly from the backend through `app_bootstrap`, `project_tree_read_nested`, `git_status_read`, `workspace_chrome_set`, and `workspace_session_set`.
 - ✅ The current frontend can now hydrate browser tabs directly from backend IPC and live `app://browser` events, including tab creation, navigation, back/forward, reload, and close flows.
 - ✅ The current frontend can now hydrate terminal sessions, terminal scrollback, Codex threads, and Codex approvals directly from backend IPC and live `app://terminal` / `app://codex` events.
+- ✅ The current frontend now also uses backend project-scoped browser and Codex sidebar projections instead of recomputing sidebar rows from the full tab and thread stores.
 
 ### Verification
 
