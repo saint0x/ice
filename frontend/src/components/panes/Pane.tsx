@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
 import { X, SplitSquareHorizontal } from 'lucide-react'
 import type { PaneNode } from '@/types'
 import { useWorkspaceStore } from '@/stores/workspace'
@@ -20,10 +20,13 @@ export const Pane = memo(function Pane({ pane }: Props) {
     return result
   }, [allTabs, pane.tabs])
   const activePaneId = useWorkspaceStore((s) => s.activePaneId)
+  const pendingFocusPaneId = useWorkspaceStore((s) => s.pendingFocusPaneId)
   const activateTab = useWorkspaceStore((s) => s.activateTab)
   const closeTab = useWorkspaceStore((s) => s.closeTab)
   const setActivePane = useWorkspaceStore((s) => s.setActivePane)
+  const clearPendingFocusPane = useWorkspaceStore((s) => s.clearPendingFocusPane)
   const splitPane = useWorkspaceStore((s) => s.splitPane)
+  const paneRef = useRef<HTMLDivElement>(null)
 
   const isActive = pane.id === activePaneId
   const activeTab = pane.activeTabId ? tabs.find((t) => t.id === pane.activeTabId) : null
@@ -32,13 +35,22 @@ export const Pane = memo(function Pane({ pane }: Props) {
     setActivePane(pane.id)
   }, [pane.id, setActivePane])
 
+  useEffect(() => {
+    if (pendingFocusPaneId !== pane.id) return
+    paneRef.current?.focus()
+    clearPendingFocusPane(pane.id)
+  }, [clearPendingFocusPane, pane.id, pendingFocusPaneId])
+
   return (
     <div
+      ref={paneRef}
       className={`${styles.pane} ${isActive ? styles.active : ''}`}
+      tabIndex={0}
       onClick={onPaneClick}
+      onFocusCapture={onPaneClick}
     >
       {tabs.length > 0 && (
-        <div className={styles.tabBar}>
+        <div className={`${styles.tabBar} ${isActive ? styles.activeTabBar : ''}`}>
           <div className={styles.tabs}>
             {tabs.map((tab) => (
               <div

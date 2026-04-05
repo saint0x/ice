@@ -8,7 +8,13 @@
 }
 
 .pane.active {
-  outline: 1px solid var(--border-color);
+  outline: 1px solid color-mix(in srgb, var(--border-focused) 72%, var(--border-color));
+  outline-offset: -1px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border-focused) 18%, transparent);
+}
+
+.pane:focus-visible {
+  outline: 1px solid var(--border-focused);
   outline-offset: -1px;
 }
 
@@ -20,6 +26,11 @@
   border-bottom: 1px solid var(--border-variant);
   flex-shrink: 0;
   padding-right: var(--sp-2);
+}
+
+.activeTabBar {
+  background: color-mix(in srgb, var(--bg-window) 88%, var(--bg-element-selected));
+  border-bottom-color: color-mix(in srgb, var(--border-focused) 45%, var(--border-variant));
 }
 
 .tabs {
@@ -60,6 +71,7 @@
 .tab.activeTab {
   background: var(--bg-surface);
   color: var(--text-primary);
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--border-focused) 65%, transparent);
 }
 
 .tabTitle {
@@ -112,6 +124,11 @@
 .splitBtn:hover {
   background: var(--bg-ghost-hover);
   color: var(--text-muted);
+}
+
+.pane:focus-within .splitBtn,
+.pane:focus-within .tabClose {
+  opacity: 1;
 }
 
 .content {

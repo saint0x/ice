@@ -10,6 +10,7 @@ interface WorkspaceState {
   layout: PaneLayout
   tabs: Map<TabId, Tab>
   activePaneId: PaneId
+  pendingFocusPaneId: PaneId | null
   sidebarOpen: boolean
   sidebarWidth: number
   bottomDockOpen: boolean
@@ -33,6 +34,7 @@ interface WorkspaceState {
   closeTab: (paneId: PaneId, tabId: TabId) => void
   activateTab: (paneId: PaneId, tabId: TabId) => void
   setActivePane: (paneId: PaneId) => void
+  clearPendingFocusPane: (paneId: PaneId) => void
   splitPane: (paneId: PaneId, direction: SplitDirection) => void
   setSidebarOpen: (open: boolean) => void
   setSidebarWidth: (width: number) => void
@@ -113,6 +115,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   layout: initialLayout,
   tabs: new Map(),
   activePaneId: initialPaneId,
+  pendingFocusPaneId: null,
   sidebarOpen: true,
   sidebarWidth: 240,
   bottomDockOpen: true,
@@ -127,6 +130,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         layout: input.layout,
         tabs: new Map(input.tabs.map((tab) => [tab.id, tab])),
         activePaneId: input.activePaneId,
+        pendingFocusPaneId: null,
         sidebarOpen: input.sidebarOpen,
         sidebarWidth: input.sidebarWidth,
         bottomDockOpen: input.bottomDockOpen,
@@ -147,7 +151,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         tabs: [...pane.tabs, tabId],
         activeTabId: tabId,
       }))
-      return { tabs, layout, activePaneId: paneId }
+      return { tabs, layout, activePaneId: paneId, pendingFocusPaneId: paneId }
     })
     return tabId
   },
@@ -185,9 +189,17 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     set((s) => ({
       layout: findAndUpdatePane(s.layout, paneId, (pane) => ({ ...pane, activeTabId: tabId })),
       activePaneId: paneId,
+      pendingFocusPaneId: paneId,
     })),
 
-  setActivePane: (paneId) => set({ activePaneId: paneId }),
+  setActivePane: (paneId) => set({ activePaneId: paneId, pendingFocusPaneId: paneId }),
+
+  clearPendingFocusPane: (paneId) =>
+    set((s) => (
+      s.pendingFocusPaneId === paneId
+        ? { pendingFocusPaneId: null }
+        : s
+    )),
 
   splitPane: (paneId, direction) =>
     set((s) => {
@@ -199,7 +211,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         children: [pane, { id: newPaneId, type: 'leaf', tabs: [], activeTabId: null }],
         ratio: 0.5,
       }))
-      return { layout }
+      return { layout, activePaneId: newPaneId, pendingFocusPaneId: newPaneId }
     }),
 
   setSidebarOpen: (open) => set({ sidebarOpen: open }),

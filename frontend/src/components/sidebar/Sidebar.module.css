@@ -7,6 +7,13 @@
   overflow: hidden;
   min-width: var(--sidebar-min-width);
   max-width: var(--sidebar-max-width);
+  outline: 1px solid transparent;
+  outline-offset: -1px;
+}
+
+.sidebar:focus-within {
+  outline-color: color-mix(in srgb, var(--border-focused) 72%, transparent);
+  box-shadow: inset -1px 0 0 color-mix(in srgb, var(--border-focused) 18%, transparent);
 }
 
 .content {
