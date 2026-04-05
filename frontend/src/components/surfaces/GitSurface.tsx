@@ -1,12 +1,17 @@
 import { memo, useEffect, useMemo, useState } from 'react'
 import {
-  GitBranch, ArrowUp, ArrowDown, Circle, Plus, Minus, Check, Loader2, RotateCcw, ArrowUpToLine, ArrowDownToLine, AlertTriangle,
+  GitBranch, ArrowUp, ArrowDown, Circle, Plus, Minus, Check, Loader2, RotateCcw, ArrowUpToLine, ArrowDownToLine, AlertTriangle, RefreshCcw, CloudDownload, CloudUpload,
 } from 'lucide-react'
 import type { Tab } from '@/types'
 import {
+  gitBranchCheckout,
+  gitBranchesList,
   gitCommit,
   gitCommitReadiness,
   gitDiffRead,
+  gitFetch,
+  gitPull,
+  gitPush,
   gitRestorePaths,
   gitStagePaths,
   gitUnstagePaths,
@@ -42,6 +47,17 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
   const [selectedDiff, setSelectedDiff] = useState<string>('')
   const [isDiffLoading, setIsDiffLoading] = useState(false)
   const [isMutating, setIsMutating] = useState(false)
+  const [branches, setBranches] = useState<Array<{
+    name: string
+    reference: string
+    commit: string
+    upstream?: string | null
+    tracking?: string | null
+    current: boolean
+    isRemote: boolean
+  }>>([])
+  const [checkoutBranch, setCheckoutBranch] = useState('')
+  const [isBranchLoading, setIsBranchLoading] = useState(false)
   const [readiness, setReadiness] = useState<{
     authorConfigured: boolean
     commitMessageValid: boolean
@@ -98,6 +114,31 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
     }
   }, [selectedChange, state, tab.projectId])
 
+  useEffect(() => {
+    if (!state) return
+    let disposed = false
+    setIsBranchLoading(true)
+    void gitBranchesList(tab.projectId)
+      .then((result) => {
+        if (!disposed) {
+          const localBranches = result.filter((branch) => !branch.isRemote)
+          setBranches(localBranches)
+          const current = localBranches.find((branch) => branch.current)
+          setCheckoutBranch(current?.name ?? state.branch)
+          setIsBranchLoading(false)
+        }
+      })
+      .catch((error: unknown) => {
+        if (!disposed) {
+          setSurfaceError(error instanceof Error ? error.message : 'Failed to load branches')
+          setIsBranchLoading(false)
+        }
+      })
+    return () => {
+      disposed = true
+    }
+  }, [state, tab.projectId])
+
   if (!state) return <div className={styles.empty}>No git state</div>
 
   const staged = state.changes.filter((c) => c.staged)
@@ -126,6 +167,19 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
     }
   }
 
+  const runBranchMutation = async (operation: () => Promise<Awaited<ReturnType<typeof gitStagePaths>>>) => {
+    await runMutation(operation)
+    try {
+      const result = await gitBranchesList(tab.projectId)
+      const localBranches = result.filter((branch) => !branch.isRemote)
+      setBranches(localBranches)
+      const current = localBranches.find((branch) => branch.current)
+      setCheckoutBranch(current?.name ?? checkoutBranch)
+    } catch {
+      // Keep the previous branch picker state if the refresh fails after mutation.
+    }
+  }
+
   const onCommit = async () => {
     if (commitDisabled) return
     setIsMutating(true)
@@ -149,6 +203,42 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
         <span className={styles.branch}>{state.branch}</span>
         {state.ahead > 0 && <span className={styles.sync}><ArrowUp size={11} />{state.ahead}</span>}
         {state.behind > 0 && <span className={styles.sync}><ArrowDown size={11} />{state.behind}</span>}
+      </div>
+      <div className={styles.branchBar}>
+        <div className={styles.branchPicker}>
+          <select
+            className={styles.branchSelect}
+            value={checkoutBranch}
+            onChange={(event) => setCheckoutBranch(event.target.value)}
+            disabled={isMutating || isBranchLoading}
+          >
+            {branches.map((branch) => (
+              <option key={branch.reference} value={branch.name}>{branch.name}</option>
+            ))}
+          </select>
+          <button
+            className={styles.syncBtn}
+            onClick={() => void runBranchMutation(() => gitBranchCheckout({ projectId: tab.projectId, branchName: checkoutBranch }))}
+            disabled={isMutating || isBranchLoading || !checkoutBranch || checkoutBranch === state.branch}
+          >
+            <RefreshCcw size={12} />
+            <span>Checkout</span>
+          </button>
+        </div>
+        <div className={styles.syncActions}>
+          <button className={styles.syncBtn} onClick={() => void runBranchMutation(() => gitFetch(tab.projectId))} disabled={isMutating}>
+            <CloudDownload size={12} />
+            <span>Fetch</span>
+          </button>
+          <button className={styles.syncBtn} onClick={() => void runBranchMutation(() => gitPull({ projectId: tab.projectId, branch: state.branch }))} disabled={isMutating}>
+            <ArrowDown size={12} />
+            <span>Pull</span>
+          </button>
+          <button className={styles.syncBtn} onClick={() => void runBranchMutation(() => gitPush({ projectId: tab.projectId, branch: state.branch }))} disabled={isMutating}>
+            <CloudUpload size={12} />
+            <span>Push</span>
+          </button>
+        </div>
       </div>
       <div className={styles.commitArea}>
         <textarea

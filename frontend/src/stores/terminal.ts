@@ -12,6 +12,7 @@ interface TerminalState {
   appendScrollback: (id: TerminalId, chunk: string) => void
   closeSession: (id: TerminalId) => void
   setActiveSession: (projectId: ProjectId, id: TerminalId) => void
+  renameSession: (id: TerminalId, title: string) => void
 }
 
 export const useTerminalStore = create<TerminalState>((set) => ({
@@ -85,5 +86,14 @@ export const useTerminalStore = create<TerminalState>((set) => ({
       const activeSessionId = new Map(s.activeSessionId)
       activeSessionId.set(projectId, id)
       return { activeSessionId }
+    }),
+
+  renameSession: (id, title) =>
+    set((s) => {
+      const sessions = new Map(s.sessions)
+      const session = sessions.get(id)
+      if (!session) return s
+      sessions.set(id, { ...session, title })
+      return { sessions }
     }),
 }))

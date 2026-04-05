@@ -115,6 +115,16 @@ interface GitDiffRecordDto {
   diff: string
 }
 
+interface GitBranchRecordDto {
+  name: string
+  reference: string
+  commit: string
+  upstream?: string | null
+  tracking?: string | null
+  current: boolean
+  isRemote: boolean
+}
+
 type WorkspaceChromePersistDto = WorkspaceChromeDto
 
 interface WorkspaceTabPersistDto {
@@ -251,6 +261,10 @@ export async function gitStatusRead(projectId: string) {
   return invoke<GitStatusSummaryDto>('git_status_read', { projectId })
 }
 
+export async function gitBranchesList(projectId: string) {
+  return invoke<GitBranchRecordDto[]>('git_branches_list', { projectId })
+}
+
 export async function gitStagePaths(projectId: string, paths: string[]) {
   return invoke<GitStatusSummaryDto>('git_stage_paths', {
     input: { projectId, paths },
@@ -276,6 +290,34 @@ export async function gitCommit(projectId: string, message: string) {
   return invoke<GitStatusSummaryDto>('git_commit', {
     input: { projectId, message },
   })
+}
+
+export async function gitBranchCheckout(input: {
+  projectId: string
+  branchName: string
+  create?: boolean
+  startPoint?: string
+}) {
+  return invoke<GitStatusSummaryDto>('git_branch_checkout', { input })
+}
+
+export async function gitFetch(projectId: string, remote?: string) {
+  return invoke<GitStatusSummaryDto>('git_fetch', {
+    input: { projectId, remote },
+  })
+}
+
+export async function gitPull(input: { projectId: string; remote?: string; branch?: string }) {
+  return invoke<GitStatusSummaryDto>('git_pull', { input })
+}
+
+export async function gitPush(input: {
+  projectId: string
+  remote?: string
+  branch?: string
+  setUpstream?: boolean
+}) {
+  return invoke<GitStatusSummaryDto>('git_push', { input })
 }
 
 export async function gitCommitReadiness(projectId: string, message?: string) {
@@ -360,7 +402,7 @@ export async function terminalResize(sessionId: string, cols: number, rows: numb
 }
 
 export async function terminalRename(sessionId: string, title: string) {
-  return invoke<void>('terminal_rename', {
+  return invoke<TerminalSessionRecordDto>('terminal_rename', {
     input: { sessionId, title },
   })
 }

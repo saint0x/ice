@@ -15,6 +15,50 @@
   flex-shrink: 0;
 }
 
+.branchBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px var(--sp-5);
+  border-bottom: 1px solid var(--border-variant);
+  flex-wrap: wrap;
+}
+
+.branchPicker,
+.syncActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.branchSelect {
+  min-width: 160px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+}
+
+.syncBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: var(--bg-element);
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+}
+
+.syncBtn:disabled {
+  opacity: 0.55;
+}
+
 .branch {
   font-size: var(--text-base);
   font-weight: var(--weight-semibold);
