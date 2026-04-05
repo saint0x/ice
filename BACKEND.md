@@ -156,6 +156,7 @@ Rules for this checklist:
 
 - ✅ Multiple projects can be registered and listed from the backend.
 - ✅ Project removal now clears browser, terminal, Codex thread, and approval state for that project.
+- ✅ The current frontend now uses backend project add, remove, and reorder commands directly from the stacked sidebar instead of treating multi-project lifecycle as bootstrap-only state.
 - ✅ Backend state is organized around per-project context rather than a hidden singleton project.
 
 ### Workspace / Workbench

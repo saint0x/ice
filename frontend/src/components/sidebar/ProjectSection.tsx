@@ -1,10 +1,10 @@
-import { memo, useCallback, useMemo } from 'react'
+import { memo, useCallback, useMemo, useState } from 'react'
 import {
   FolderOpen, GitBranch, FolderTree, Globe, Terminal, MessageSquare,
-  Search, Play, Bug, CheckCircle, ChevronRight, ChevronDown
+  Search, Play, Bug, CheckCircle, ChevronRight, ChevronDown, Trash2
 } from 'lucide-react'
 import type { Project, SidebarSection } from '@/types'
-import { codexThreadCreate, terminalCreate, toCodexThread, toTerminalSession } from '@/lib/backend'
+import { codexThreadCreate, projectRemove, terminalCreate, toCodexThread, toTerminalSession } from '@/lib/backend'
 import { useProjectsStore } from '@/stores/projects'
 import { useGitStore } from '@/stores/git'
 import { useTerminalStore } from '@/stores/terminal'
@@ -30,6 +30,7 @@ const SECTION_ROWS: { key: SidebarSection; icon: typeof FolderTree; label: strin
 export const ProjectSection = memo(function ProjectSection({ project }: Props) {
   const activeProjectId = useProjectsStore((s) => s.activeProjectId)
   const setActiveProject = useProjectsStore((s) => s.setActiveProject)
+  const removeProject = useProjectsStore((s) => s.removeProject)
   const toggleSection = useProjectsStore((s) => s.toggleSection)
   const toggleProjectCollapsed = useProjectsStore((s) => s.toggleProjectCollapsed)
   const gitChangeCount = useGitStore((s) => s.gitState.get(project.id)?.changes.length ?? 0)
@@ -44,6 +45,7 @@ export const ProjectSection = memo(function ProjectSection({ project }: Props) {
   const setBottomDockOpen = useWorkspaceStore((s) => s.setBottomDockOpen)
   const setChatPanelOpen = useWorkspaceStore((s) => s.setChatPanelOpen)
   const isActive = project.id === activeProjectId
+  const [surfaceError, setSurfaceError] = useState<string | null>(null)
 
   const terminalCount = useMemo(() => {
     let count = 0
@@ -105,6 +107,16 @@ export const ProjectSection = memo(function ProjectSection({ project }: Props) {
     [activePaneId, addThread, openTab, project.id, project.name, setActiveProject, setActiveSession, setActiveThread, setBottomDockOpen, setChatPanelOpen, upsertSession]
   )
 
+  const onRemoveProject = useCallback(async () => {
+    setSurfaceError(null)
+    try {
+      await projectRemove(project.id)
+      removeProject(project.id)
+    } catch (error) {
+      setSurfaceError(error instanceof Error ? error.message : 'Failed to remove project')
+    }
+  }, [project.id, removeProject])
+
   const getBadge = (section: SidebarSection): string | undefined => {
     if (section === 'git' && gitChangeCount > 0) return String(gitChangeCount)
     if (section === 'terminal' && terminalCount > 0) return String(terminalCount)
@@ -137,6 +149,7 @@ export const ProjectSection = memo(function ProjectSection({ project }: Props) {
           : <ChevronDown size={12} className={styles.collapseIcon} />
         }
       </button>
+      {surfaceError ? <div className={styles.inlineError}>{surfaceError}</div> : null}
 
       {!project.collapsed && (
         <>
@@ -184,6 +197,9 @@ export const ProjectSection = memo(function ProjectSection({ project }: Props) {
             </button>
             <button className={styles.actionBtn} onClick={() => void onQuickAction('debug')} title="Debug">
               <Bug size={14} />
+            </button>
+            <button className={styles.actionBtn} onClick={() => void onRemoveProject()} title="Remove Project">
+              <Trash2 size={14} />
             </button>
           </div>
 

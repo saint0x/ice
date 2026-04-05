@@ -366,6 +366,22 @@ export async function appHealth() {
   return invoke<HealthDto>('app_health')
 }
 
+export async function projectAdd(rootPath: string, trusted = false) {
+  return invoke<ProjectSummaryDto>('project_add', {
+    input: { rootPath, trusted },
+  })
+}
+
+export async function projectRemove(projectId: string) {
+  return invoke<void>('project_remove', { projectId })
+}
+
+export async function projectReorder(projectIds: string[]) {
+  return invoke<void>('project_reorder', {
+    input: { projectIds },
+  })
+}
+
 export async function projectSnapshot(projectId: string, treeDepth = 3) {
   return invoke<Record<string, unknown>>('project_snapshot', {
     input: { projectId, treeDepth },

@@ -34,8 +34,6 @@ Rules for this checklist:
 
 ### Multi-Project UX
 
-- [ ] Keep sidebar project sections synced with backend project order and active project state.
-- [ ] Support live add/remove project flows from the backend.
 - [ ] Ensure pane tabs, terminal sessions, browser tabs, git state, and Codex threads all stay properly keyed by `projectId`.
 
 ### Polish / Desktop Quality
@@ -63,6 +61,7 @@ Rules for this checklist:
 - ✅ The frontend is already built around a stacked multi-project sidebar instead of a single hidden current-project switcher.
 - ✅ Project order, active project, collapse state, and expanded section state are modeled per project in [projects.ts](/Users/deepsaint/Desktop/ice/frontend/src/stores/projects.ts).
 - ✅ Sidebar project cards render files, git, browser, terminal, and action affordances in [ProjectSection.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/sidebar/ProjectSection.tsx).
+- ✅ The stacked sidebar now supports backend-backed add, remove, and reorder flows, and active-project state stays aligned with the canonical project stack instead of drifting into a frontend-only selection model.
 
 ### Surface Inventory
 

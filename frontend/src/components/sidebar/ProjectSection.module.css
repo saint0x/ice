@@ -32,6 +32,12 @@
   background: var(--sidebar-row-hover);
 }
 
+.inlineError {
+  padding: 0 var(--sidebar-row-px);
+  font-size: 10px;
+  color: var(--color-error);
+}
+
 .projectIcon {
   flex-shrink: 0;
   color: var(--icon-muted);

@@ -1,4 +1,94 @@
 .stack {
   display: flex;
   flex-direction: column;
+  gap: var(--sidebar-card-gap);
+}
+
+.projectControls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.addRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.addInput {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+}
+
+.addBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: var(--bg-element);
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  flex-shrink: 0;
+}
+
+.addBtn:disabled {
+  opacity: 0.5;
+}
+
+.errorBanner {
+  font-size: 10px;
+  color: var(--color-error);
+}
+
+.projectCard {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.reorderRail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  padding-top: 12px;
+}
+
+.reorderHandle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  color: var(--text-disabled);
+  background: var(--bg-elevated);
+}
+
+.reorderBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 38px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--bg-element);
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.reorderBtn:disabled {
+  opacity: 0.35;
 }
