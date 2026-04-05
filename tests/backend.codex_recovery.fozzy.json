@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "name": "backend-codex-recovery-and-scope",
+  "steps": [
+    {
+      "type": "trace_event",
+      "name": "verify_codex_project_scope_contract",
+      "fields": {
+        "target": "src-tauri/codex+security"
+      }
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test codex::service::tests::scoped_turn_prompt_includes_project_root_boundary -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test codex::service::tests::scoped_turn_prompt_includes_project_root_boundary -- --exact"
+      ],
+      "expect_exit": 0
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test codex::service::tests::pending_approval_includes_policy_metadata -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test codex::service::tests::pending_approval_includes_policy_metadata -- --exact"
+      ],
+      "expect_exit": 0
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test security::approvals::tests::blocks_filesystem_path_outside_project_root -- --exact && cargo test security::approvals::tests::blocks_command_with_absolute_path_outside_project_root -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test security::approvals::tests::blocks_filesystem_path_outside_project_root -- --exact && cargo test security::approvals::tests::blocks_command_with_absolute_path_outside_project_root -- --exact"
+      ],
+      "expect_exit": 0
+    }
+  ]
+}

@@ -51,6 +51,7 @@ impl IcePaths {
 mod tests {
     use super::IcePaths;
     use std::path::PathBuf;
+    use tempfile::tempdir;
 
     #[test]
     fn builds_expected_layout_from_root() {
@@ -61,5 +62,30 @@ mod tests {
             paths.concern_dir("browser"),
             PathBuf::from("/tmp/ice-root/browser")
         );
+    }
+
+    #[test]
+    fn ensures_layout_creates_canonical_concerns() {
+        let temp = tempdir().expect("temp dir");
+        let root = temp.path().join(".ice");
+        let paths = IcePaths::from_root(root.clone());
+
+        paths.ensure_layout().expect("ensure layout");
+
+        assert!(root.is_dir());
+        assert!(paths.db_path().ends_with("ice.db"));
+        for concern in [
+            "projects",
+            "workspace",
+            "browser",
+            "terminal",
+            "codex",
+            "diagnostics",
+        ] {
+            assert!(
+                paths.concern_dir(concern).is_dir(),
+                "missing concern dir {concern}"
+            );
+        }
     }
 }

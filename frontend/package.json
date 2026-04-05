@@ -10,7 +10,9 @@
     "test": "vitest run",
     "preview": "vite preview",
     "tauri": "tauri",
-    "verify:tauri": "npm run build && node ./scripts/verify-tauri.mjs"
+    "verify:tauri": "npm run build && node ./scripts/verify-tauri.mjs",
+    "package:tauri": "npm run build && node ./scripts/package-tauri.mjs",
+    "verify:release": "npm run package:tauri && node ./scripts/verify-release.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.10.1",

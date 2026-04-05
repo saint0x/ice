@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "name": "backend-startup-layout",
+  "steps": [
+    {
+      "type": "trace_event",
+      "name": "verify_startup_layout_contract",
+      "fields": {
+        "target": "src-tauri/app-paths"
+      }
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test app::paths::tests::ensures_layout_creates_canonical_concerns -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test app::paths::tests::ensures_layout_creates_canonical_concerns -- --exact"
+      ],
+      "expect_exit": 0
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && rg -n 'home\\.join\\(\"\\.ice\"\\)|concern_dir\\(\"codex\"\\)|ice\\.db' src/app"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && rg -n 'home\\.join\\(\"\\.ice\"\\)|concern_dir\\(\"codex\"\\)|ice\\.db' src/app"
+      ],
+      "expect_exit": 0
+    }
+  ]
+}

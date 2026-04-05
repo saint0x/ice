@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "name": "frontend-release-bundle",
+  "steps": [
+    {
+      "type": "trace_event",
+      "name": "verify_release_bundle_contract",
+      "fields": {
+        "target": "frontend+tauri-release"
+      }
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd frontend && PATH=/Users/deepsaint/.nvm/versions/node/v22.15.1/bin:$PATH npm run verify:release"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd frontend && PATH=/Users/deepsaint/.nvm/versions/node/v22.15.1/bin:$PATH npm run verify:release"
+      ],
+      "expect_exit": 0
+    }
+  ]
+}

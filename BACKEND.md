@@ -42,10 +42,8 @@ Rules for this checklist:
 - [ ] Publish a typed shared contract for project, tree, git, browser, terminal, Codex, and approval payloads.
 ### Testing / Release
 
-- [ ] Expand Fozzy scenarios further into browser navigation and Codex recovery flows.
+- [ ] Expand Fozzy scenarios further into browser navigation beyond the current native bridge coverage.
 - [ ] Add host-backed Fozzy coverage for the new git and filesystem mutation commands.
-- [ ] Add startup smoke tests that assert canonical storage under `~/.ice`.
-- [ ] Add release packaging checks for Tauri bundles once the frontend wiring is complete.
 
 ## Verified Done
 
@@ -201,4 +199,7 @@ Rules for this checklist:
 - ✅ Feature-focused Fozzy coverage now also exists for browser metadata and renderer-sync contracts in [backend.browser_contract.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.browser_contract.fozzy.json).
 - ✅ Feature-focused Fozzy coverage now also exists for browser renderer bridge contracts in [backend.browser_bridge.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.browser_bridge.fozzy.json).
 - ✅ Feature-focused Fozzy coverage now also exists for project sidebar and browser restore-policy contracts in [backend.project_sidebar.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.project_sidebar.fozzy.json).
+- ✅ Feature-focused Fozzy coverage now also exists for Codex project-scope and recovery checks in [backend.codex_recovery.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.codex_recovery.fozzy.json).
+- ✅ Startup smoke coverage now asserts canonical `~/.ice` layout through [backend.startup_layout.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.startup_layout.fozzy.json) and [paths.rs](/Users/deepsaint/Desktop/ice/src-tauri/src/app/paths.rs).
+- ✅ Release packaging checks now exist through [frontend.release_bundle.fozzy.json](/Users/deepsaint/Desktop/ice/tests/frontend.release_bundle.fozzy.json), `npm run verify:release`, and the packaged [Ice.app](/Users/deepsaint/Desktop/ice/src-tauri/target/release/bundle/macos/Ice.app) bundle path.
 - ✅ Frontend-side verification now also includes Vitest coverage for shared backend mappers and workbench stores plus a no-bundle Tauri smoke build through `npm run verify:tauri`.
