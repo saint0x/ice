@@ -12,6 +12,7 @@ import type {
   GitState,
   PaneLayout,
   Project,
+  TerminalDiagnostics,
   TerminalSession,
   Tab,
 } from '@/types'
@@ -201,6 +202,25 @@ interface TerminalSessionRecordDto {
 interface TerminalScrollbackDto {
   sessionId: string
   content: string
+}
+
+interface TerminalDiagnosticsDto {
+  sessionId: string
+  projectId: string
+  cwd: string
+  shell: string
+  shellPath: string
+  title: string
+  isRunning: boolean
+  startupCommand?: string | null
+  envOverrides?: Record<string, string> | null
+  restoredFromPersistence: boolean
+  lastExitCode?: number | null
+  lastExitSignal?: string | null
+  lastExitReason?: string | null
+  scrollbackBytes: number
+  scrollbackLineCount: number
+  recentLines: string[]
 }
 
 interface TerminalEventPayload {
@@ -547,6 +567,10 @@ export async function terminalScrollbackRead(sessionId: string) {
   })
 }
 
+export async function terminalDiagnosticsRead(sessionId: string) {
+  return invoke<TerminalDiagnosticsDto>('terminal_diagnostics_read', { sessionId })
+}
+
 export async function terminalRespawn(sessionId: string) {
   return invoke<TerminalSessionRecordDto>('terminal_respawn', { sessionId })
 }
@@ -806,6 +830,27 @@ export function toTerminalSession(dto: TerminalSessionRecordDto): TerminalSessio
     scrollbackBytes: dto.scrollbackBytes,
     startupCommand: dto.startupCommand ?? undefined,
     lastExitReason: dto.lastExitReason ?? undefined,
+  }
+}
+
+export function toTerminalDiagnostics(dto: TerminalDiagnosticsDto): TerminalDiagnostics {
+  return {
+    sessionId: dto.sessionId,
+    projectId: dto.projectId,
+    cwd: dto.cwd,
+    shell: dto.shell,
+    shellPath: dto.shellPath,
+    title: dto.title,
+    isRunning: dto.isRunning,
+    startupCommand: dto.startupCommand ?? undefined,
+    envOverrides: dto.envOverrides ?? undefined,
+    restoredFromPersistence: dto.restoredFromPersistence,
+    lastExitCode: dto.lastExitCode ?? undefined,
+    lastExitSignal: dto.lastExitSignal ?? undefined,
+    lastExitReason: dto.lastExitReason ?? undefined,
+    scrollbackBytes: dto.scrollbackBytes,
+    scrollbackLineCount: dto.scrollbackLineCount,
+    recentLines: dto.recentLines,
   }
 }
 

@@ -112,6 +112,25 @@ export interface TerminalSession {
   lastExitReason?: string
 }
 
+export interface TerminalDiagnostics {
+  sessionId: TerminalId
+  projectId: ProjectId
+  cwd: string
+  shell: string
+  shellPath: string
+  title: string
+  isRunning: boolean
+  startupCommand?: string
+  envOverrides?: Record<string, string>
+  restoredFromPersistence: boolean
+  lastExitCode?: number
+  lastExitSignal?: string
+  lastExitReason?: string
+  scrollbackBytes: number
+  scrollbackLineCount: number
+  recentLines: string[]
+}
+
 export interface CodexThread {
   id: ThreadId
   projectId: ProjectId

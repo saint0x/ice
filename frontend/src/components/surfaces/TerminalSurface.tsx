@@ -1,7 +1,7 @@
 import { memo, useRef, useEffect, useState } from 'react'
-import { Loader2, RotateCcw, TerminalSquare, Hand, CornerDownLeft } from 'lucide-react'
+import { Loader2, RotateCcw, TerminalSquare, Hand, CornerDownLeft, History, Gauge, ShieldAlert } from 'lucide-react'
 import type { TerminalSession } from '@/types'
-import { terminalInterrupt, terminalResize, terminalRespawn, terminalSendEof, terminalWrite, toTerminalSession } from '@/lib/backend'
+import { terminalDiagnosticsRead, terminalInterrupt, terminalResize, terminalRespawn, terminalSendEof, terminalWrite, toTerminalDiagnostics, toTerminalSession } from '@/lib/backend'
 import { useThemeStore } from '@/stores/theme'
 import { useTerminalStore } from '@/stores/terminal'
 import styles from './TerminalSurface.module.css'
@@ -46,9 +46,13 @@ export const TerminalSurface = memo(function TerminalSurface({ session }: Props)
   const themeId = useThemeStore((s) => s.themeId)
   const scrollback = useTerminalStore((s) => s.scrollback.get(session.id) ?? '')
   const upsertSession = useTerminalStore((s) => s.upsertSession)
+  const diagnostics = useTerminalStore((s) => s.diagnostics.get(session.id))
+  const upsertDiagnostics = useTerminalStore((s) => s.upsertDiagnostics)
   const scrollbackRef = useRef('')
   const [isRespawning, setIsRespawning] = useState(false)
   const [surfaceError, setSurfaceError] = useState<string | null>(null)
+  const [isDiagnosticsLoading, setIsDiagnosticsLoading] = useState(false)
+  const liveLineCount = scrollback.replace(/\r/g, '') ? scrollback.replace(/\r/g, '').split('\n').length : (diagnostics?.scrollbackLineCount ?? 0)
 
   useEffect(() => {
     let disposed = false
@@ -117,6 +121,27 @@ export const TerminalSurface = memo(function TerminalSurface({ session }: Props)
     fitRef.current?.fit()
   }, [scrollback])
 
+  useEffect(() => {
+    let disposed = false
+    setIsDiagnosticsLoading(true)
+    void terminalDiagnosticsRead(session.id)
+      .then((result) => {
+        if (!disposed) {
+          upsertDiagnostics(toTerminalDiagnostics(result))
+          setIsDiagnosticsLoading(false)
+        }
+      })
+      .catch((error: unknown) => {
+        if (!disposed) {
+          setSurfaceError(error instanceof Error ? error.message : 'Failed to load terminal diagnostics')
+          setIsDiagnosticsLoading(false)
+        }
+      })
+    return () => {
+      disposed = true
+    }
+  }, [session.id, upsertDiagnostics])
+
   // Update terminal theme when app theme changes
   useEffect(() => {
     if (termRef.current) {
@@ -174,6 +199,43 @@ export const TerminalSurface = memo(function TerminalSurface({ session }: Props)
           </button>
         </div>
       )}
+      <div className={styles.diagnosticsBar}>
+        <div className={styles.diagnosticPill}>
+          <TerminalSquare size={12} />
+          <span>{session.shellPath ?? session.shell ?? 'shell'}</span>
+        </div>
+        {diagnostics?.startupCommand ? (
+          <div className={styles.diagnosticPill}>
+            <Gauge size={12} />
+            <span>{diagnostics.startupCommand}</span>
+          </div>
+        ) : null}
+        {diagnostics ? (
+          <div className={styles.diagnosticPill}>
+            <History size={12} />
+            <span>{liveLineCount} lines</span>
+          </div>
+        ) : null}
+        {diagnostics?.envOverrides && Object.keys(diagnostics.envOverrides).length > 0 ? (
+          <div className={styles.diagnosticPill}>
+            <ShieldAlert size={12} />
+            <span>{Object.keys(diagnostics.envOverrides).length} env overrides</span>
+          </div>
+        ) : null}
+        {!session.isRunning && diagnostics?.lastExitCode !== undefined ? (
+          <div className={styles.diagnosticPill}>
+            <RotateCcw size={12} />
+            <span>Exit {diagnostics.lastExitCode}</span>
+          </div>
+        ) : null}
+        {!session.isRunning && diagnostics?.lastExitSignal ? (
+          <div className={styles.diagnosticPill}>
+            <RotateCcw size={12} />
+            <span>{diagnostics.lastExitSignal}</span>
+          </div>
+        ) : null}
+        {isDiagnosticsLoading ? <div className={styles.diagnosticsLoading}>Refreshing diagnostics...</div> : null}
+      </div>
       {!session.isRunning && (
         <div className={styles.exitBanner}>
           <div className={styles.exitMeta}>

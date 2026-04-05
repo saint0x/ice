@@ -849,6 +849,14 @@ pub async fn terminal_scrollback_read(
 }
 
 #[tauri::command]
+pub async fn terminal_diagnostics_read(
+    session_id: String,
+    state: State<'_, AppState>,
+) -> Result<crate::terminal::service::TerminalDiagnosticsRecord, AppError> {
+    Ok(state.terminal.diagnostics(&session_id).await?)
+}
+
+#[tauri::command]
 pub async fn terminal_respawn(
     session_id: String,
     state: State<'_, AppState>,

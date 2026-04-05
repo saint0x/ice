@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "name": "backend-terminal-diagnostics",
+  "steps": [
+    {
+      "type": "trace_event",
+      "name": "verify_terminal_diagnostics_contract",
+      "fields": {
+        "target": "src-tauri/terminal-diagnostics"
+      }
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test terminal::service::tests::extracts_recent_lines_for_diagnostics -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test terminal::service::tests::extracts_recent_lines_for_diagnostics -- --exact"
+      ],
+      "expect_exit": 0
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test terminal::service::tests::counts_scrollback_lines -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test terminal::service::tests::counts_scrollback_lines -- --exact"
+      ],
+      "expect_exit": 0
+    }
+  ]
+}

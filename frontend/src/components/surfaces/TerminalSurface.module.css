@@ -16,6 +16,41 @@
   background: color-mix(in srgb, var(--bg-panel) 88%, transparent);
 }
 
+.diagnosticsBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border-variant);
+  background: color-mix(in srgb, var(--bg-surface) 82%, var(--bg-panel));
+  overflow-x: auto;
+}
+
+.diagnosticPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--bg-element);
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.diagnosticPill span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.diagnosticsLoading {
+  font-size: 10px;
+  color: var(--text-disabled);
+  margin-left: auto;
+  white-space: nowrap;
+}
+
 .actionBtn {
   display: inline-flex;
   align-items: center;

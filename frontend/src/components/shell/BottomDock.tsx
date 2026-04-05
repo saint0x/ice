@@ -1,10 +1,10 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, ChevronUp, Plus, Terminal, RotateCcw, PencilLine, Check, X, Clock3, FileTerminal, History, ShieldAlert, Copy, Eraser } from 'lucide-react'
+import { ChevronDown, ChevronUp, Plus, Terminal, RotateCcw, PencilLine, Check, X, Clock3, FileTerminal, History, ShieldAlert, Copy, Eraser, Gauge, Layers3 } from 'lucide-react'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useTerminalStore } from '@/stores/terminal'
 import { useProjectsStore } from '@/stores/projects'
 import { TerminalSurface } from '@/components/surfaces/TerminalSurface'
-import { terminalClose, terminalCreate, terminalRename, terminalRespawn, terminalScrollbackClear, terminalScrollbackRead, toTerminalSession } from '@/lib/backend'
+import { terminalClose, terminalCreate, terminalDiagnosticsRead, terminalRename, terminalRespawn, terminalScrollbackClear, terminalScrollbackRead, toTerminalDiagnostics, toTerminalSession } from '@/lib/backend'
 import styles from './BottomDock.module.css'
 
 export const BottomDock = memo(function BottomDock() {
@@ -14,10 +14,13 @@ export const BottomDock = memo(function BottomDock() {
   const setHeight = useWorkspaceStore((s) => s.setBottomDockHeight)
   const activeProjectId = useProjectsStore((s) => s.activeProjectId)
   const allSessions = useTerminalStore((s) => s.sessions)
+  const allScrollback = useTerminalStore((s) => s.scrollback)
   const activeSessionId = useTerminalStore((s) => activeProjectId ? s.activeSessionId.get(activeProjectId) : null)
   const setActiveSession = useTerminalStore((s) => s.setActiveSession)
   const closeSession = useTerminalStore((s) => s.closeSession)
   const upsertSession = useTerminalStore((s) => s.upsertSession)
+  const diagnostics = useTerminalStore((s) => s.diagnostics)
+  const upsertDiagnostics = useTerminalStore((s) => s.upsertDiagnostics)
   const renameSession = useTerminalStore((s) => s.renameSession)
   const clearScrollback = useTerminalStore((s) => s.clearScrollback)
   const resizeRef = useRef<{ startY: number; startH: number } | null>(null)
@@ -25,8 +28,7 @@ export const BottomDock = memo(function BottomDock() {
   const [isRenaming, setIsRenaming] = useState(false)
   const [isRestarting, setIsRestarting] = useState(false)
   const [surfaceError, setSurfaceError] = useState<string | null>(null)
-  const [scrollbackPreview, setScrollbackPreview] = useState<string>('')
-  const [isPreviewLoading, setIsPreviewLoading] = useState(false)
+  const [isDiagnosticsLoading, setIsDiagnosticsLoading] = useState(false)
   const [isClearingHistory, setIsClearingHistory] = useState(false)
 
   const projectSessions = useMemo(() => {
@@ -58,6 +60,17 @@ export const BottomDock = memo(function BottomDock() {
   )
 
   const activeSession = activeSessionId ? allSessions.get(activeSessionId) : null
+  const activeDiagnostics = activeSession ? diagnostics.get(activeSession.id) : undefined
+  const activeScrollback = activeSession ? allScrollback.get(activeSession.id) ?? '' : ''
+  const livePreview = useMemo(() => {
+    const normalized = activeScrollback.replace(/\r/g, '').trim()
+    if (!normalized) return activeDiagnostics?.recentLines.join('\n') ?? ''
+    return normalized.split('\n').slice(-12).join('\n')
+  }, [activeDiagnostics?.recentLines, activeScrollback])
+  const liveLineCount = useMemo(() => {
+    const normalized = activeScrollback.replace(/\r/g, '')
+    return normalized ? normalized.split('\n').length : (activeDiagnostics?.scrollbackLineCount ?? 0)
+  }, [activeDiagnostics?.scrollbackLineCount, activeScrollback])
 
   useEffect(() => {
     setRenameDraft(activeSession?.title ?? '')
@@ -66,35 +79,29 @@ export const BottomDock = memo(function BottomDock() {
 
   useEffect(() => {
     if (!activeSession) {
-      setScrollbackPreview('')
       return
     }
 
     let disposed = false
-    setIsPreviewLoading(true)
-    void terminalScrollbackRead(activeSession.id)
+    setIsDiagnosticsLoading(true)
+    void terminalDiagnosticsRead(activeSession.id)
       .then((result) => {
         if (!disposed) {
-          const trimmed = result.content.trim()
-          const preview = trimmed
-            ? trimmed.split('\n').slice(-6).join('\n')
-            : ''
-          setScrollbackPreview(preview)
-          setIsPreviewLoading(false)
+          upsertDiagnostics(toTerminalDiagnostics(result))
+          setIsDiagnosticsLoading(false)
         }
       })
       .catch((error: unknown) => {
         if (!disposed) {
-          setScrollbackPreview('')
-          setSurfaceError(error instanceof Error ? error.message : 'Failed to load terminal history preview')
-          setIsPreviewLoading(false)
+          setSurfaceError(error instanceof Error ? error.message : 'Failed to load terminal diagnostics')
+          setIsDiagnosticsLoading(false)
         }
       })
 
     return () => {
       disposed = true
     }
-  }, [activeSession])
+  }, [activeSession, upsertDiagnostics])
 
   const onRenameCommit = async () => {
     if (!activeSession || !renameDraft.trim()) {
@@ -136,7 +143,8 @@ export const BottomDock = memo(function BottomDock() {
       const updated = await terminalScrollbackClear(activeSession.id)
       upsertSession(toTerminalSession(updated))
       clearScrollback(activeSession.id)
-      setScrollbackPreview('')
+      const diagnosticsRecord = await terminalDiagnosticsRead(activeSession.id)
+      upsertDiagnostics(toTerminalDiagnostics(diagnosticsRecord))
     } catch (error) {
       setSurfaceError(error instanceof Error ? error.message : 'Failed to clear terminal history')
     } finally {
@@ -146,7 +154,9 @@ export const BottomDock = memo(function BottomDock() {
 
   const onCopyHistory = async () => {
     try {
-      await navigator.clipboard.writeText(scrollbackPreview)
+      if (!activeSession) return
+      const scrollback = await terminalScrollbackRead(activeSession.id)
+      await navigator.clipboard.writeText(scrollback.content)
     } catch (error) {
       setSurfaceError(error instanceof Error ? error.message : 'Failed to copy terminal history')
     }
@@ -254,10 +264,22 @@ export const BottomDock = memo(function BottomDock() {
                 <History size={12} />
                 <span>{formatBytes(activeSession.scrollbackBytes ?? 0)} scrollback</span>
               </div>
+              {activeDiagnostics ? (
+                <div className={styles.diagnosticItem}>
+                  <Layers3 size={12} />
+                  <span>{liveLineCount} lines</span>
+                </div>
+              ) : null}
               {activeSession.startupCommand ? (
                 <div className={styles.diagnosticItem}>
                   <Clock3 size={12} />
                   <span>{activeSession.startupCommand}</span>
+                </div>
+              ) : null}
+              {activeDiagnostics?.envOverrides && Object.keys(activeDiagnostics.envOverrides).length > 0 ? (
+                <div className={styles.diagnosticItem}>
+                  <Gauge size={12} />
+                  <span>{Object.keys(activeDiagnostics.envOverrides).length} env overrides</span>
                 </div>
               ) : null}
               {activeSession.restoredFromPersistence ? (
@@ -266,13 +288,25 @@ export const BottomDock = memo(function BottomDock() {
                   <span>Restored</span>
                 </div>
               ) : null}
+              {activeDiagnostics?.lastExitCode !== undefined ? (
+                <div className={styles.diagnosticBadge}>
+                  <Terminal size={12} />
+                  <span>Exit {activeDiagnostics.lastExitCode}</span>
+                </div>
+              ) : null}
+              {activeDiagnostics?.lastExitSignal ? (
+                <div className={styles.diagnosticBadge}>
+                  <Terminal size={12} />
+                  <span>{activeDiagnostics.lastExitSignal}</span>
+                </div>
+              ) : null}
               {activeSession.lastExitReason ? (
                 <div className={styles.diagnosticBadge}>
                   <Terminal size={12} />
                   <span>{activeSession.lastExitReason}</span>
                 </div>
               ) : null}
-              <button className={styles.diagnosticAction} onClick={() => void onCopyHistory()} disabled={!scrollbackPreview}>
+              <button className={styles.diagnosticAction} onClick={() => void onCopyHistory()} disabled={!liveLineCount}>
                 <Copy size={12} />
                 <span>Copy</span>
               </button>
@@ -283,10 +317,10 @@ export const BottomDock = memo(function BottomDock() {
             </div>
             <div className={styles.historyPanel}>
               <div className={styles.historyHeader}>Recent scrollback</div>
-              {isPreviewLoading ? (
+              {isDiagnosticsLoading ? (
                 <div className={styles.historyEmpty}>Loading terminal history...</div>
-              ) : scrollbackPreview ? (
-                <pre className={styles.historyPreview}>{scrollbackPreview}</pre>
+              ) : livePreview ? (
+                <pre className={styles.historyPreview}>{livePreview}</pre>
               ) : (
                 <div className={styles.historyEmpty}>No persisted scrollback yet.</div>
               )}

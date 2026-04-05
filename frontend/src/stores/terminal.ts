@@ -1,13 +1,15 @@
 import { create } from 'zustand'
-import type { TerminalSession, TerminalId, ProjectId } from '@/types'
+import type { TerminalSession, TerminalDiagnostics, TerminalId, ProjectId } from '@/types'
 
 interface TerminalState {
   sessions: Map<TerminalId, TerminalSession>
   activeSessionId: Map<ProjectId, TerminalId | null>
   scrollback: Map<TerminalId, string>
+  diagnostics: Map<TerminalId, TerminalDiagnostics>
 
   hydrateSessions: (sessions: TerminalSession[]) => void
   upsertSession: (session: TerminalSession) => void
+  upsertDiagnostics: (diagnostics: TerminalDiagnostics) => void
   setScrollback: (id: TerminalId, content: string) => void
   appendScrollback: (id: TerminalId, chunk: string) => void
   clearScrollback: (id: TerminalId) => void
@@ -20,6 +22,7 @@ export const useTerminalStore = create<TerminalState>((set) => ({
   sessions: new Map(),
   activeSessionId: new Map(),
   scrollback: new Map(),
+  diagnostics: new Map(),
 
   hydrateSessions: (sessions) =>
     set((s) => {
@@ -50,6 +53,13 @@ export const useTerminalStore = create<TerminalState>((set) => ({
       return { sessions, activeSessionId }
     }),
 
+  upsertDiagnostics: (diagnostics) =>
+    set((s) => {
+      const next = new Map(s.diagnostics)
+      next.set(diagnostics.sessionId, diagnostics)
+      return { diagnostics: next }
+    }),
+
   setScrollback: (id, content) =>
     set((s) => {
       const scrollback = new Map(s.scrollback)
@@ -78,15 +88,17 @@ export const useTerminalStore = create<TerminalState>((set) => ({
       sessions.delete(id)
       const scrollback = new Map(s.scrollback)
       scrollback.delete(id)
+      const diagnostics = new Map(s.diagnostics)
+      diagnostics.delete(id)
       if (session) {
         const activeSessionId = new Map(s.activeSessionId)
         if (activeSessionId.get(session.projectId) === id) {
           const remaining = [...sessions.values()].filter((s) => s.projectId === session.projectId)
           activeSessionId.set(session.projectId, remaining[0]?.id ?? null)
         }
-        return { sessions, activeSessionId, scrollback }
+        return { sessions, activeSessionId, scrollback, diagnostics }
       }
-      return { sessions, scrollback }
+      return { sessions, scrollback, diagnostics }
     }),
 
   setActiveSession: (projectId, id) =>

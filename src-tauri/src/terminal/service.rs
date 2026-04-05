@@ -60,6 +60,27 @@ pub struct TerminalScrollbackRecord {
     pub content: String,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalDiagnosticsRecord {
+    pub session_id: String,
+    pub project_id: String,
+    pub cwd: String,
+    pub shell: String,
+    pub shell_path: String,
+    pub title: String,
+    pub is_running: bool,
+    pub startup_command: Option<String>,
+    pub env_overrides: Option<HashMap<String, String>>,
+    pub restored_from_persistence: bool,
+    pub last_exit_code: Option<i32>,
+    pub last_exit_signal: Option<String>,
+    pub last_exit_reason: Option<String>,
+    pub scrollback_bytes: usize,
+    pub scrollback_line_count: usize,
+    pub recent_lines: Vec<String>,
+}
+
 #[derive(Debug, Clone)]
 struct TerminalSpawnRequest {
     session_id: String,
@@ -195,6 +216,40 @@ impl TerminalService {
         Ok(TerminalScrollbackRecord {
             session_id: session_id.to_string(),
             content,
+        })
+    }
+
+    pub async fn diagnostics(&self, session_id: &str) -> Result<TerminalDiagnosticsRecord> {
+        let record = self
+            .metadata
+            .lock()
+            .get(session_id)
+            .cloned()
+            .ok_or_else(|| anyhow!("unknown terminal session"))?;
+        let content = self
+            .scrollback
+            .lock()
+            .get(session_id)
+            .cloned()
+            .unwrap_or_default();
+        let recent_lines = recent_scrollback_lines(&content, 24);
+        Ok(TerminalDiagnosticsRecord {
+            session_id: record.session_id,
+            project_id: record.project_id,
+            cwd: record.cwd,
+            shell: record.shell,
+            shell_path: record.shell_path,
+            title: record.title,
+            is_running: record.is_running,
+            startup_command: record.startup_command,
+            env_overrides: record.env_overrides,
+            restored_from_persistence: record.restored_from_persistence,
+            last_exit_code: record.last_exit_code,
+            last_exit_signal: record.last_exit_signal,
+            last_exit_reason: record.last_exit_reason,
+            scrollback_bytes: record.scrollback_bytes,
+            scrollback_line_count: scrollback_line_count(&content),
+            recent_lines,
         })
     }
 
@@ -654,14 +709,44 @@ fn trim_scrollback(content: &str) -> String {
     content[start..].to_string()
 }
 
+fn recent_scrollback_lines(content: &str, max_lines: usize) -> Vec<String> {
+    if max_lines == 0 {
+        return Vec::new();
+    }
+    let normalized = content.replace('\r', "");
+    let lines: Vec<String> = normalized.lines().map(str::to_string).collect();
+    let start = lines.len().saturating_sub(max_lines);
+    lines[start..].to_vec()
+}
+
+fn scrollback_line_count(content: &str) -> usize {
+    if content.is_empty() {
+        return 0;
+    }
+    content.replace('\r', "").lines().count()
+}
+
 #[cfg(test)]
 mod tests {
-    use super::trim_scrollback;
+    use super::{recent_scrollback_lines, scrollback_line_count, trim_scrollback};
 
     #[test]
     fn trims_scrollback_to_bounded_size() {
         let content = "a".repeat(300_000);
         let trimmed = trim_scrollback(&content);
         assert_eq!(trimmed.len(), 256 * 1024);
+    }
+
+    #[test]
+    fn extracts_recent_lines_for_diagnostics() {
+        let content = "one\ntwo\nthree\nfour";
+        let lines = recent_scrollback_lines(content, 2);
+        assert_eq!(lines, vec!["three".to_string(), "four".to_string()]);
+    }
+
+    #[test]
+    fn counts_scrollback_lines() {
+        let content = "one\r\ntwo\r\nthree";
+        assert_eq!(scrollback_line_count(content), 3);
     }
 }

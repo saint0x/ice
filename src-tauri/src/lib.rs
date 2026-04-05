@@ -97,6 +97,7 @@ pub fn run() {
             commands::terminal_rename,
             commands::terminal_list,
             commands::terminal_scrollback_read,
+            commands::terminal_diagnostics_read,
             commands::terminal_respawn,
             commands::terminal_interrupt,
             commands::terminal_send_eof,
