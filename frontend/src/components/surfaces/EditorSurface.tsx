@@ -21,6 +21,7 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
   const setSaving = useEditorStore((state) => state.setSaving)
   const setError = useEditorStore((state) => state.setError)
   const setConflict = useEditorStore((state) => state.setConflict)
+  const updateConflictMergeDraft = useEditorStore((state) => state.updateConflictMergeDraft)
   const reloadFromDisk = useEditorStore((state) => state.reloadFromDisk)
   const updateTab = useWorkspaceStore((state) => state.updateTab)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
@@ -112,6 +113,7 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
               latestModifiedAtMs: latest.modifiedAtMs ?? undefined,
               latestEncoding: latest.encoding ?? undefined,
               latestHasBom: latest.hasBom,
+              mergeDraft: buildMergedDraft(document.content, latest.content ?? ''),
             },
             message,
           )
@@ -171,6 +173,17 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
     } catch (error) {
       setError(tab.projectId, filePath, error instanceof Error ? error.message : 'Failed to overwrite file')
     }
+  }
+
+  const onUseMergedDraft = () => {
+    if (!document?.conflict) return
+    updateContent(tab.projectId, filePath, document.conflict.mergeDraft ?? document.content)
+  }
+
+  const onSaveMergedDraft = async () => {
+    if (!document?.conflict) return
+    updateContent(tab.projectId, filePath, document.conflict.mergeDraft ?? document.content)
+    await onOverwriteDisk()
   }
 
   const focusMatch = (nextIndex: number) => {
@@ -286,22 +299,51 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
         </div>
       )}
       {document?.conflict ? (
-        <div className={styles.conflictBar}>
-          <div className={styles.conflictCopy}>
-            <span className={styles.conflictTitle}>File changed on disk</span>
-            <span className={styles.conflictDetail}>
-              Your version is stale. Reload the newer disk contents or overwrite the file with your current editor buffer.
-            </span>
+        <div className={styles.conflictPanel}>
+          <div className={styles.conflictBar}>
+            <div className={styles.conflictCopy}>
+              <span className={styles.conflictTitle}>File changed on disk</span>
+              <span className={styles.conflictDetail}>
+                Your version is stale. Compare the current editor buffer with the latest disk contents, then reload, merge, or overwrite intentionally.
+              </span>
+            </div>
+            <div className={styles.conflictActions}>
+              <button className={styles.conflictBtn} type="button" onClick={onReloadFromDisk}>
+                <RefreshCcw size={12} />
+                <span>Reload disk</span>
+              </button>
+              <button className={styles.conflictBtn} type="button" onClick={onUseMergedDraft}>
+                <RefreshCcw size={12} />
+                <span>Use merged draft</span>
+              </button>
+              <button className={styles.conflictBtnPrimary} type="button" onClick={() => void onSaveMergedDraft()}>
+                <Save size={12} />
+                <span>Save merged draft</span>
+              </button>
+              <button className={styles.conflictBtnPrimary} type="button" onClick={() => void onOverwriteDisk()}>
+                <Save size={12} />
+                <span>Overwrite disk</span>
+              </button>
+            </div>
           </div>
-          <div className={styles.conflictActions}>
-            <button className={styles.conflictBtn} type="button" onClick={onReloadFromDisk}>
-              <RefreshCcw size={12} />
-              <span>Reload disk</span>
-            </button>
-            <button className={styles.conflictBtnPrimary} type="button" onClick={() => void onOverwriteDisk()}>
-              <Save size={12} />
-              <span>Overwrite disk</span>
-            </button>
+          <div className={styles.conflictCompare}>
+            <div className={styles.conflictColumn}>
+              <div className={styles.conflictColumnTitle}>Editor buffer</div>
+              <pre className={styles.conflictCode}>{document.content}</pre>
+            </div>
+            <div className={styles.conflictColumn}>
+              <div className={styles.conflictColumnTitle}>Disk version</div>
+              <pre className={styles.conflictCode}>{document.conflict.latestContent}</pre>
+            </div>
+          </div>
+          <div className={styles.mergeEditor}>
+            <div className={styles.conflictColumnTitle}>Merged draft</div>
+            <textarea
+              className={styles.mergeInput}
+              value={document.conflict.mergeDraft ?? document.content}
+              spellCheck={false}
+              onChange={(event) => updateConflictMergeDraft(tab.projectId, filePath, event.target.value)}
+            />
           </div>
         </div>
       ) : null}
@@ -376,4 +418,16 @@ function findMatches(content: string, query: string) {
 function replaceAll(content: string, query: string, replacement: string) {
   if (!query) return content
   return content.split(query).join(replacement)
+}
+
+function buildMergedDraft(localContent: string, latestContent: string) {
+  if (!latestContent) return localContent
+  if (localContent === latestContent) return localContent
+  return [
+    '<<<<<<< Editor Buffer',
+    localContent,
+    '=======',
+    latestContent,
+    '>>>>>>> Disk Version',
+  ].join('\n')
 }

@@ -161,6 +161,13 @@
   flex-wrap: wrap;
 }
 
+.conflictPanel {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 8%, var(--bg-surface));
+}
+
 .conflictCopy {
   display: flex;
   flex-direction: column;
@@ -183,6 +190,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .conflictBtn,
@@ -200,6 +208,61 @@
 
 .conflictBtnPrimary {
   background: color-mix(in srgb, var(--bg-element-selected) 82%, white 18%);
+}
+
+.conflictCompare {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 0 14px 14px;
+}
+
+.conflictColumn,
+.mergeEditor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.conflictColumnTitle {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.conflictCode {
+  min-height: 120px;
+  max-height: 220px;
+  margin: 0;
+  overflow: auto;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-variant);
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.mergeEditor {
+  padding: 0 14px 14px;
+}
+
+.mergeInput {
+  min-height: 140px;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  resize: vertical;
 }
 
 .loadingState,

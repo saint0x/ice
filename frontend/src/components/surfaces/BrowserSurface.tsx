@@ -45,8 +45,13 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
     () => runtimeNotices.filter((notice) => notice.kind !== 'findResult').slice(0, 3),
     [runtimeNotices],
   )
+  const rendererDetached = useMemo(
+    () => runtimeNotices.find((notice) => notice.kind === 'rendererDetached'),
+    [runtimeNotices],
+  )
 
   const url = draftUrl ?? browserTab?.url ?? (tab.meta?.url as string) ?? 'https://example.com'
+  const isUnsupportedScheme = useMemo(() => /^(file|data|chrome|devtools|mailto):/i.test(url), [url])
 
   useEffect(() => {
     if (!browserTabId || !rendererId) return
@@ -246,6 +251,19 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
             <span>{surfaceError}</span>
           </div>
         )}
+        {(isUnsupportedScheme || rendererDetached) && !browserTab.isLoading ? (
+          <div className={styles.blockedState}>
+            <AlertTriangle size={14} />
+            <div className={styles.blockedCopy}>
+              <span className={styles.blockedTitle}>This navigation needs a fallback path</span>
+              <span className={styles.blockedHint}>
+                {isUnsupportedScheme
+                  ? 'The current URL scheme is not fully renderable inside the native browser host. Open it externally or navigate to an http/https page.'
+                  : 'The native renderer detached for this tab. You can reopen the page externally or navigate again to recover.'}
+              </span>
+            </div>
+          </div>
+        ) : null}
         {visibleNotices.length > 0 ? (
           <div className={styles.noticeStack}>
             {visibleNotices.map((notice) => (

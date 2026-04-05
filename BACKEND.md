@@ -34,9 +34,7 @@ Rules for this checklist:
 
 ### Frontend Contract Support
 
-- [ ] Add richer editor conflict-resolution flows on top of the existing version-token backend guard so stale-save errors can be resolved intentionally in the UI.
 - [ ] Publish a typed shared contract for project, tree, git, browser, terminal, Codex, and approval payloads.
-- [ ] Keep pressure on frontend integration to remove remaining local-only helper mutations so backend state stays canonical across startup and runtime.
 ### Testing / Release
 
 - [ ] Expand Fozzy scenarios further into browser navigation and Codex recovery flows.
@@ -94,6 +92,7 @@ Rules for this checklist:
 - ✅ The current frontend now surfaces backend command failures through a canonical shell-level notification path instead of trapping operational errors only inside local component state.
 - ✅ The current frontend now keeps pane activation and focus synchronized across sidebar-driven opens, tab activation, and split creation, so the active workbench target is explicit and stable during backend-driven navigation.
 - ✅ The current frontend now also uses broader shell shortcuts and explicit empty/loading states on top of the existing backend contracts, so backend-driven workbench actions no longer depend on click-only paths or silent missing-state fallbacks.
+- ✅ The current frontend now also uses the version-token backend guard for visual editor conflict comparison and merged-draft resolution instead of leaving stale-save recovery at a raw reload-or-overwrite boundary.
 
 ### Browser
 
@@ -197,3 +196,4 @@ Rules for this checklist:
 - ✅ Feature-focused Fozzy coverage now also exists for browser metadata and renderer-sync contracts in [backend.browser_contract.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.browser_contract.fozzy.json).
 - ✅ Feature-focused Fozzy coverage now also exists for browser renderer bridge contracts in [backend.browser_bridge.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.browser_bridge.fozzy.json).
 - ✅ Feature-focused Fozzy coverage now also exists for project sidebar and browser restore-policy contracts in [backend.project_sidebar.fozzy.json](/Users/deepsaint/Desktop/ice/tests/backend.project_sidebar.fozzy.json).
+- ✅ Frontend-side verification now also includes Vitest coverage for shared backend mappers and workbench stores plus a no-bundle Tauri smoke build through `npm run verify:tauri`.

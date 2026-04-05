@@ -14,7 +14,7 @@ interface Props {
 }
 
 interface MessageBlock {
-  type: 'text' | 'code'
+  type: 'text' | 'code' | 'tool' | 'json' | 'diff'
   content: string
   language?: string
 }
@@ -151,14 +151,26 @@ export const CodexConversation = memo(function CodexConversation({
 
 const MessageBody = memo(function MessageBody({ content }: { content: string }) {
   const blocks = useMemo(() => parseMessageBlocks(content), [content])
+  const artifacts = useMemo(() => extractArtifacts(content), [content])
 
   return (
     <div className={styles.messageBody}>
       {blocks.map((block, index) => {
-        if (block.type === 'code') {
+        if (block.type === 'code' || block.type === 'tool' || block.type === 'json' || block.type === 'diff') {
           return (
-            <div key={`code-${index}`} className={styles.codeBlock}>
-              {block.language ? <div className={styles.codeLanguage}>{block.language}</div> : null}
+            <div
+              key={`code-${index}`}
+              className={`${styles.codeBlock} ${block.type === 'tool' ? styles.toolBlock : ''} ${block.type === 'json' ? styles.jsonBlock : ''} ${block.type === 'diff' ? styles.diffBlock : ''}`}
+            >
+              <div className={styles.codeLanguage}>
+                {block.type === 'tool'
+                  ? `Tool Result${block.language ? ` · ${block.language}` : ''}`
+                  : block.type === 'json'
+                    ? 'Structured Output'
+                    : block.type === 'diff'
+                      ? 'Diff Output'
+                      : block.language ?? 'code'}
+              </div>
               <pre className={styles.codeContent}>{block.content}</pre>
             </div>
           )
@@ -174,6 +186,21 @@ const MessageBody = memo(function MessageBody({ content }: { content: string }) 
           </div>
         )
       })}
+      {artifacts.length > 0 ? (
+        <div className={styles.artifactList}>
+          {artifacts.map((artifact) => (
+            <button
+              key={artifact}
+              type="button"
+              className={styles.artifactChip}
+              onClick={() => void navigator.clipboard.writeText(artifact)}
+            >
+              <span>{artifact}</span>
+              <span className={styles.artifactAction}>Copy</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   )
 })
@@ -197,7 +224,7 @@ function parseMessageBlocks(content: string): MessageBlock[] {
       blocks.push({ type: 'text', content: leadingText })
     }
     blocks.push({
-      type: 'code',
+      type: classifyCodeBlock(language?.trim() || undefined),
       content: codeContent.replace(/\n$/, ''),
       language: language?.trim() || undefined,
     })
@@ -210,6 +237,15 @@ function parseMessageBlocks(content: string): MessageBlock[] {
   }
 
   return blocks.length > 0 ? blocks : [{ type: 'text', content: normalized }]
+}
+
+function classifyCodeBlock(language?: string): MessageBlock['type'] {
+  const normalized = language?.toLowerCase()
+  if (!normalized) return 'code'
+  if (['bash', 'sh', 'zsh', 'shell', 'console'].includes(normalized)) return 'tool'
+  if (normalized === 'json') return 'json'
+  if (['diff', 'patch'].includes(normalized)) return 'diff'
+  return 'code'
 }
 
 function formatTimestamp(value: string): string {
@@ -232,4 +268,9 @@ function formatContext(context: unknown): string {
   } catch {
     return String(context)
   }
+}
+
+function extractArtifacts(content: string) {
+  const matches = content.match(/(?:\/[\w./-]+|[\w./-]+\.(?:rs|ts|tsx|js|jsx|json|md|css|toml|yml|yaml|sh))/g) ?? []
+  return [...new Set(matches)].slice(0, 8)
 }

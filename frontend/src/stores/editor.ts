@@ -19,6 +19,7 @@ export interface EditorDocument {
     latestModifiedAtMs?: number
     latestEncoding?: string
     latestHasBom: boolean
+    mergeDraft?: string
   }
 }
 
@@ -36,6 +37,7 @@ interface EditorState {
     conflict: NonNullable<EditorDocument['conflict']>,
     error?: string,
   ) => void
+  updateConflictMergeDraft: (projectId: string, path: string, mergeDraft: string) => void
   reloadFromDisk: (
     projectId: string,
     path: string,
@@ -144,6 +146,22 @@ export const useEditorStore = create<EditorState>((set) => ({
         isSaving: false,
         error,
         conflict,
+      })
+      return { documents }
+    }),
+
+  updateConflictMergeDraft: (projectId, path, mergeDraft) =>
+    set((state) => {
+      const key = documentKey(projectId, path)
+      const current = state.documents.get(key)
+      if (!current?.conflict) return state
+      const documents = new Map(state.documents)
+      documents.set(key, {
+        ...current,
+        conflict: {
+          ...current.conflict,
+          mergeDraft,
+        },
       })
       return { documents }
     }),

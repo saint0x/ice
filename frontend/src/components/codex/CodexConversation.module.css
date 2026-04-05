@@ -96,6 +96,18 @@
   background: color-mix(in srgb, var(--bg-elevated) 90%, black 10%);
 }
 
+.toolBlock {
+  border-color: color-mix(in srgb, var(--color-info) 30%, var(--border-variant));
+}
+
+.jsonBlock {
+  border-color: color-mix(in srgb, var(--color-success) 26%, var(--border-variant));
+}
+
+.diffBlock {
+  border-color: color-mix(in srgb, var(--color-warning) 28%, var(--border-variant));
+}
+
 .codeLanguage {
   padding: 6px 10px;
   border-bottom: 1px solid var(--border-variant);
@@ -228,6 +240,23 @@
 
 .artifact:hover {
   background: var(--bg-element-hover);
+}
+
+.artifactList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.artifactChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--bg-element);
+  color: var(--text-primary);
+  font-size: 10px;
 }
 
 .artifact:disabled {

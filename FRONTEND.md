@@ -11,32 +11,8 @@ Rules for this checklist:
 
 ## Highest Priority Remaining
 
-### Backend Wiring
-- [ ] Keep removing the last local-only helper logic in frontend stores and surfaces so startup and mutations come exclusively from backend truth.
-
-### Filesystem / Editor
-- [ ] Add conflict diff/merge visualization on top of the current save-conflict reload/overwrite flow.
-
-### Git
-
-### Browser
-
-- [ ] Improve renderer metadata capture beyond the current native-host URL/loading/title/favicon sync, especially blocked-frame fallbacks.
-
-### Terminal
-
-### Codex / Agent UX
-
-- [ ] Add richer artifact- and tool-result-specific rendering on top of the now-live canonical Codex message stream.
-
-### Multi-Project UX
-
-### Polish / Desktop Quality
-
-### Verification
-
-- [ ] Add frontend integration tests around backend hydration and event synchronization.
-- [ ] Add end-to-end Tauri verification once real backend wiring is complete.
+### Future Depth
+- [ ] Expand Codex artifact/result presentation further if backend message payloads become more structured than the current text-stream contract.
 
 ## Verified Done
 
@@ -74,14 +50,17 @@ Rules for this checklist:
 - ✅ Browser find-in-page now executes inside the native child-webview runtime and returns real match counts plus active selection state through backend browser events instead of frontend-fabricated results.
 - ✅ Browser downloads now surface real backend-driven requested/finished notices with canonical destination paths under `~/.ice/browser/downloads`, and popup/new-window requests now materialize as in-app browser tabs.
 - ✅ Browser runtime notices now flow through canonical browser store state from backend `app://browser` events instead of living as transient component-local helper state in [BrowserSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/BrowserSurface.tsx).
+- ✅ Browser surfaces now show explicit blocked/unsupported-navigation guidance for detached native renderers and unsupported URL schemes instead of silently degrading when the native host cannot render a page normally.
 - ✅ The editor surface now reads real file contents from the backend, blocks binary-file text editing, saves through backend `file_write_text`, and honors backend version-token save guards.
 - ✅ The editor now has in-surface find/replace controls on the real backend-backed document model, and stale save conflicts now surface explicit reload-from-disk vs overwrite-disk actions instead of a raw backend error.
+- ✅ The editor conflict flow now includes side-by-side buffer vs disk comparison plus a merged-draft workspace, so stale-save resolution is visual and intentional instead of only reload-or-overwrite.
 - ✅ The existing title-bar and project utility actions now open real backend-backed workbench tabs for files, project search, diagnostics, and debug state instead of decorative placeholders.
 - ✅ Demo/default startup entities have been removed from project, git, terminal, Codex, and workspace stores so the shell now waits for canonical backend hydration instead of rendering fake placeholder state.
 - ✅ The Git surface now stages, unstages, restores, reads diffs, and commits through backend git IPC with commit-readiness feedback instead of placeholder-only controls.
 - ✅ The Git surface now consumes backend `app://git` `mutationCompleted` events so exact stage, unstage, restore, commit, checkout, fetch, pull, and push outcomes are reflected as real mutation feedback instead of a generic refresh.
 - ✅ Codex surfaces now have real thread selection, unread clearing, approval execution, and stronger runtime-status presentation without inventing fake history the backend does not persist.
 - ✅ Codex surfaces and the chat panel now share one production conversation renderer, keep approval context structured, render real live streaming updates, and expose expandable request details instead of flattening approval payloads into generic text.
+- ✅ Codex conversation rendering now recognizes tool-style code fences, structured JSON output, diff blocks, and extracted artifact/file references for richer agent-result presentation on top of the canonical message stream.
 - ✅ Terminal surfaces now keep xterm mounted across scrollback updates, send resize back to the backend PTY, and expose explicit respawn UI instead of silently restarting dead sessions.
 - ✅ Browser surfaces now route open-external through the backend browser contract, and the native host now drives URL/title/load-state/favicon updates back into canonical backend browser state.
 - ✅ Browser sidebar rows and browser-surface chrome now use backend `browser_tab_pin_set` for pinned-tab state instead of local-only affordances.
@@ -101,6 +80,8 @@ Rules for this checklist:
 - ✅ Core workbench shortcuts now cover pane splits, tab cycling, project cycling, files/search/git utilities, browser launch, and terminal operations on top of the original shell toggles.
 - ✅ Backend-driven browser, git, Codex, chat, editor, settings, and terminal surfaces now all expose explicit empty/loading/failure treatment instead of falling back to raw missing-state behavior.
 - ✅ Pane tabs, terminal sessions, browser tabs, git state, and Codex threads remain keyed by `projectId`, with project cycling and sidebar-driven opens preserving that project scoping across the shell.
+- ✅ Frontend verification now includes real Vitest coverage for backend event mapping, workspace focus synchronization, and shell notifications through [backend.test.ts](/Users/deepsaint/Desktop/ice/frontend/src/lib/backend.test.ts), [workspace.test.ts](/Users/deepsaint/Desktop/ice/frontend/src/stores/workspace.test.ts), and [notifications.test.ts](/Users/deepsaint/Desktop/ice/frontend/src/stores/notifications.test.ts).
+- ✅ End-to-end Tauri smoke verification now exists through `npm run verify:tauri`, which builds the frontend and runs a no-bundle Tauri build against the real Rust app path.
 - ✅ Codex threads and approvals now hydrate from backend `codex_threads_list` / `codex_approvals_list`, and the frontend listens to live `app://codex` events through [useBackendIntegration.ts](/Users/deepsaint/Desktop/ice/frontend/src/hooks/useBackendIntegration.ts).
 - ✅ Codex thread creation, prompt submission, and approval approve/deny actions now route through backend IPC in [CodexSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/CodexSurface.tsx), [ChatPanel.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/shell/ChatPanel.tsx), and [ProjectSection.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/sidebar/ProjectSection.tsx).
 - ✅ Codex surfaces and the chat panel now render canonical multi-turn history from backend `codex_thread_messages_list` plus live `messageUpserted` events instead of relying on summary-only thread previews.
