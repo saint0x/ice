@@ -12,12 +12,10 @@ Rules for this checklist:
 ## Highest Priority Remaining
 
 ### Backend Wiring
-- [ ] Add editor-local search and replace UI on top of the now-live backend file read/write/search contracts.
 - [ ] Keep removing the last local-only helper logic in frontend stores and surfaces so startup and mutations come exclusively from backend truth.
 
 ### Filesystem / Editor
-
-- [ ] Add stale-version conflict-resolution UI on top of the backend file `versionToken` instead of just surfacing the raw save failure.
+- [ ] Add conflict diff/merge visualization on top of the current save-conflict reload/overwrite flow.
 
 ### Git
 
@@ -87,6 +85,7 @@ Rules for this checklist:
 - ✅ Browser find-in-page now executes inside the native child-webview runtime and returns real match counts plus active selection state through backend browser events instead of frontend-fabricated results.
 - ✅ Browser downloads now surface real backend-driven requested/finished notices with canonical destination paths under `~/.ice/browser/downloads`, and popup/new-window requests now materialize as in-app browser tabs.
 - ✅ The editor surface now reads real file contents from the backend, blocks binary-file text editing, saves through backend `file_write_text`, and honors backend version-token save guards.
+- ✅ The editor now has in-surface find/replace controls on the real backend-backed document model, and stale save conflicts now surface explicit reload-from-disk vs overwrite-disk actions instead of a raw backend error.
 - ✅ The existing title-bar and project utility actions now open real backend-backed workbench tabs for files, project search, diagnostics, and debug state instead of decorative placeholders.
 - ✅ Demo/default startup entities have been removed from project, git, terminal, Codex, and workspace stores so the shell now waits for canonical backend hydration instead of rendering fake placeholder state.
 - ✅ The Git surface now stages, unstages, restores, reads diffs, and commits through backend git IPC with commit-readiness feedback instead of placeholder-only controls.

@@ -106,6 +106,7 @@ Rules for this checklist:
 - ✅ Native browser downloads now land under `~/.ice/browser/downloads`, emit requested/finished browser events with destination-path metadata, and stay inside the canonical backend browser concern instead of using ad hoc renderer-owned paths.
 - ✅ Native browser new-window requests now create in-app project browser tabs through the backend service instead of bypassing the shell with placeholder external-window behavior.
 - ✅ The current frontend now also uses the production file IO backend for editor reads and saves, including binary-file detection and optimistic version-token save enforcement.
+- ✅ The current frontend now also uses that same file IO contract for in-editor find/replace workflows and explicit stale-save conflict resolution instead of surfacing raw version-token save failures.
 - ✅ The current frontend no longer seeds fake startup projects, git state, terminal sessions, Codex threads, or workspace tabs before backend hydration.
 - ✅ The current frontend now uses backend git mutation and readiness commands for stage, unstage, restore, commit, and per-file diff inspection in the Git surface.
 - ✅ The current frontend Codex surfaces now execute approvals, clear unread state, switch active threads correctly, and present runtime status without inventing message history the backend does not expose.

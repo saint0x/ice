@@ -13,6 +13,13 @@ export interface EditorDocument {
   isLoading: boolean
   isSaving: boolean
   error?: string
+  conflict?: {
+    latestContent: string
+    latestVersionToken?: string
+    latestModifiedAtMs?: number
+    latestEncoding?: string
+    latestHasBom: boolean
+  }
 }
 
 interface EditorState {
@@ -23,6 +30,17 @@ interface EditorState {
   markSaved: (projectId: string, path: string, payload: Omit<EditorDocument, 'isDirty' | 'isLoading' | 'isSaving'>) => void
   setSaving: (projectId: string, path: string, isSaving: boolean) => void
   setError: (projectId: string, path: string, error?: string) => void
+  setConflict: (
+    projectId: string,
+    path: string,
+    conflict: NonNullable<EditorDocument['conflict']>,
+    error?: string,
+  ) => void
+  reloadFromDisk: (
+    projectId: string,
+    path: string,
+    payload: Omit<EditorDocument, 'isDirty' | 'isLoading' | 'isSaving'>,
+  ) => void
 }
 
 function documentKey(projectId: string, path: string) {
@@ -50,6 +68,7 @@ export const useEditorStore = create<EditorState>((set) => ({
         isLoading: true,
         isSaving: current?.isSaving ?? false,
         error: undefined,
+        conflict: current?.conflict,
       })
       return { documents }
     }),
@@ -72,6 +91,7 @@ export const useEditorStore = create<EditorState>((set) => ({
         content,
         isDirty: content !== current.content ? true : current.isDirty,
         error: undefined,
+        conflict: undefined,
       })
       return { documents }
     }),
@@ -87,6 +107,7 @@ export const useEditorStore = create<EditorState>((set) => ({
         isLoading: false,
         isSaving: false,
         error: undefined,
+        conflict: undefined,
       })
       return { documents }
     }),
@@ -108,6 +129,38 @@ export const useEditorStore = create<EditorState>((set) => ({
       if (!current) return state
       const documents = new Map(state.documents)
       documents.set(key, { ...current, isLoading: false, isSaving: false, error })
+      return { documents }
+    }),
+
+  setConflict: (projectId, path, conflict, error) =>
+    set((state) => {
+      const key = documentKey(projectId, path)
+      const current = state.documents.get(key)
+      if (!current) return state
+      const documents = new Map(state.documents)
+      documents.set(key, {
+        ...current,
+        isLoading: false,
+        isSaving: false,
+        error,
+        conflict,
+      })
+      return { documents }
+    }),
+
+  reloadFromDisk: (projectId, path, payload) =>
+    set((state) => {
+      const documents = new Map(state.documents)
+      documents.set(documentKey(projectId, path), {
+        ...payload,
+        projectId,
+        path,
+        isDirty: false,
+        isLoading: false,
+        isSaving: false,
+        error: undefined,
+        conflict: undefined,
+      })
       return { documents }
     }),
 }))

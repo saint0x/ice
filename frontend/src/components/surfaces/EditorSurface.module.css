@@ -44,6 +44,17 @@
   gap: var(--sp-2);
 }
 
+.findBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  background: var(--bg-element);
+  color: var(--text-primary);
+}
+
 .metaBadge,
 .langBadge {
   font-size: 10px;
@@ -79,6 +90,116 @@
   background: color-mix(in srgb, var(--color-warning) 10%, var(--bg-surface));
   color: var(--text-primary);
   font-size: var(--text-xs);
+}
+
+.findBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border-variant);
+  background: color-mix(in srgb, var(--bg-panel) 82%, var(--bg-surface));
+  flex-wrap: wrap;
+}
+
+.findGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.findInput {
+  width: 180px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+}
+
+.findCount {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.findAction,
+.findActionWide {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  background: var(--bg-element);
+  color: var(--text-primary);
+  font-size: 10px;
+}
+
+.findAction {
+  width: 28px;
+  padding: 0;
+}
+
+.findAction:disabled,
+.findActionWide:disabled {
+  opacity: 0.45;
+}
+
+.conflictBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 10%, var(--bg-surface));
+  flex-wrap: wrap;
+}
+
+.conflictCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.conflictTitle {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.conflictDetail {
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.conflictActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.conflictBtn,
+.conflictBtnPrimary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  background: var(--bg-element);
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+}
+
+.conflictBtnPrimary {
+  background: color-mix(in srgb, var(--bg-element-selected) 82%, white 18%);
 }
 
 .loadingState,
