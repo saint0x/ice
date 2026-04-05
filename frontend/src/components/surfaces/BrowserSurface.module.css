@@ -5,6 +5,34 @@
   background: var(--bg-surface);
 }
 
+.emptyState {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+}
+
+.emptyIcon {
+  color: var(--text-muted);
+}
+
+.emptyTitle {
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.emptyHint {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  max-width: 320px;
+  line-height: 1.5;
+}
+
 .toolbar {
   display: flex;
   align-items: center;

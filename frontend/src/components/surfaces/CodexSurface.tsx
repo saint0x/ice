@@ -26,20 +26,24 @@ export const CodexSurface = memo(function CodexSurface({ tab }: Props) {
   const [input, setInput] = useState('')
   const [approvalBusyId, setApprovalBusyId] = useState<string | null>(null)
   const [surfaceError, setSurfaceError] = useState<string | null>(null)
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false)
 
   useEffect(() => {
     if (!threadId) return
     clearUnread(threadId)
     let disposed = false
+    setIsHistoryLoading(true)
     void codexThreadMessagesList(threadId)
       .then((history) => {
         if (!disposed) {
           hydrateMessages(threadId, history.map(toCodexMessage))
+          setIsHistoryLoading(false)
         }
       })
       .catch((error: unknown) => {
         if (!disposed) {
           setSurfaceError(error instanceof Error ? error.message : 'Failed to load thread history')
+          setIsHistoryLoading(false)
         }
       })
     return () => {
@@ -126,6 +130,12 @@ export const CodexSurface = memo(function CodexSurface({ tab }: Props) {
               : 'No thread is attached to this tab yet. Sending a prompt will create one through the backend.'}
           </div>
         </div>
+        {isHistoryLoading ? (
+          <div className={styles.loadingState}>
+            <Loader2 size={16} className={styles.spinner} />
+            <span>Loading thread history...</span>
+          </div>
+        ) : null}
         <CodexConversation
           approvals={approvals}
           approvalBusyId={approvalBusyId}

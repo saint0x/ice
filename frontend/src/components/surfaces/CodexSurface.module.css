@@ -92,6 +92,19 @@
   line-height: 1.6;
 }
 
+.loadingState {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  align-self: center;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-panel) 88%, transparent);
+  border: 1px solid var(--border-variant);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
 /* User — right aligned */
 .userRow {
   display: flex;

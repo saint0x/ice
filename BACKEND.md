@@ -93,6 +93,7 @@ Rules for this checklist:
 - ✅ The frontend now also uses backend file search, health/runtime diagnostics, approval audit, and project snapshot contracts for existing utility tabs and quick actions instead of decorative-only project controls.
 - ✅ The current frontend now surfaces backend command failures through a canonical shell-level notification path instead of trapping operational errors only inside local component state.
 - ✅ The current frontend now keeps pane activation and focus synchronized across sidebar-driven opens, tab activation, and split creation, so the active workbench target is explicit and stable during backend-driven navigation.
+- ✅ The current frontend now also uses broader shell shortcuts and explicit empty/loading states on top of the existing backend contracts, so backend-driven workbench actions no longer depend on click-only paths or silent missing-state fallbacks.
 
 ### Browser
 

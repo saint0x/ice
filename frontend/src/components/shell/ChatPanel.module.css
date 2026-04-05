@@ -221,6 +221,20 @@
   flex-direction: column;
 }
 
+.loadingState {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  align-self: center;
+  margin: 16px auto 0;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-element) 82%, transparent);
+  border: 1px solid var(--border-variant);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
 .threadListInner {
   flex: 1;
   overflow-y: auto;

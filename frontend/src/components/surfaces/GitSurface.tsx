@@ -93,6 +93,7 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
   const [selectedCommitDiff, setSelectedCommitDiff] = useState<string>('')
   const [isHistoryLoading, setIsHistoryLoading] = useState(false)
   const [isCommitDiffLoading, setIsCommitDiffLoading] = useState(false)
+  const hasChanges = state ? state.changes.length > 0 : false
   const selectedChange = useMemo(() => {
     if (!state || !selectedKey) return null
     return state.changes.find((change) => changeKey(change.path, change.staged) === selectedKey) ?? null
@@ -555,6 +556,13 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
         </div>
       ) : (
       <div className={styles.changes}>
+        {!hasChanges ? (
+          <div className={styles.emptyState}>
+            <GitBranch size={18} className={styles.emptyIcon} />
+            <span className={styles.emptyTitle}>Working tree is clean</span>
+            <span className={styles.emptyHint}>Stage changes from your project to see diffs, commit readiness, and mutation controls update here.</span>
+          </div>
+        ) : null}
         {staged.length > 0 && (
           <div className={styles.group}>
             <div className={styles.groupHeaderRow}>

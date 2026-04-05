@@ -113,6 +113,14 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
 
   return (
     <div className={styles.surface}>
+      {!browserTabId || !browserTab ? (
+        <div className={styles.emptyState}>
+          <Globe size={18} className={styles.emptyIcon} />
+          <span className={styles.emptyTitle}>Browser tab unavailable</span>
+          <span className={styles.emptyHint}>Reopen this browser tab from the sidebar or create a new one.</span>
+        </div>
+      ) : (
+        <>
       <div className={styles.toolbar}>
         <div className={styles.navButtons}>
           <button
@@ -263,7 +271,7 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
         <div
           ref={viewportRef}
           className={styles.nativeViewport}
-          aria-label={browserTab?.title ?? tab.title}
+          aria-label={browserTab.title ?? tab.title}
         />
         <div className={styles.overlay}>
           <Globe size={12} className={styles.overlayIcon} />
@@ -272,6 +280,8 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
           </span>
         </div>
       </div>
+        </>
+      )}
     </div>
   )
 })

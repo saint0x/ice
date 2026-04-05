@@ -30,21 +30,25 @@ export const ChatPanel = memo(function ChatPanel() {
   const [input, setInput] = useState('')
   const [approvalBusyId, setApprovalBusyId] = useState<string | null>(null)
   const [surfaceError, setSurfaceError] = useState<string | null>(null)
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false)
   const resizeRef = useRef<{ startX: number; startW: number } | null>(null)
 
   useEffect(() => {
     if (!activeThreadId) return
     clearUnread(activeThreadId)
     let disposed = false
+    setIsHistoryLoading(true)
     void codexThreadMessagesList(activeThreadId)
       .then((history) => {
         if (!disposed) {
           hydrateMessages(activeThreadId, history.map(toCodexMessage))
+          setIsHistoryLoading(false)
         }
       })
       .catch((error: unknown) => {
         if (!disposed) {
           setSurfaceError(error instanceof Error ? error.message : 'Failed to load conversation history')
+          setIsHistoryLoading(false)
         }
       })
     return () => {
@@ -135,6 +139,12 @@ export const ChatPanel = memo(function ChatPanel() {
 
       {activeThread ? (
         <>
+          {isHistoryLoading ? (
+            <div className={styles.loadingState}>
+              <Loader2 size={14} className={styles.spinner} />
+              <span>Loading conversation history...</span>
+            </div>
+          ) : null}
           <CodexConversation
             approvals={approvals}
             approvalBusyId={approvalBusyId}
