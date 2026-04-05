@@ -1,0 +1,255 @@
+.messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+.errorBanner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-error) 10%, var(--bg-panel));
+  border: 1px solid color-mix(in srgb, var(--color-error) 25%, transparent);
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+}
+
+.userRow {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.userBubble {
+  max-width: 85%;
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--bg-element-selected);
+  border-radius: var(--radius-panel) var(--radius-panel) var(--sp-2) var(--radius-panel);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.agentRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-3);
+}
+
+.agentAvatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--bg-element);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--color-info);
+}
+
+.approvalAvatar {
+  color: var(--color-warning);
+}
+
+.agentContent {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.agentBubble {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
+.messageBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.textBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.paragraph {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.codeBlock {
+  overflow: hidden;
+  border-radius: 10px;
+  border: 1px solid var(--border-variant);
+  background: color-mix(in srgb, var(--bg-elevated) 90%, black 10%);
+}
+
+.codeLanguage {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-variant);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.codeContent {
+  margin: 0;
+  padding: 12px 14px;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--text-primary);
+  white-space: pre;
+}
+
+.messageMetaRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.messageMeta {
+  font-size: 10px;
+  color: var(--text-disabled);
+}
+
+.approvalCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 18%, var(--border-variant));
+}
+
+.approvalTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.approvalTitle {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.approvalAction {
+  font-size: 10px;
+  color: var(--color-warning);
+  font-family: var(--font-mono);
+}
+
+.approvalMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.metaPill {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--bg-element);
+  color: var(--text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.policyReason {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.contextDetails {
+  border-top: 1px solid var(--border-variant);
+  padding-top: var(--sp-2);
+}
+
+.contextSummary {
+  cursor: pointer;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  user-select: none;
+}
+
+.contextBlock {
+  margin: var(--sp-2) 0 0;
+  padding: var(--sp-3);
+  border-radius: 10px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-variant);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.55;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.artifacts {
+  display: flex;
+  gap: 8px;
+  margin-top: var(--sp-1);
+}
+
+.artifact {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--bg-elevated);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+  border-radius: 8px;
+}
+
+.artifact:hover {
+  background: var(--bg-element-hover);
+}
+
+.artifact:disabled {
+  opacity: 0.55;
+}
+
+.thinkingLabel {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  padding-top: 5px;
+}
+
+.streamingLabel {
+  font-size: 10px;
+  color: var(--color-info);
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

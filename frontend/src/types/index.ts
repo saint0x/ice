@@ -151,5 +151,5 @@ export interface CodexApproval {
   policyAction?: string
   policyReason?: string
   description: string
-  context?: string
+  context?: unknown
 }

@@ -13,8 +13,6 @@ Rules for this checklist:
 
 ### Backend Wiring
 - [ ] Add editor-local search and replace UI on top of the now-live backend file read/write/search contracts.
-- [ ] Subscribe to backend events for filesystem, git, browser, terminal, and Codex updates instead of relying on local-only mutations.
-- [ ] Persist and hydrate workspace layout from the backend rather than purely local in-memory state.
 - [ ] Keep removing the last local-only helper logic in frontend stores and surfaces so startup and mutations come exclusively from backend truth.
 
 ### Filesystem / Editor
@@ -23,10 +21,6 @@ Rules for this checklist:
 
 ### Git
 
-- [ ] Add stage / unstage / commit interactions in [GitSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/GitSurface.tsx).
-- [ ] Use `git_commit_readiness` to preflight author config and message validity before enabling the final commit action.
-- [ ] Add file-level diff rendering and change selection flows.
-- [ ] Use `git_restore_paths` for discard/revert actions instead of local-only row removal.
 - [ ] Subscribe to `app://git` `mutationCompleted` events so the UI can distinguish stage, unstage, restore, commit, checkout, fetch, pull, and push outcomes without inferring intent from a generic status refresh.
 
 ### Browser
@@ -40,8 +34,7 @@ Rules for this checklist:
 
 ### Codex / Agent UX
 
-- [ ] Render real streaming turn output in [CodexSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/CodexSurface.tsx).
-- [ ] Add approval prompts bound to backend pending approvals, using approval `category` and `riskLevel` for intent-specific UI.
+- [ ] Add richer artifact- and tool-result-specific rendering on top of the now-live canonical Codex message stream.
 
 ### Multi-Project UX
 
@@ -100,6 +93,7 @@ Rules for this checklist:
 - ✅ Demo/default startup entities have been removed from project, git, terminal, Codex, and workspace stores so the shell now waits for canonical backend hydration instead of rendering fake placeholder state.
 - ✅ The Git surface now stages, unstages, restores, reads diffs, and commits through backend git IPC with commit-readiness feedback instead of placeholder-only controls.
 - ✅ Codex surfaces now have real thread selection, unread clearing, approval execution, and stronger runtime-status presentation without inventing fake history the backend does not persist.
+- ✅ Codex surfaces and the chat panel now share one production conversation renderer, keep approval context structured, render real live streaming updates, and expose expandable request details instead of flattening approval payloads into generic text.
 - ✅ Terminal surfaces now keep xterm mounted across scrollback updates, send resize back to the backend PTY, and expose explicit respawn UI instead of silently restarting dead sessions.
 - ✅ Browser surfaces now route open-external through the backend browser contract, and the native host now drives URL/title/load-state/favicon updates back into canonical backend browser state.
 - ✅ Browser sidebar rows and browser-surface chrome now use backend `browser_tab_pin_set` for pinned-tab state instead of local-only affordances.
@@ -115,6 +109,7 @@ Rules for this checklist:
 - ✅ Codex threads and approvals now hydrate from backend `codex_threads_list` / `codex_approvals_list`, and the frontend listens to live `app://codex` events through [useBackendIntegration.ts](/Users/deepsaint/Desktop/ice/frontend/src/hooks/useBackendIntegration.ts).
 - ✅ Codex thread creation, prompt submission, and approval approve/deny actions now route through backend IPC in [CodexSurface.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/surfaces/CodexSurface.tsx), [ChatPanel.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/shell/ChatPanel.tsx), and [ProjectSection.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/sidebar/ProjectSection.tsx).
 - ✅ Codex surfaces and the chat panel now render canonical multi-turn history from backend `codex_thread_messages_list` plus live `messageUpserted` events instead of relying on summary-only thread previews.
+- ✅ Filesystem, git, browser, terminal, and Codex event subscriptions are live, and workspace chrome/session now persist and hydrate through backend contracts instead of staying local-only.
 - ✅ Backend persistence now tracks an explicit schema version in SQLite, which gives production migrations a canonical upgrade baseline instead of implicit table-shape assumptions.
 - ✅ The backend tree API now supports hidden-file and `.gitignore` controls, and the file-read API now distinguishes binary files from editable text.
 - ✅ The backend now exposes project-scoped filename and content search commands for the sidebar search entrypoint.

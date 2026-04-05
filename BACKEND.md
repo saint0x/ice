@@ -116,6 +116,7 @@ Rules for this checklist:
 - ✅ The current frontend now uses backend branch creation plus upstream-aware publish/push flows instead of leaving those git capabilities stranded behind IPC only.
 - ✅ The current frontend now uses backend whole-tree git diff reads and backend terminal scrollback/session metadata for richer dock diagnostics instead of placeholder-only shell state.
 - ✅ The backend now persists canonical Codex per-thread message history in SQLite, exposes it through `codex_thread_messages_list`, and emits live `messageUpserted` events that the frontend uses for real multi-turn conversation rendering.
+- ✅ Approval payload context now stays structured through the frontend boundary, and the shared Codex conversation renderer uses that canonical data for richer live-stream and approval-detail presentation instead of flattening approval context into lossy strings.
 
 ### Terminal
 

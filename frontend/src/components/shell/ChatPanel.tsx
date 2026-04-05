@@ -1,9 +1,9 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  MessageSquare, X, Bot, Loader2, Sparkles,
-  ShieldAlert, ArrowRight, Check, Ban
+  MessageSquare, X, Loader2, Sparkles, ArrowRight
 } from 'lucide-react'
 import { codexServerRequestDeny, codexServerRequestRespond, codexThreadCreate, codexThreadMessagesList, codexTurnStart, toCodexMessage, toCodexThread } from '@/lib/backend'
+import { CodexConversation } from '@/components/codex/CodexConversation'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useProjectsStore } from '@/stores/projects'
 import { useCodexStore } from '@/stores/codex'
@@ -25,6 +25,7 @@ export const ChatPanel = memo(function ChatPanel() {
   const resolveApproval = useCodexStore((s) => s.resolveApproval)
   const updateThread = useCodexStore((s) => s.updateThread)
   const hydrateMessages = useCodexStore((s) => s.hydrateMessages)
+  const clearUnread = useCodexStore((s) => s.clearUnread)
 
   const [input, setInput] = useState('')
   const [approvalBusyId, setApprovalBusyId] = useState<string | null>(null)
@@ -33,6 +34,7 @@ export const ChatPanel = memo(function ChatPanel() {
 
   useEffect(() => {
     if (!activeThreadId) return
+    clearUnread(activeThreadId)
     let disposed = false
     void codexThreadMessagesList(activeThreadId)
       .then((history) => {
@@ -48,7 +50,7 @@ export const ChatPanel = memo(function ChatPanel() {
     return () => {
       disposed = true
     }
-  }, [activeThreadId, hydrateMessages])
+  }, [activeThreadId, clearUnread, hydrateMessages])
 
   const threads = useMemo(() => {
     const result = []
@@ -133,81 +135,15 @@ export const ChatPanel = memo(function ChatPanel() {
 
       {activeThread ? (
         <>
-          <div className={styles.messages}>
-            {surfaceError && (
-              <div className={styles.errorBanner}>
-                <ShieldAlert size={13} />
-                <span>{surfaceError}</span>
-              </div>
-            )}
-            {messages.length > 0 ? messages.map((message) => (
-              message.role === 'user' ? (
-                <div key={message.id} className={styles.userRow}>
-                  <div className={styles.userBubble}>{message.content}</div>
-                </div>
-              ) : (
-                <div key={message.id} className={styles.agentRow}>
-                  <div className={styles.agentAvatar}>
-                    <Bot size={14} />
-                  </div>
-                  <div className={styles.agentContent}>
-                    <div className={styles.agentBubble}>
-                      {message.content}
-                    </div>
-                    {message.state === 'streaming' ? <div className={styles.streamingLabel}>Streaming...</div> : null}
-                  </div>
-                </div>
-              )
-            )) : (
-              <div className={styles.agentRow}>
-                <div className={styles.agentAvatar}>
-                  <Bot size={14} />
-                </div>
-                <div className={styles.agentContent}>
-                  <div className={styles.agentBubble}>
-                    {activeThread.lastMessage ?? 'Thread is ready. Send the next prompt to Codex.'}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {approvals.map((approval) => (
-              <div key={approval.id} className={styles.agentRow}>
-                <div className={styles.agentAvatar}>
-                  <ShieldAlert size={14} />
-                </div>
-                <div className={styles.agentContent}>
-                  <div className={styles.agentBubble}>
-                    {approval.description}
-                  </div>
-                  <div className={styles.approvalMeta}>
-                    {approval.category && <span className={styles.metaBadge}>{approval.category}</span>}
-                    {approval.riskLevel && <span className={styles.metaBadge}>{approval.riskLevel}</span>}
-                    {approval.policyAction && <span className={styles.metaBadge}>{approval.policyAction}</span>}
-                  </div>
-                  <div className={styles.artifacts}>
-                    <button className={styles.artifact} onClick={() => void handleApproval(approval.id, 'approve')} disabled={approvalBusyId === approval.id}>
-                      <Check size={12} />
-                      <span>{approvalBusyId === approval.id ? 'Working...' : 'Approve'}</span>
-                    </button>
-                    <button className={styles.artifact} onClick={() => void handleApproval(approval.id, 'deny')} disabled={approvalBusyId === approval.id}>
-                      <Ban size={12} />
-                      <span>Deny</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-
-            {activeThread.status === 'running' && (
-              <div className={styles.agentRow}>
-                <div className={styles.agentAvatar}>
-                  <Loader2 size={14} className={styles.spinner} />
-                </div>
-                <div className={styles.thinkingLabel}>Thinking...</div>
-              </div>
-            )}
-          </div>
+          <CodexConversation
+            approvals={approvals}
+            approvalBusyId={approvalBusyId}
+            fallbackMessage={activeThread.lastMessage ?? 'Thread is ready. Send the next prompt to Codex.'}
+            messages={messages}
+            onApproval={handleApproval}
+            surfaceError={surfaceError}
+            threadStatus={activeThread.status}
+          />
 
           <div className={styles.inputArea}>
             <div className={styles.inputWrapper}>

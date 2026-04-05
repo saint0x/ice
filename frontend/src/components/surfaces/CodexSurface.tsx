@@ -1,10 +1,11 @@
 import { memo, useEffect, useMemo, useState } from 'react'
 import {
-  MessageSquare, Loader2, Bot, ShieldAlert, ArrowRight, Check, Ban, Sparkles, AlertTriangle
+  MessageSquare, Loader2, ArrowRight, Sparkles
 } from 'lucide-react'
 import type { CodexThread, Tab } from '@/types'
 import { codexServerRequestDeny, codexServerRequestRespond, codexThreadCreate, codexThreadMessagesList, codexTurnStart, toCodexMessage } from '@/lib/backend'
 import { useCodexStore } from '@/stores/codex'
+import { CodexConversation } from '@/components/codex/CodexConversation'
 import styles from './CodexSurface.module.css'
 
 interface Props {
@@ -21,12 +22,14 @@ export const CodexSurface = memo(function CodexSurface({ tab }: Props) {
   const updateThread = useCodexStore((s) => s.updateThread)
   const hydrateMessages = useCodexStore((s) => s.hydrateMessages)
   const resolveApproval = useCodexStore((s) => s.resolveApproval)
+  const clearUnread = useCodexStore((s) => s.clearUnread)
   const [input, setInput] = useState('')
   const [approvalBusyId, setApprovalBusyId] = useState<string | null>(null)
   const [surfaceError, setSurfaceError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!threadId) return
+    clearUnread(threadId)
     let disposed = false
     void codexThreadMessagesList(threadId)
       .then((history) => {
@@ -42,7 +45,7 @@ export const CodexSurface = memo(function CodexSurface({ tab }: Props) {
     return () => {
       disposed = true
     }
-  }, [hydrateMessages, threadId])
+  }, [clearUnread, hydrateMessages, threadId])
 
   const statusLabel = useMemo(() => {
     if (!thread) return 'Ready'
@@ -115,13 +118,6 @@ export const CodexSurface = memo(function CodexSurface({ tab }: Props) {
       </div>
 
       <div className={styles.messages}>
-        {surfaceError && (
-          <div className={styles.errorBanner}>
-            <AlertTriangle size={13} />
-            <span>{surfaceError}</span>
-          </div>
-        )}
-
         <div className={styles.metaCard}>
           <div className={styles.metaTitle}>Thread State</div>
           <div className={styles.metaBody}>
@@ -130,80 +126,15 @@ export const CodexSurface = memo(function CodexSurface({ tab }: Props) {
               : 'No thread is attached to this tab yet. Sending a prompt will create one through the backend.'}
           </div>
         </div>
-
-        {messages.length > 0 ? messages.map((message) => (
-          message.role === 'user' ? (
-            <div key={message.id} className={styles.userRow}>
-              <div className={styles.userBubble}>{message.content}</div>
-            </div>
-          ) : (
-            <div key={message.id} className={styles.agentRow}>
-              <div className={styles.agentAvatar}>
-                <Bot size={14} />
-              </div>
-              <div className={styles.agentContent}>
-                <div className={styles.agentBubble}>{message.content}</div>
-                {message.state === 'streaming' ? <div className={styles.streamingLabel}>Streaming...</div> : null}
-              </div>
-            </div>
-          )
-        )) : (
-          <div className={styles.agentRow}>
-            <div className={styles.agentAvatar}>
-              <Bot size={14} />
-            </div>
-            <div className={styles.agentContent}>
-              <div className={styles.agentBubble}>
-                {thread ? 'Thread is ready. Send the next prompt to Codex.' : 'Start a new Codex thread by sending a prompt.'}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {approvals.map((approval) => (
-          <div key={approval.id} className={styles.agentRow}>
-            <div className={styles.agentAvatar}>
-              <ShieldAlert size={14} />
-            </div>
-            <div className={styles.agentContent}>
-              <div className={styles.agentBubble}>
-                Approval required: {approval.description}
-              </div>
-              <div className={styles.approvalMeta}>
-                {approval.category && <span className={styles.metaPill}>{approval.category}</span>}
-                {approval.riskLevel && <span className={styles.metaPill}>{approval.riskLevel}</span>}
-                {approval.policyAction && <span className={styles.metaPill}>{approval.policyAction}</span>}
-              </div>
-              <div className={styles.artifacts}>
-                <button
-                  className={styles.artifact}
-                  onClick={() => void handleApproval(approval.id, 'approve')}
-                  disabled={approvalBusyId === approval.id}
-                >
-                  <Check size={12} />
-                  <span>{approvalBusyId === approval.id ? 'Working...' : 'Approve'}</span>
-                </button>
-                <button
-                  className={styles.artifact}
-                  onClick={() => void handleApproval(approval.id, 'deny')}
-                  disabled={approvalBusyId === approval.id}
-                >
-                  <Ban size={12} />
-                  <span>Deny</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
-
-        {thread?.status === 'running' && (
-          <div className={styles.agentRow}>
-            <div className={styles.agentAvatar}>
-              <Loader2 size={14} className={styles.spinner} />
-            </div>
-            <div className={styles.thinkingLabel}>Thinking...</div>
-          </div>
-        )}
+        <CodexConversation
+          approvals={approvals}
+          approvalBusyId={approvalBusyId}
+          fallbackMessage={thread ? 'Thread is ready. Send the next prompt to Codex.' : 'Start a new Codex thread by sending a prompt.'}
+          messages={messages}
+          onApproval={handleApproval}
+          surfaceError={surfaceError}
+          threadStatus={thread?.status}
+        />
       </div>
 
       <div className={styles.inputArea}>

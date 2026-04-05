@@ -831,7 +831,7 @@ export function toCodexApproval(dto: CodexApprovalDto): CodexApproval {
     policyAction: dto.policyAction,
     policyReason: dto.policyReason ?? undefined,
     description: dto.description,
-    context: dto.contextJson ? JSON.stringify(dto.contextJson) : undefined,
+    context: dto.contextJson,
   }
 }
 
