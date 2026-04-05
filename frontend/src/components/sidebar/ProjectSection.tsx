@@ -4,7 +4,7 @@ import {
   Search, Play, Bug, CheckCircle, ChevronRight, ChevronDown
 } from 'lucide-react'
 import type { Project, SidebarSection } from '@/types'
-import { codexThreadCreate, toCodexThread } from '@/lib/backend'
+import { codexThreadCreate, terminalCreate, toCodexThread, toTerminalSession } from '@/lib/backend'
 import { useProjectsStore } from '@/stores/projects'
 import { useGitStore } from '@/stores/git'
 import { useTerminalStore } from '@/stores/terminal'
@@ -37,6 +37,8 @@ export const ProjectSection = memo(function ProjectSection({ project }: Props) {
   const allThreads = useCodexStore((s) => s.threads)
   const addThread = useCodexStore((s) => s.addThread)
   const setActiveThread = useCodexStore((s) => s.setActiveThread)
+  const upsertSession = useTerminalStore((s) => s.upsertSession)
+  const setActiveSession = useTerminalStore((s) => s.setActiveSession)
   const openTab = useWorkspaceStore((s) => s.openTab)
   const activePaneId = useWorkspaceStore((s) => s.activePaneId)
   const setBottomDockOpen = useWorkspaceStore((s) => s.setBottomDockOpen)
@@ -76,7 +78,7 @@ export const ProjectSection = memo(function ProjectSection({ project }: Props) {
   )
 
   const onQuickAction = useCallback(
-    (type: 'codex' | 'search' | 'terminal') => {
+    async (type: 'codex' | 'search' | 'terminal' | 'diagnostics' | 'debug') => {
       setActiveProject(project.id)
       if (type === 'codex') {
         setChatPanelOpen(true)
@@ -86,11 +88,21 @@ export const ProjectSection = memo(function ProjectSection({ project }: Props) {
           setActiveThread(project.id, mapped.id)
           openTab(activePaneId, 'codex', mapped.title, project.id, { threadId: mapped.id })
         })
+      } else if (type === 'search') {
+        openTab(activePaneId, 'settings', `${project.name} Search`, project.id, { tool: 'search' })
+      } else if (type === 'diagnostics') {
+        openTab(activePaneId, 'settings', `${project.name} Diagnostics`, project.id, { tool: 'diagnostics' })
+      } else if (type === 'debug') {
+        openTab(activePaneId, 'settings', `${project.name} Debug`, project.id, { tool: 'debug' })
       } else if (type === 'terminal') {
         setBottomDockOpen(true)
+        const session = await terminalCreate(project.id)
+        const mapped = toTerminalSession(session)
+        upsertSession(mapped)
+        setActiveSession(project.id, mapped.id)
       }
     },
-    [activePaneId, addThread, openTab, project.id, setActiveProject, setActiveThread, setBottomDockOpen, setChatPanelOpen]
+    [activePaneId, addThread, openTab, project.id, project.name, setActiveProject, setActiveSession, setActiveThread, setBottomDockOpen, setChatPanelOpen, upsertSession]
   )
 
   const getBadge = (section: SidebarSection): string | undefined => {
@@ -157,7 +169,7 @@ export const ProjectSection = memo(function ProjectSection({ project }: Props) {
               <MessageSquare size={14} />
               {unreadThreadCount > 0 && <span className={styles.actionDot} />}
             </button>
-            <button className={styles.actionBtn} title="Search">
+            <button className={styles.actionBtn} onClick={() => void onQuickAction('search')} title="Search">
               <Search size={14} />
             </button>
             <button
@@ -167,10 +179,10 @@ export const ProjectSection = memo(function ProjectSection({ project }: Props) {
             >
               <Play size={14} />
             </button>
-            <button className={styles.actionBtn} title="Diagnostics">
+            <button className={styles.actionBtn} onClick={() => void onQuickAction('diagnostics')} title="Diagnostics">
               <CheckCircle size={14} />
             </button>
-            <button className={styles.actionBtn} title="Debug">
+            <button className={styles.actionBtn} onClick={() => void onQuickAction('debug')} title="Debug">
               <Bug size={14} />
             </button>
           </div>

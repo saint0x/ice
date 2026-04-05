@@ -90,6 +90,7 @@ Rules for this checklist:
 - ✅ Commit readiness now exposes author config, commit-message validation, hooks path, and active hooks so the frontend can explain blocked commits before execution.
 - ✅ Structured git mutation events now emit through `app://git` as `mutationCompleted`, with typed action/context payloads for stage, unstage, restore, commit, checkout, fetch, pull, and push outcomes.
 - ✅ Native git history and commit-show contracts now exist through typed backend commands, so the frontend can render real recent commits and inspect commit diffs without shelling out locally.
+- ✅ The frontend now also uses backend file search, health/runtime diagnostics, approval audit, and project snapshot contracts for existing utility tabs and quick actions instead of decorative-only project controls.
 
 ### Browser
 

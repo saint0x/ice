@@ -12,7 +12,7 @@ Rules for this checklist:
 ## Highest Priority Remaining
 
 ### Backend Wiring
-- [ ] Add editor search, replace, and project-search UI on top of the now-live backend file read/write/search contracts.
+- [ ] Add editor-local search and replace UI on top of the now-live backend file read/write/search contracts.
 - [ ] Add deeper terminal session diagnostics actions on top of the now-live backend lifecycle contract.
 - [ ] Subscribe to backend events for filesystem, git, browser, terminal, and Codex updates instead of relying on local-only mutations.
 - [ ] Persist and hydrate workspace layout from the backend rather than purely local in-memory state.
@@ -21,9 +21,7 @@ Rules for this checklist:
 
 ### Filesystem / Editor
 
-- [ ] Open real editor tabs from `file_read` / `file_read_text` and push edits through backend writes.
-- [ ] Add dirty-state tracking, save affordances, and stale-version conflict UI using the backend file `versionToken`.
-- [ ] Wire the Search quick action in [ProjectSection.tsx](/Users/deepsaint/Desktop/ice/frontend/src/components/sidebar/ProjectSection.tsx) to `file_search_paths` and `file_search_text`.
+- [ ] Add stale-version conflict-resolution UI on top of the backend file `versionToken` instead of just surfacing the raw save failure.
 
 ### Git
 
@@ -103,6 +101,7 @@ Rules for this checklist:
 - ✅ Browser find-in-page now executes inside the native child-webview runtime and returns real match counts plus active selection state through backend browser events instead of frontend-fabricated results.
 - ✅ Browser downloads now surface real backend-driven requested/finished notices with canonical destination paths under `~/.ice/browser/downloads`, and popup/new-window requests now materialize as in-app browser tabs.
 - ✅ The editor surface now reads real file contents from the backend, blocks binary-file text editing, saves through backend `file_write_text`, and honors backend version-token save guards.
+- ✅ The existing title-bar and project utility actions now open real backend-backed workbench tabs for files, project search, diagnostics, and debug state instead of decorative placeholders.
 - ✅ Demo/default startup entities have been removed from project, git, terminal, Codex, and workspace stores so the shell now waits for canonical backend hydration instead of rendering fake placeholder state.
 - ✅ The Git surface now stages, unstages, restores, reads diffs, and commits through backend git IPC with commit-readiness feedback instead of placeholder-only controls.
 - ✅ Codex surfaces now have real thread selection, unread clearing, approval execution, and stronger runtime-status presentation without inventing fake history the backend does not persist.

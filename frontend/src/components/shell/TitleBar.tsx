@@ -48,7 +48,7 @@ export const TitleBar = memo(function TitleBar() {
 
   const onOpenFiles = useCallback(() => {
     if (!activeProjectId || !activeProject) return
-    openTab(activePaneId, 'editor', `${activeProject.name} — Files`, activeProjectId, {})
+    openTab(activePaneId, 'settings', `${activeProject.name} Files`, activeProjectId, { tool: 'files' })
   }, [activeProjectId, activeProject, activePaneId, openTab])
 
   const onOpenBrowser = useCallback(() => {

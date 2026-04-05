@@ -5,6 +5,7 @@ import { BrowserSurface } from '@/components/surfaces/BrowserSurface'
 import { TerminalSurface } from '@/components/surfaces/TerminalSurface'
 import { GitSurface } from '@/components/surfaces/GitSurface'
 import { CodexSurface } from '@/components/surfaces/CodexSurface'
+import { SettingsSurface } from '@/components/surfaces/SettingsSurface'
 import { useTerminalStore } from '@/stores/terminal'
 
 interface Props {
@@ -29,6 +30,8 @@ export const ContentRenderer = memo(function ContentRenderer({ tab }: Props) {
       return <GitSurface tab={tab} />
     case 'codex':
       return <CodexSurface tab={tab} />
+    case 'settings':
+      return <SettingsSurface tab={tab} />
     default:
       return <div style={{ padding: 16, color: 'var(--text-muted)' }}>Unknown content type</div>
   }

@@ -73,6 +73,12 @@ interface AppBootstrapDto {
   workspaceSession: WorkspaceSessionDto
 }
 
+interface HealthDto {
+  ok: boolean
+  appVersion: string
+  codexAvailable: boolean
+}
+
 interface FsTreeNodeDto {
   path: string
   name: string
@@ -204,6 +210,22 @@ interface TerminalEventPayload {
   data?: string
 }
 
+interface ApprovalAuditDto {
+  auditId: number
+  requestId: number
+  projectId: string
+  threadId?: string | null
+  actionType: string
+  category: string
+  riskLevel: string
+  policyAction: string
+  policyReason?: string | null
+  decision: string
+  description: string
+  contextJson?: unknown
+  createdAt: string
+}
+
 interface CodexThreadDto {
   projectId: string
   threadId: string
@@ -315,6 +337,16 @@ export async function appBootstrap() {
   return invoke<AppBootstrapDto>('app_bootstrap')
 }
 
+export async function appHealth() {
+  return invoke<HealthDto>('app_health')
+}
+
+export async function projectSnapshot(projectId: string, treeDepth = 3) {
+  return invoke<Record<string, unknown>>('project_snapshot', {
+    input: { projectId, treeDepth },
+  })
+}
+
 export async function projectTreeReadNested(projectId: string) {
   return invoke<FsTreeNodeDto[]>('project_tree_read_nested', {
     input: { projectId, depth: 8, includeHidden: false, respectGitignore: true, maxEntries: 5000 },
@@ -420,6 +452,26 @@ export async function fileRead(projectId: string, path: string) {
   })
 }
 
+export async function fileSearchPaths(projectId: string, query: string, limit = 50) {
+  return invoke<{ query: string; paths: string[] }>('file_search_paths', {
+    input: { projectId, query, limit },
+  })
+}
+
+export async function fileSearchText(projectId: string, query: string, limit = 50) {
+  return invoke<{
+    query: string
+    matches: Array<{
+      path: string
+      lineNumber: number
+      line: string
+      submatches: Array<{ start: number; end: number; text: string }>
+    }>
+  }>('file_search_text', {
+    input: { projectId, query, limit },
+  })
+}
+
 export async function fileWriteText(input: {
   projectId: string
   path: string
@@ -503,8 +555,20 @@ export async function codexThreadsList(projectId?: string) {
   return invoke<CodexThreadDto[]>('codex_threads_list', { projectId })
 }
 
+export async function codexStatus() {
+  return invoke<Record<string, unknown>>('codex_status')
+}
+
+export async function codexRuntimeInfo() {
+  return invoke<Record<string, unknown>>('codex_runtime_info')
+}
+
 export async function codexApprovalsList(projectId?: string) {
   return invoke<CodexApprovalDto[]>('codex_approvals_list', { projectId })
+}
+
+export async function approvalAuditList(projectId?: string) {
+  return invoke<ApprovalAuditDto[]>('approval_audit_list', { projectId })
 }
 
 export async function codexThreadCreate(projectId: string, title?: string) {
