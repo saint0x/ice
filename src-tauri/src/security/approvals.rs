@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -191,6 +192,129 @@ pub fn apply_approval_policy(
     ("prompt".to_string(), None)
 }
 
+pub fn enforce_project_scope_policy(
+    approval: &PendingApprovalRecord,
+    project_root: &Path,
+) -> Option<String> {
+    let context = approval.context_json.as_ref()?;
+
+    if approval.project_id == "global"
+        && matches!(approval.category.as_str(), "command" | "git" | "filesystem")
+    {
+        return Some("Blocked unscoped agent action".to_string());
+    }
+
+    if let Some(cwd) = context.get("cwd").and_then(|value| value.as_str()) {
+        if !path_is_within_root(project_root, cwd) {
+            return Some(format!("Blocked action outside project root: {cwd}"));
+        }
+    }
+
+    for candidate in extract_path_candidates(context) {
+        if !path_is_within_root(project_root, &candidate) {
+            return Some(format!("Blocked action outside project root: {candidate}"));
+        }
+    }
+
+    for candidate in extract_command_path_candidates(context) {
+        if !path_is_within_root(project_root, &candidate) {
+            return Some(format!(
+                "Blocked command path outside project root: {candidate}"
+            ));
+        }
+    }
+
+    None
+}
+
+fn extract_path_candidates(context: &Value) -> Vec<String> {
+    let mut out = Vec::new();
+
+    for key in ["path", "target"] {
+        if let Some(value) = context.get(key).and_then(|value| value.as_str()) {
+            out.push(value.to_string());
+        }
+    }
+
+    if let Some(values) = context.get("paths").and_then(|value| value.as_array()) {
+        for value in values {
+            if let Some(path) = value.as_str() {
+                out.push(path.to_string());
+            }
+        }
+    }
+
+    out
+}
+
+fn extract_command_path_candidates(context: &Value) -> Vec<String> {
+    let command = context
+        .get("command")
+        .or_else(|| context.get("cmd"))
+        .and_then(|value| value.as_str())
+        .unwrap_or_default();
+    tokenize_shellish(command)
+        .into_iter()
+        .filter(|token| looks_like_path_token(token))
+        .collect()
+}
+
+fn tokenize_shellish(input: &str) -> Vec<String> {
+    input
+        .split(|ch: char| {
+            ch.is_whitespace() || matches!(ch, '"' | '\'' | ',' | ';' | '(' | ')' | '[' | ']')
+        })
+        .filter_map(|part| {
+            let token = part.trim();
+            if token.is_empty() {
+                None
+            } else {
+                Some(token.to_string())
+            }
+        })
+        .collect()
+}
+
+fn looks_like_path_token(token: &str) -> bool {
+    token.starts_with('/')
+        || token.starts_with("./")
+        || token.starts_with("../")
+        || token == "."
+        || token == ".."
+        || token.contains('/')
+}
+
+fn path_is_within_root(root: &Path, candidate: &str) -> bool {
+    if candidate.is_empty() {
+        return true;
+    }
+
+    let root = normalize_path(root);
+    let candidate_path = Path::new(candidate);
+    let normalized = if candidate_path.is_absolute() {
+        normalize_path(candidate_path)
+    } else {
+        normalize_path(&root.join(candidate_path))
+    };
+    normalized.starts_with(&root)
+}
+
+fn normalize_path(path: &Path) -> PathBuf {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                normalized.pop();
+            }
+            Component::RootDir | Component::Prefix(_) | Component::Normal(_) => {
+                normalized.push(component.as_os_str());
+            }
+        }
+    }
+    normalized
+}
+
 impl SecurityService {
     pub fn new(app: AppHandle, persistence: Arc<PersistenceService>) -> Self {
         let approvals = persistence
@@ -277,8 +401,12 @@ impl SecurityService {
 
 #[cfg(test)]
 mod tests {
-    use super::{apply_approval_policy, classify_approval};
+    use super::{
+        apply_approval_policy, classify_approval, enforce_project_scope_policy,
+        PendingApprovalRecord,
+    };
     use serde_json::json;
+    use std::path::Path;
 
     #[test]
     fn classifies_destructive_shell_command_as_high_risk_command() {
@@ -309,5 +437,47 @@ mod tests {
         assert!(policy_reason
             .expect("policy reason")
             .contains("High-risk filesystem mutation"));
+    }
+
+    #[test]
+    fn blocks_filesystem_path_outside_project_root() {
+        let approval = PendingApprovalRecord {
+            request_id: 7,
+            project_id: "project-a".to_string(),
+            thread_id: Some("thread-1".to_string()),
+            action_type: "fs/write".to_string(),
+            category: "filesystem".to_string(),
+            risk_level: "medium".to_string(),
+            policy_action: "prompt".to_string(),
+            policy_reason: None,
+            description: "Edit Files".to_string(),
+            context_json: Some(json!({ "path": "../outside.txt" })),
+        };
+
+        let reason = enforce_project_scope_policy(&approval, Path::new("/tmp/project-a"));
+        assert!(reason
+            .expect("scope block")
+            .contains("outside project root"));
+    }
+
+    #[test]
+    fn blocks_command_with_absolute_path_outside_project_root() {
+        let approval = PendingApprovalRecord {
+            request_id: 8,
+            project_id: "project-a".to_string(),
+            thread_id: Some("thread-1".to_string()),
+            action_type: "shell/exec".to_string(),
+            category: "command".to_string(),
+            risk_level: "medium".to_string(),
+            policy_action: "prompt".to_string(),
+            policy_reason: None,
+            description: "Run Command".to_string(),
+            context_json: Some(json!({ "command": "cat /tmp/outside.txt" })),
+        };
+
+        let reason = enforce_project_scope_policy(&approval, Path::new("/tmp/project-a"));
+        assert!(reason
+            .expect("scope block")
+            .contains("outside project root"));
     }
 }

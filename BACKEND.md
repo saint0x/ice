@@ -24,6 +24,11 @@ Rules for this checklist:
 
 ### Codex / Agent Runtime
 
+- ✅ Codex thread creation now validates the target project before the thread is created, and turn execution now rejects cross-project thread reuse instead of rebinding threads to whichever `projectId` the caller supplies.
+- ✅ Codex turn execution now injects a canonical project-scope preamble derived from the registered project root, so each turn explicitly tells the agent which project it is in and forbids work outside that root.
+- ✅ Codex approval handling now blocks unscoped actions and project-root escape attempts by validating approval path and command context against the owning project root before the user is even prompted.
+- ✅ Codex thread-history reads now require both `projectId` and `threadId`, so message-history access is validated against thread ownership instead of being keyed by thread id alone.
+
 ### Security / Approvals
 
 ### Persistence / State

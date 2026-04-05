@@ -390,6 +390,7 @@ pub struct CodexTurnStartInput {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodexThreadMessagesInput {
+    pub project_id: String,
     pub thread_id: String,
 }
 

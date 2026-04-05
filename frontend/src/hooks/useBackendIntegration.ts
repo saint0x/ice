@@ -143,7 +143,7 @@ export function useBackendIntegration() {
       hydrateApprovals(pendingApprovals.map(toCodexApproval))
       await Promise.all(
         codexThreads.map(async (thread) => {
-          const history = await codexThreadMessagesList(thread.threadId)
+          const history = await codexThreadMessagesList(thread.projectId, thread.threadId)
           if (!disposed) {
             hydrateMessages(thread.threadId, history.map(toCodexMessage))
           }

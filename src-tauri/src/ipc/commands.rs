@@ -966,7 +966,10 @@ pub async fn codex_thread_messages_list(
     input: CodexThreadMessagesInput,
     state: State<'_, AppState>,
 ) -> Result<Vec<crate::codex::service::CodexMessageRecord>, AppError> {
-    Ok(state.codex.thread_messages(&input.thread_id).await?)
+    Ok(state
+        .codex
+        .thread_messages_in_project(&input.project_id, &input.thread_id)
+        .await?)
 }
 
 #[tauri::command]

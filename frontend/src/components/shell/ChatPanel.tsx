@@ -34,11 +34,11 @@ export const ChatPanel = memo(function ChatPanel() {
   const resizeRef = useRef<{ startX: number; startW: number } | null>(null)
 
   useEffect(() => {
-    if (!activeThreadId) return
+    if (!activeProjectId || !activeThreadId) return
     clearUnread(activeThreadId)
     let disposed = false
     setIsHistoryLoading(true)
-    void codexThreadMessagesList(activeThreadId)
+    void codexThreadMessagesList(activeProjectId, activeThreadId)
       .then((history) => {
         if (!disposed) {
           hydrateMessages(activeThreadId, history.map(toCodexMessage))
@@ -54,7 +54,7 @@ export const ChatPanel = memo(function ChatPanel() {
     return () => {
       disposed = true
     }
-  }, [activeThreadId, clearUnread, hydrateMessages])
+  }, [activeProjectId, activeThreadId, clearUnread, hydrateMessages])
 
   const threads = useMemo(() => {
     const result = []

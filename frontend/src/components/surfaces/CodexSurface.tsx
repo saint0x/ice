@@ -33,7 +33,7 @@ export const CodexSurface = memo(function CodexSurface({ tab }: Props) {
     clearUnread(threadId)
     let disposed = false
     setIsHistoryLoading(true)
-    void codexThreadMessagesList(threadId)
+    void codexThreadMessagesList(tab.projectId, threadId)
       .then((history) => {
         if (!disposed) {
           hydrateMessages(threadId, history.map(toCodexMessage))
@@ -49,7 +49,7 @@ export const CodexSurface = memo(function CodexSurface({ tab }: Props) {
     return () => {
       disposed = true
     }
-  }, [clearUnread, hydrateMessages, threadId])
+  }, [clearUnread, hydrateMessages, tab.projectId, threadId])
 
   const statusLabel = useMemo(() => {
     if (!thread) return 'Ready'

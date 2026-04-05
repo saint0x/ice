@@ -359,6 +359,38 @@ impl PersistenceService {
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
+    pub fn read_project_sync(&self, project_id: &str) -> Result<Option<ProjectRecord>> {
+        let conn = self.connect()?;
+        let project_id = project_id.to_string();
+        conn.query_row(
+            "
+            SELECT id, name, root_path, color_token, icon_hint, is_trusted, created_at, last_opened_at
+            FROM projects
+            WHERE id = ?1
+            ",
+            params![project_id],
+            |row| {
+                Ok(ProjectRecord {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    root_path: row.get(2)?,
+                    color_token: row.get(3)?,
+                    icon_hint: row.get(4)?,
+                    is_trusted: row.get::<_, i64>(5)? != 0,
+                    created_at: row.get(6)?,
+                    last_opened_at: row.get(7)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(Into::into)
+    }
+
+    pub async fn read_project(&self, project_id: String) -> Result<Option<ProjectRecord>> {
+        let this = self.clone();
+        tokio::task::spawn_blocking(move || this.read_project_sync(&project_id)).await?
+    }
+
     pub fn insert_project_sync(&self, project: &ProjectRecord) -> Result<()> {
         let conn = self.connect()?;
         conn.execute(

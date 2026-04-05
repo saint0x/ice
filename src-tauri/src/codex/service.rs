@@ -19,8 +19,10 @@ use crate::app::events::CODEX_EVENT;
 use crate::app::paths::IcePaths;
 use crate::persistence::db::PersistenceService;
 use crate::projects::models::ProjectCodexSidebarItem;
+use crate::projects::models::ProjectRecord;
 use crate::security::approvals::{
-    apply_approval_policy, classify_approval, PendingApprovalRecord, SecurityService,
+    apply_approval_policy, classify_approval, enforce_project_scope_policy, PendingApprovalRecord,
+    SecurityService,
 };
 
 pub struct CodexService {
@@ -263,11 +265,14 @@ impl CodexService {
         title: Option<String>,
         model: Option<String>,
     ) -> Result<CodexThreadBinding> {
+        let project = self.require_project(&project_id).await?;
         let result = self
             .request(
                 "thread/start",
                 json!({
-                  "title": title,
+                  "title": title
+                    .clone()
+                    .or_else(|| Some(default_thread_title(&project))),
                   "model": model
                 }),
             )
@@ -306,6 +311,9 @@ impl CodexService {
         prompt: String,
         model: Option<String>,
     ) -> Result<Value> {
+        let project = self.require_project(&project_id).await?;
+        let existing_thread = self.require_thread_in_project(&project_id, &thread_id)?;
+        let scoped_prompt = build_scoped_turn_prompt(&project, &prompt);
         let result = self
             .request(
                 "turn/start",
@@ -314,7 +322,7 @@ impl CodexService {
                   "model": model,
                   "input": {
                     "type": "text",
-                    "text": prompt
+                    "text": scoped_prompt
                   }
                 }),
             )
@@ -322,7 +330,7 @@ impl CodexService {
         let updated_binding = {
             let mut state = self.state.lock();
             if let Some(binding) = state.threads.get_mut(&thread_id) {
-                binding.project_id = project_id.clone();
+                binding.project_id = existing_thread.project_id.clone();
                 binding.status = "running".to_string();
                 binding.unread = false;
                 binding.last_turn_id = result
@@ -379,10 +387,21 @@ impl CodexService {
             .collect()
     }
 
-    pub async fn thread_messages(&self, thread_id: &str) -> Result<Vec<CodexMessageRecord>> {
+    pub async fn thread_messages_in_project(
+        &self,
+        project_id: &str,
+        thread_id: &str,
+    ) -> Result<Vec<CodexMessageRecord>> {
+        let binding = self.require_thread_in_project(project_id, thread_id)?;
         self.persistence
             .list_codex_messages_for_thread(thread_id.to_string())
             .await
+            .map(|messages| {
+                messages
+                    .into_iter()
+                    .filter(|message| message.project_id == binding.project_id)
+                    .collect()
+            })
     }
 
     pub async fn sidebar_threads(&self, project_id: &str) -> Vec<ProjectCodexSidebarItem> {
@@ -678,6 +697,46 @@ impl CodexService {
                                 build_pending_approval(id, &method, &value, &runtime.threads)
                             };
                             if let Some(approval) = approval {
+                                let scoped_approval = if approval.project_id != "global" {
+                                    match persistence
+                                        .read_project(approval.project_id.clone())
+                                        .await
+                                        .ok()
+                                        .flatten()
+                                    {
+                                        Some(project) => {
+                                            if let Some(reason) = enforce_project_scope_policy(
+                                                &approval,
+                                                std::path::Path::new(&project.root_path),
+                                            ) {
+                                                Some(PendingApprovalRecord {
+                                                    policy_action: "block".to_string(),
+                                                    policy_reason: Some(reason),
+                                                    ..approval.clone()
+                                                })
+                                            } else {
+                                                Some(approval.clone())
+                                            }
+                                        }
+                                        None => Some(PendingApprovalRecord {
+                                            policy_action: "block".to_string(),
+                                            policy_reason: Some(
+                                                "Blocked action for unknown project scope"
+                                                    .to_string(),
+                                            ),
+                                            ..approval.clone()
+                                        }),
+                                    }
+                                } else {
+                                    Some(PendingApprovalRecord {
+                                        policy_action: "block".to_string(),
+                                        policy_reason: Some(
+                                            "Blocked action without project scope".to_string(),
+                                        ),
+                                        ..approval.clone()
+                                    })
+                                };
+                                let approval = scoped_approval.unwrap_or(approval);
                                 if approval.policy_action == "block" {
                                     let _ = security.record_policy_block(approval.clone()).await;
                                     if let Some(thread) = mark_thread_after_denial(
@@ -803,6 +862,38 @@ impl CodexService {
     }
 }
 
+impl CodexService {
+    async fn require_project(&self, project_id: &str) -> Result<ProjectRecord> {
+        self.persistence
+            .read_project(project_id.to_string())
+            .await?
+            .ok_or_else(|| anyhow!("unknown project {project_id}"))
+    }
+
+    fn require_thread(&self, thread_id: &str) -> Result<CodexThreadBinding> {
+        self.state
+            .lock()
+            .threads
+            .get(thread_id)
+            .cloned()
+            .ok_or_else(|| anyhow!("unknown thread {thread_id}"))
+    }
+
+    fn require_thread_in_project(
+        &self,
+        project_id: &str,
+        thread_id: &str,
+    ) -> Result<CodexThreadBinding> {
+        let binding = self.require_thread(thread_id)?;
+        if binding.project_id != project_id {
+            return Err(anyhow!(
+                "thread {thread_id} does not belong to project {project_id}"
+            ));
+        }
+        Ok(binding)
+    }
+}
+
 fn resolve_login_shell() -> String {
     if let Ok(output) = StdCommand::new("dscl")
         .args([".", "-read", "/Users/deepsaint", "UserShell"])
@@ -832,6 +923,37 @@ fn normalize_thread_after_startup(mut thread: CodexThreadBinding) -> CodexThread
         thread.status = "disconnected".to_string();
     }
     thread
+}
+
+fn default_thread_title(project: &ProjectRecord) -> String {
+    format!("{} Thread", project.name)
+}
+
+fn build_scoped_turn_prompt(project: &ProjectRecord, prompt: &str) -> String {
+    format!(
+        concat!(
+            "[ICE PROJECT SCOPE]\n",
+            "Project ID: {project_id}\n",
+            "Project Name: {project_name}\n",
+            "Project Root: {project_root}\n",
+            "Trusted Project: {trusted}\n",
+            "\n",
+            "You are operating inside one project only.\n",
+            "Treat the project root above as your sole workspace.\n",
+            "Do not read, edit, create, delete, or run commands outside that root.\n",
+            "Do not switch to another project, workspace, or repository.\n",
+            "If a request would require leaving this project, refuse and explain that the action is out of scope.\n",
+            "Use paths relative to the project root whenever possible.\n",
+            "\n",
+            "[USER PROMPT]\n",
+            "{prompt}"
+        ),
+        project_id = project.id,
+        project_name = project.name,
+        project_root = project.root_path,
+        trusted = if project.is_trusted { "true" } else { "false" },
+        prompt = prompt,
+    )
 }
 
 fn update_thread_for_approval_request(
@@ -1196,7 +1318,11 @@ fn extract_default_listen(help_text: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_pending_approval, extract_default_listen, CodexThreadBinding};
+    use super::{
+        build_pending_approval, build_scoped_turn_prompt, extract_default_listen,
+        CodexThreadBinding,
+    };
+    use crate::projects::models::ProjectRecord;
     use serde_json::json;
     use std::collections::HashMap;
 
@@ -1232,5 +1358,27 @@ mod tests {
         assert_eq!(approval.project_id, "project-a");
         assert_eq!(approval.category, "git");
         assert_eq!(approval.policy_action, "block");
+    }
+
+    #[test]
+    fn scoped_turn_prompt_includes_project_root_boundary() {
+        let prompt = build_scoped_turn_prompt(
+            &ProjectRecord {
+                id: "project-a".to_string(),
+                name: "ice".to_string(),
+                root_path: "/Users/deepsaint/Desktop/ice".to_string(),
+                color_token: "blue".to_string(),
+                icon_hint: None,
+                is_trusted: true,
+                created_at: "now".to_string(),
+                last_opened_at: "now".to_string(),
+            },
+            "Refactor the git surface",
+        );
+
+        assert!(prompt.contains("Project Root: /Users/deepsaint/Desktop/ice"));
+        assert!(prompt
+            .contains("Do not read, edit, create, delete, or run commands outside that root."));
+        assert!(prompt.contains("[USER PROMPT]\nRefactor the git surface"));
     }
 }

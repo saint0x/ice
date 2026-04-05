@@ -649,9 +649,9 @@ export async function codexTurnStart(projectId: string, threadId: string, prompt
   })
 }
 
-export async function codexThreadMessagesList(threadId: string) {
+export async function codexThreadMessagesList(projectId: string, threadId: string) {
   return invoke<CodexMessageDto[]>('codex_thread_messages_list', {
-    input: { threadId },
+    input: { projectId, threadId },
   })
 }
 
