@@ -1,7 +1,15 @@
-import { memo, useMemo } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
 import { Globe, Plus, X, Lock, Circle, Pin } from 'lucide-react'
 import type { ProjectId } from '@/types'
-import { browserTabClose, browserTabCreate, browserTabPinSet, toBrowserTab } from '@/lib/backend'
+import {
+  browserTabClose,
+  browserTabCreate,
+  browserTabPinSet,
+  projectBrowserRestorePolicyGet,
+  projectBrowserRestorePolicySet,
+  toBrowserTab,
+  type BrowserRestorePolicy,
+} from '@/lib/backend'
 import { useBrowserStore } from '@/stores/browser'
 import { useWorkspaceStore } from '@/stores/workspace'
 import styles from './BrowserList.module.css'
@@ -14,6 +22,7 @@ export const BrowserList = memo(function BrowserList({ projectId }: { projectId:
   const closeTab = useBrowserStore((s) => s.closeTab)
   const openTab = useWorkspaceStore((s) => s.openTab)
   const activePaneId = useWorkspaceStore((s) => s.activePaneId)
+  const [restorePolicy, setRestorePolicy] = useState<BrowserRestorePolicy | null>(null)
 
   const tabs = useMemo(() => {
     const result = []
@@ -23,8 +32,46 @@ export const BrowserList = memo(function BrowserList({ projectId }: { projectId:
     return result
   }, [allTabs, projectId])
 
+  useEffect(() => {
+    let disposed = false
+    void projectBrowserRestorePolicyGet(projectId)
+      .then((policy) => {
+        if (!disposed) {
+          setRestorePolicy(policy)
+        }
+      })
+      .catch(() => {
+        if (!disposed) {
+          setRestorePolicy('pinned')
+        }
+      })
+
+    return () => {
+      disposed = true
+    }
+  }, [projectId])
+
   return (
     <div className={styles.list}>
+      <div className={styles.policyRow}>
+        <span className={styles.policyLabel}>Restore</span>
+        <select
+          className={styles.policySelect}
+          value={restorePolicy ?? 'pinned'}
+          onChange={(event) => {
+            const nextPolicy = event.target.value as BrowserRestorePolicy
+            setRestorePolicy(nextPolicy)
+            void projectBrowserRestorePolicySet(projectId, nextPolicy).catch(() => {
+              void projectBrowserRestorePolicyGet(projectId).then(setRestorePolicy).catch(() => {})
+            })
+          }}
+          disabled={restorePolicy === null}
+        >
+          <option value="none">None</option>
+          <option value="pinned">Pinned</option>
+          <option value="all">All tabs</option>
+        </select>
+      </div>
       {tabs.map((tab) => (
         <div
           key={tab.id}

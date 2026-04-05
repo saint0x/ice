@@ -239,6 +239,8 @@ interface BrowserExternalOpenRequestDto {
   url: string
 }
 
+export type BrowserRestorePolicy = 'none' | 'pinned' | 'all'
+
 interface BrowserFindInPageResultDto {
   tabId: string
   query: string
@@ -457,6 +459,16 @@ export async function codexServerRequestDeny(requestId: number, message?: string
 
 export async function browserTabsList(projectId?: string) {
   return invoke<BrowserTabDto[]>('browser_tabs_list', { projectId })
+}
+
+export async function projectBrowserRestorePolicyGet(projectId: string) {
+  return invoke<BrowserRestorePolicy>('project_browser_restore_policy_get', { projectId })
+}
+
+export async function projectBrowserRestorePolicySet(projectId: string, policy: BrowserRestorePolicy) {
+  return invoke<BrowserRestorePolicy>('project_browser_restore_policy_set', {
+    input: { projectId, policy },
+  })
 }
 
 export async function browserTabCreate(projectId: string, url?: string, title?: string) {

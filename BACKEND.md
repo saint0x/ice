@@ -114,6 +114,7 @@ Rules for this checklist:
 - ✅ The current frontend terminal surface now uses the backend resize contract and explicit respawn flow, instead of remounting xterm on every scrollback update or silently auto-respawning dead sessions.
 - ✅ The current frontend browser surface now uses backend open-external and find-in-page reporting contracts, with the iframe renderer host acting as an interim fallback until the final native browser container lands.
 - ✅ The current frontend now uses backend browser pin-state commands in both the sidebar and the browser surface instead of local-only browser tab chrome.
+- ✅ The current frontend now uses backend per-project browser restore-policy state instead of treating browser session restore behavior as an implicit local choice.
 - ✅ The current frontend now uses backend git branch/fetch/pull/push controls and backend terminal rename/session actions instead of placeholder shell chrome.
 - ✅ The current frontend now uses backend branch creation plus upstream-aware publish/push flows instead of leaving those git capabilities stranded behind IPC only.
 - ✅ The current frontend now uses backend whole-tree git diff reads and backend terminal scrollback/session metadata for richer dock diagnostics instead of placeholder-only shell state.
