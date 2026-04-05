@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useState } from 'react'
 import {
-  GitBranch, ArrowUp, ArrowDown, Circle, Plus, Minus, Check, Loader2, RotateCcw, ArrowUpToLine, ArrowDownToLine, AlertTriangle, RefreshCcw, CloudDownload, CloudUpload,
+  GitBranch, ArrowUp, ArrowDown, Circle, Plus, Minus, Check, Loader2, RotateCcw, ArrowUpToLine, ArrowDownToLine, AlertTriangle, RefreshCcw, CloudDownload, CloudUpload, GitCommitHorizontal,
 } from 'lucide-react'
 import type { Tab } from '@/types'
 import {
@@ -61,6 +61,7 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
     isRemote: boolean
   }>>([])
   const [checkoutBranch, setCheckoutBranch] = useState('')
+  const [newBranchName, setNewBranchName] = useState('')
   const [isBranchLoading, setIsBranchLoading] = useState(false)
   const [readiness, setReadiness] = useState<{
     authorConfigured: boolean
@@ -76,6 +77,10 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
     if (!state || !selectedKey) return null
     return state.changes.find((change) => changeKey(change.path, change.staged) === selectedKey) ?? null
   }, [selectedKey, state])
+  const currentBranchRecord = useMemo(
+    () => branches.find((branch) => branch.current) ?? null,
+    [branches],
+  )
 
   useEffect(() => {
     if (!state) return
@@ -166,6 +171,14 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
 
   const staged = state.changes.filter((c) => c.staged)
   const unstaged = state.changes.filter((c) => !c.staged)
+  const normalizedNewBranchName = newBranchName.trim()
+  const branchExists = branches.some((branch) => branch.name === normalizedNewBranchName)
+  const createBranchDisabled =
+    isMutating ||
+    isBranchLoading ||
+    !normalizedNewBranchName ||
+    branchExists ||
+    /\s/.test(normalizedNewBranchName)
 
   const commitDisabled =
     isMutating ||
@@ -198,6 +211,9 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
       setBranches(localBranches)
       const current = localBranches.find((branch) => branch.current)
       setCheckoutBranch(current?.name ?? checkoutBranch)
+      if (current?.name === normalizedNewBranchName) {
+        setNewBranchName('')
+      }
     } catch {
       // Keep the previous branch picker state if the refresh fails after mutation.
     }
@@ -224,6 +240,20 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
       <div className={styles.header}>
         <GitBranch size={14} />
         <span className={styles.branch}>{state.branch}</span>
+        {currentBranchRecord?.upstream ? (
+          <span className={styles.upstreamBadge}>
+            <GitCommitHorizontal size={11} />
+            <span>{currentBranchRecord.upstream}</span>
+          </span>
+        ) : (
+          <span className={styles.warningBadge}>
+            <AlertTriangle size={11} />
+            <span>No upstream</span>
+          </span>
+        )}
+        {currentBranchRecord?.tracking ? (
+          <span className={styles.sync}>{currentBranchRecord.tracking}</span>
+        ) : null}
         {state.ahead > 0 && <span className={styles.sync}><ArrowUp size={11} />{state.ahead}</span>}
         {state.behind > 0 && <span className={styles.sync}><ArrowDown size={11} />{state.behind}</span>}
       </div>
@@ -248,6 +278,28 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
             <span>Checkout</span>
           </button>
         </div>
+        <div className={styles.branchCreator}>
+          <input
+            className={styles.branchInput}
+            value={newBranchName}
+            onChange={(event) => setNewBranchName(event.target.value)}
+            placeholder="new-branch-name"
+            spellCheck={false}
+          />
+          <button
+            className={styles.syncBtn}
+            onClick={() => void runBranchMutation(() => gitBranchCheckout({
+              projectId: tab.projectId,
+              branchName: normalizedNewBranchName,
+              create: true,
+              startPoint: state.branch,
+            }))}
+            disabled={createBranchDisabled}
+          >
+            <Plus size={12} />
+            <span>Create branch</span>
+          </button>
+        </div>
         <div className={styles.syncActions}>
           <button className={styles.syncBtn} onClick={() => void runBranchMutation(() => gitFetch(tab.projectId))} disabled={isMutating}>
             <CloudDownload size={12} />
@@ -257,12 +309,32 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
             <ArrowDown size={12} />
             <span>Pull</span>
           </button>
-          <button className={styles.syncBtn} onClick={() => void runBranchMutation(() => gitPush({ projectId: tab.projectId, branch: state.branch }))} disabled={isMutating}>
+          <button
+            className={styles.syncBtn}
+            onClick={() => void runBranchMutation(() => gitPush({
+              projectId: tab.projectId,
+              branch: state.branch,
+              setUpstream: !currentBranchRecord?.upstream,
+            }))}
+            disabled={isMutating}
+          >
             <CloudUpload size={12} />
-            <span>Push</span>
+            <span>{currentBranchRecord?.upstream ? 'Push' : 'Publish'}</span>
           </button>
         </div>
       </div>
+      {normalizedNewBranchName && branchExists ? (
+        <div className={styles.errorBanner}>
+          <AlertTriangle size={13} />
+          <span>Branch "{normalizedNewBranchName}" already exists.</span>
+        </div>
+      ) : null}
+      {normalizedNewBranchName && /\s/.test(normalizedNewBranchName) ? (
+        <div className={styles.errorBanner}>
+          <AlertTriangle size={13} />
+          <span>Branch names cannot contain spaces.</span>
+        </div>
+      ) : null}
       <div className={styles.commitArea}>
         <textarea
           className={styles.commitInput}
