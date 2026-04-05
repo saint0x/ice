@@ -131,6 +131,7 @@ Rules for this checklist:
 - ✅ Terminal sessions can now be respawned from persisted metadata, and app shutdown / crash recovery marks live sessions as restorable instead of leaving ghost running state.
 - ✅ Terminal backend actions now also include interrupt, EOF, and explicit scrollback clear flows, with frontend wiring for operational diagnostics controls in the dock and terminal surface.
 - ✅ Terminal diagnostics now also have a typed backend `terminal_diagnostics_read` contract that joins persisted session metadata with recent scrollback context for operator-facing shell diagnostics.
+- ✅ The current frontend now also routes dedicated keyboard shortcuts through backend terminal create, interrupt, EOF, clear-history, and respawn commands instead of limiting those operations to click-only controls.
 
 ### Codex / Agent Runtime
 
