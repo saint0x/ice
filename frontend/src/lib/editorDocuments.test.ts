@@ -11,7 +11,7 @@ vi.mock('@/lib/backend', () => ({
 describe('editor document prefetch planning', () => {
   beforeEach(() => {
     vi.mocked(fileRead).mockReset()
-    useEditorStore.setState({ documents: new Map() })
+    useEditorStore.setState({ documents: new Map(), removedProjectIds: new Set() })
   })
 
   it('prioritizes open editor tabs and the selected path ahead of the full tree', () => {
@@ -192,5 +192,35 @@ describe('editor document prefetch planning', () => {
       isDirty: true,
       isSaving: true,
     })
+  })
+
+  it('does not hydrate an editor document after its project was removed mid-read', async () => {
+    let resolveRead: (value: Awaited<ReturnType<typeof fileRead>>) => void = () => {}
+    vi.mocked(fileRead).mockReturnValueOnce(new Promise((resolve) => {
+      resolveRead = resolve
+    }))
+
+    const pending = ensureEditorDocument('project-a', 'src/race.ts')
+    expect(useEditorStore.getState().documents.get('project-a:src/race.ts')).toMatchObject({
+      isLoading: true,
+    })
+
+    useEditorStore.getState().removeProjectDocuments('project-a')
+    resolveRead({
+      path: 'src/race.ts',
+      content: 'late disk read',
+      isBinary: false,
+      sizeBytes: 14,
+      encoding: 'utf-8',
+      hasBom: false,
+      modifiedAtMs: 10,
+      versionToken: 'v1',
+    })
+
+    await expect(pending).resolves.toMatchObject({
+      projectId: 'project-a',
+      path: 'src/race.ts',
+    })
+    expect(useEditorStore.getState().documents.has('project-a:src/race.ts')).toBe(false)
   })
 })

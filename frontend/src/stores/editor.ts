@@ -31,6 +31,7 @@ export interface EditorDocument {
 
 interface EditorState {
   documents: Map<string, EditorDocument>
+  removedProjectIds: Set<string>
   setLoading: (projectId: string, path: string) => void
   hydrateDocument: (document: EditorDocument) => void
   updateContent: (projectId: string, path: string, content: string) => void
@@ -52,6 +53,7 @@ interface EditorState {
     path: string,
     payload: Omit<EditorDocument, 'isDirty' | 'isLoading' | 'isSaving'>,
   ) => void
+  removeProjectDocuments: (projectId: string) => void
 }
 
 function documentKey(projectId: string, path: string) {
@@ -63,9 +65,11 @@ const DEFAULT_CACHE_BYTES = 64 * 1024 * 1024
 
 export const useEditorStore = create<EditorState>((set) => ({
   documents: new Map(),
+  removedProjectIds: new Set(),
 
   setLoading: (projectId, path) =>
     set((state) => {
+      if (state.removedProjectIds.has(projectId)) return state
       const key = documentKey(projectId, path)
       const documents = new Map(state.documents)
       const current = documents.get(key)
@@ -94,6 +98,7 @@ export const useEditorStore = create<EditorState>((set) => ({
 
   hydrateDocument: (document) =>
     set((state) => {
+      if (state.removedProjectIds.has(document.projectId)) return state
       const documents = new Map(state.documents)
       documents.set(documentKey(document.projectId, document.path), document)
       return { documents }
@@ -101,6 +106,7 @@ export const useEditorStore = create<EditorState>((set) => ({
 
   updateContent: (projectId, path, content) =>
     set((state) => {
+      if (state.removedProjectIds.has(projectId)) return state
       const key = documentKey(projectId, path)
       const documents = new Map(state.documents)
       const current = documents.get(key)
@@ -119,6 +125,7 @@ export const useEditorStore = create<EditorState>((set) => ({
 
   touchDocument: (projectId, path) =>
     set((state) => {
+      if (state.removedProjectIds.has(projectId)) return state
       const key = documentKey(projectId, path)
       const current = state.documents.get(key)
       if (!current) return state
@@ -169,6 +176,7 @@ export const useEditorStore = create<EditorState>((set) => ({
 
   markSaved: (projectId, path, payload) =>
     set((state) => {
+      if (state.removedProjectIds.has(projectId)) return state
       const documents = new Map(state.documents)
       documents.set(documentKey(projectId, path), {
         ...payload,
@@ -188,6 +196,7 @@ export const useEditorStore = create<EditorState>((set) => ({
 
   setSaving: (projectId, path, isSaving) =>
     set((state) => {
+      if (state.removedProjectIds.has(projectId)) return state
       const key = documentKey(projectId, path)
       const current = state.documents.get(key)
       if (!current) return state
@@ -198,6 +207,7 @@ export const useEditorStore = create<EditorState>((set) => ({
 
   setError: (projectId, path, error) =>
     set((state) => {
+      if (state.removedProjectIds.has(projectId)) return state
       const key = documentKey(projectId, path)
       const current = state.documents.get(key)
       if (!current) return state
@@ -238,6 +248,7 @@ export const useEditorStore = create<EditorState>((set) => ({
 
   setConflict: (projectId, path, conflict, error) =>
     set((state) => {
+      if (state.removedProjectIds.has(projectId)) return state
       const key = documentKey(projectId, path)
       const current = state.documents.get(key)
       if (!current) return state
@@ -255,6 +266,7 @@ export const useEditorStore = create<EditorState>((set) => ({
 
   updateConflictMergeDraft: (projectId, path, mergeDraft) =>
     set((state) => {
+      if (state.removedProjectIds.has(projectId)) return state
       const key = documentKey(projectId, path)
       const current = state.documents.get(key)
       if (!current?.conflict) return state
@@ -271,6 +283,7 @@ export const useEditorStore = create<EditorState>((set) => ({
 
   reloadFromDisk: (projectId, path, payload) =>
     set((state) => {
+      if (state.removedProjectIds.has(projectId)) return state
       const documents = new Map(state.documents)
       documents.set(documentKey(projectId, path), {
         ...payload,
@@ -286,5 +299,18 @@ export const useEditorStore = create<EditorState>((set) => ({
         conflict: undefined,
       })
       return { documents }
+    }),
+
+  removeProjectDocuments: (projectId) =>
+    set((state) => {
+      const documents = new Map(state.documents)
+      for (const [key, document] of documents.entries()) {
+        if (document.projectId === projectId) {
+          documents.delete(key)
+        }
+      }
+      const removedProjectIds = new Set(state.removedProjectIds)
+      removedProjectIds.add(projectId)
+      return { documents, removedProjectIds }
     }),
 }))

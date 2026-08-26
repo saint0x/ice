@@ -4,7 +4,7 @@ import { useWorkspaceStore } from '@/stores/workspace'
 
 describe('editor cache retention', () => {
   beforeEach(() => {
-    useEditorStore.setState({ documents: new Map() })
+    useEditorStore.setState({ documents: new Map(), removedProjectIds: new Set() })
     useWorkspaceStore.setState({
       layout: {
         id: 'pane-1',
@@ -108,5 +108,30 @@ describe('editor cache retention', () => {
     useEditorStore.getState().discardPendingLoad('project-a', 'src/dirty.ts')
 
     expect(useEditorStore.getState().documents.has('project-a:src/dirty.ts')).toBe(true)
+  })
+
+  it('does not allow removed project editor documents to be recreated', () => {
+    useEditorStore.getState().setLoading('project-a', 'src/main.ts')
+
+    useEditorStore.getState().removeProjectDocuments('project-a')
+
+    useEditorStore.getState().hydrateDocument({
+      projectId: 'project-a',
+      path: 'src/main.ts',
+      content: 'late disk read',
+      isBinary: false,
+      sizeBytes: 14,
+      hasBom: false,
+      loadedAt: 1,
+      lastTouchedAt: 1,
+      syntaxMode: 'full',
+      isDirty: false,
+      isLoading: false,
+      isSaving: false,
+    })
+    useEditorStore.getState().setLoading('project-a', 'src/other.ts')
+
+    expect(useEditorStore.getState().documents.has('project-a:src/main.ts')).toBe(false)
+    expect(useEditorStore.getState().documents.has('project-a:src/other.ts')).toBe(false)
   })
 })

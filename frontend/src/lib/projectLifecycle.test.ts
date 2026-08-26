@@ -221,6 +221,7 @@ function resetStores() {
   })
 
   useEditorStore.setState({
+    removedProjectIds: new Set(),
     documents: new Map([
       ['project-1:old.ts', {
         projectId: 'project-1',
@@ -291,6 +292,7 @@ describe('project lifecycle cleanup', () => {
 
     expect(useEditorStore.getState().documents.has('project-1:old.ts')).toBe(false)
     expect(useEditorStore.getState().documents.has('project-2:keep.ts')).toBe(true)
+    expect(useEditorStore.getState().removedProjectIds.has('project-1')).toBe(true)
   })
 
   it('does not resurrect removed project browser tabs or terminals from late backend events', () => {

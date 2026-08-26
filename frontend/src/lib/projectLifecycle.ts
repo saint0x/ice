@@ -85,13 +85,5 @@ export function removeProjectLocalState(projectId: string) {
     }
   })
 
-  useEditorStore.setState((state) => {
-    const documents = new Map(state.documents)
-    for (const [key, document] of documents.entries()) {
-      if (document.projectId === projectId) {
-        documents.delete(key)
-      }
-    }
-    return { documents }
-  })
+  useEditorStore.getState().removeProjectDocuments(projectId)
 }
