@@ -5,9 +5,9 @@ use std::process::Command as StdCommand;
 use std::sync::Arc;
 use std::thread;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{anyhow, Context, Result};
 use parking_lot::Mutex;
-use portable_pty::{CommandBuilder, PtySize, native_pty_system};
+use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
@@ -806,8 +806,8 @@ fn scrollback_line_count(content: &str) -> usize {
 #[cfg(test)]
 mod tests {
     use super::{
-        TerminalSessionRecord, load_terminal_state_for_startup, recent_scrollback_lines,
-        scrollback_line_count, trim_scrollback,
+        load_terminal_state_for_startup, recent_scrollback_lines, scrollback_line_count,
+        trim_scrollback, TerminalSessionRecord,
     };
     use crate::persistence::db::PersistenceService;
     use tempfile::tempdir;

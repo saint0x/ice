@@ -213,7 +213,9 @@ fn validate_session_state(session_state: &WorkspaceSessionState) -> Result<()> {
 
     let node_id_set: HashSet<_> = node_ids.iter().cloned().collect();
     if node_id_set.len() != node_ids.len() {
-        return Err(anyhow!("workspace session contains duplicate layout node ids"));
+        return Err(anyhow!(
+            "workspace session contains duplicate layout node ids"
+        ));
     }
 
     let pane_id_set: HashSet<_> = pane_ids.iter().cloned().collect();
@@ -468,8 +470,7 @@ mod tests {
             }),
         };
 
-        let error =
-            validate_session_state(&session).expect_err("duplicate split ids should fail");
+        let error = validate_session_state(&session).expect_err("duplicate split ids should fail");
         assert!(error
             .to_string()
             .contains("workspace session contains duplicate layout node ids"));

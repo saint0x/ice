@@ -3,13 +3,13 @@ use std::fs;
 use std::path::Path;
 use std::process::Command as StdCommand;
 use std::process::Stdio;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{anyhow, Context, Result};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Emitter};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -23,8 +23,8 @@ use crate::persistence::db::PersistenceService;
 use crate::projects::models::ProjectCodexSidebarItem;
 use crate::projects::models::ProjectRecord;
 use crate::security::approvals::{
-    PendingApprovalRecord, SecurityService, apply_approval_policy, classify_approval,
-    enforce_project_scope_policy,
+    apply_approval_policy, classify_approval, enforce_project_scope_policy, PendingApprovalRecord,
+    SecurityService,
 };
 
 const CODEX_MODEL_ID: &str = "gpt-5.4";
@@ -1874,9 +1874,9 @@ fn extract_default_listen(help_text: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        CODEX_MODEL_ID, CodexRuntimeState, CodexThreadBinding, apply_notification_to_threads,
-        build_pending_approval, build_scoped_turn_prompt, extract_default_listen,
-        load_persisted_threads_for_startup, normalize_thread_after_startup, summarize_text,
+        apply_notification_to_threads, build_pending_approval, build_scoped_turn_prompt,
+        extract_default_listen, load_persisted_threads_for_startup, normalize_thread_after_startup,
+        summarize_text, CodexRuntimeState, CodexThreadBinding, CODEX_MODEL_ID,
     };
     use crate::app::paths::IcePaths;
     use crate::persistence::db::PersistenceService;
@@ -1939,10 +1939,8 @@ mod tests {
         );
 
         assert!(prompt.contains("Project Root: /Users/deepsaint/Desktop/ice"));
-        assert!(
-            prompt
-                .contains("Do not read, edit, create, delete, or run commands outside that root.")
-        );
+        assert!(prompt
+            .contains("Do not read, edit, create, delete, or run commands outside that root."));
         assert!(prompt.contains("[USER PROMPT]\nRefactor the git surface"));
     }
 

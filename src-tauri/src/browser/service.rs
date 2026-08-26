@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{anyhow, Context, Result};
 use parking_lot::RwLock;
 use serde::Serialize;
 use tauri::{
@@ -1235,9 +1235,9 @@ fn browser_runtime_init_script(tab_id: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        BrowserHistoryEntry, BrowserTabRecord, BrowserTabState, MAX_BROWSER_HISTORY_ENTRIES,
         browser_security_origin, is_secure_url, load_browser_tabs_for_startup,
-        trim_browser_history,
+        trim_browser_history, BrowserHistoryEntry, BrowserTabRecord, BrowserTabState,
+        MAX_BROWSER_HISTORY_ENTRIES,
     };
     use crate::persistence::db::PersistenceService;
     use tempfile::tempdir;

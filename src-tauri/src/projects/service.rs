@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, anyhow};
+use anyhow::{anyhow, Context, Result};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use std::path::PathBuf;
@@ -325,11 +325,9 @@ mod tests {
         )
         .expect_err("unknown project should fail");
 
-        assert!(
-            error
-                .to_string()
-                .contains("unknown project project-missing")
-        );
+        assert!(error
+            .to_string()
+            .contains("unknown project project-missing"));
     }
 
     #[test]
@@ -362,15 +360,11 @@ mod tests {
         let order_error = decode_project_order_config(Some(serde_json::json!({"order": []})))
             .expect_err("invalid order config should fail");
 
-        assert!(
-            policy_error
-                .to_string()
-                .contains("stored config policy has an invalid shape")
-        );
-        assert!(
-            order_error
-                .to_string()
-                .contains("stored config projects.order has an invalid shape")
-        );
+        assert!(policy_error
+            .to_string()
+            .contains("stored config policy has an invalid shape"));
+        assert!(order_error
+            .to_string()
+            .contains("stored config projects.order has an invalid shape"));
     }
 }
