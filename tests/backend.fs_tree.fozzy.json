@@ -50,6 +50,69 @@
         "cd src-tauri && cargo test fs::service::tests::tree_walk_respects_gitignore_and_hidden_defaults -- --exact"
       ],
       "expect_exit": 0
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test fs::service::tests::existing_paths_reject_symlink_escape_from_project_root -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test fs::service::tests::existing_paths_reject_symlink_escape_from_project_root -- --exact"
+      ],
+      "expect_exit": 0
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test fs::service::tests::creatable_paths_reject_parent_symlink_escape_from_project_root -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test fs::service::tests::creatable_paths_reject_parent_symlink_escape_from_project_root -- --exact"
+      ],
+      "expect_exit": 0
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test fs::service::tests::import_rejects_nested_destination_symlink_escape -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test fs::service::tests::import_rejects_nested_destination_symlink_escape -- --exact"
+      ],
+      "expect_exit": 0
     }
   ]
 }

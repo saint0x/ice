@@ -8,7 +8,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::fs as stdfs;
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
@@ -174,7 +174,7 @@ impl FsService {
         projects: &ProjectService,
     ) -> Result<FileReadResult> {
         let root = projects.resolve_project_path(project_id).await?;
-        let full_path = resolve_under_root(&root, path)?;
+        let full_path = resolve_existing_under_root(&root, path)?;
         let path_string = path.to_string();
         tokio::task::spawn_blocking(move || {
             let metadata = stdfs::metadata(&full_path)?;
@@ -281,7 +281,7 @@ impl FsService {
         projects: &ProjectService,
     ) -> Result<()> {
         let root = projects.resolve_project_path(project_id).await?;
-        let full_path = resolve_under_root(&root, path)?;
+        let full_path = resolve_creatable_under_root(&root, path)?;
         if let Some(expected_version_token) = expected_version_token {
             let metadata = tokio::fs::metadata(&full_path).await.with_context(|| {
                 format!(
@@ -317,7 +317,7 @@ impl FsService {
         projects: &ProjectService,
     ) -> Result<()> {
         let root = projects.resolve_project_path(project_id).await?;
-        let full_path = resolve_under_root(&root, path)?;
+        let full_path = resolve_creatable_under_root(&root, path)?;
         tokio::fs::create_dir_all(&full_path).await?;
         self.app.emit(
             FS_EVENT,
@@ -334,7 +334,7 @@ impl FsService {
         projects: &ProjectService,
     ) -> Result<()> {
         let root = projects.resolve_project_path(project_id).await?;
-        let full_path = resolve_under_root(&root, path)?;
+        let full_path = resolve_existing_under_root(&root, path)?;
         let metadata = tokio::fs::metadata(&full_path).await?;
         if metadata.is_dir() {
             if recursive {
@@ -360,8 +360,8 @@ impl FsService {
         projects: &ProjectService,
     ) -> Result<()> {
         let root = projects.resolve_project_path(project_id).await?;
-        let from_path = resolve_under_root(&root, from)?;
-        let to_path = resolve_under_root(&root, to)?;
+        let from_path = resolve_existing_under_root(&root, from)?;
+        let to_path = resolve_creatable_under_root(&root, to)?;
         if let Some(parent) = to_path.parent() {
             tokio::fs::create_dir_all(parent).await?;
         }
@@ -391,7 +391,7 @@ impl FsService {
 
         let root = projects.resolve_project_path(project_id).await?;
         let destination_root = match destination_dir {
-            Some(path) if !path.is_empty() => resolve_under_root(&root, path)?,
+            Some(path) if !path.is_empty() => resolve_creatable_under_root(&root, path)?,
             _ => root.clone(),
         };
         tokio::fs::create_dir_all(&destination_root).await?;
@@ -510,12 +510,79 @@ impl Default for TreeReadOptions {
 }
 
 fn resolve_under_root(root: &Path, relative: &str) -> Result<PathBuf> {
+    ensure_safe_relative_path(relative)?;
     let full = root.join(relative);
     let normalized = full.components().collect::<PathBuf>();
     if !normalized.starts_with(root) {
         return Err(anyhow!("path escapes project root"));
     }
     Ok(normalized)
+}
+
+fn resolve_existing_under_root(root: &Path, relative: &str) -> Result<PathBuf> {
+    let path = resolve_under_root(root, relative)?;
+    let canonical_root = root
+        .canonicalize()
+        .with_context(|| format!("failed to resolve project root {}", root.display()))?;
+    let canonical_path = path
+        .canonicalize()
+        .with_context(|| format!("failed to resolve path {}", path.display()))?;
+    if !canonical_path.starts_with(&canonical_root) {
+        return Err(anyhow!("path escapes project root"));
+    }
+    Ok(path)
+}
+
+fn resolve_creatable_under_root(root: &Path, relative: &str) -> Result<PathBuf> {
+    let path = resolve_under_root(root, relative)?;
+    let canonical_root = root
+        .canonicalize()
+        .with_context(|| format!("failed to resolve project root {}", root.display()))?;
+    if let Ok(canonical_path) = path.canonicalize() {
+        if !canonical_path.starts_with(&canonical_root) {
+            return Err(anyhow!("path escapes project root"));
+        }
+        return Ok(path);
+    }
+
+    let existing_parent = nearest_existing_parent(&path, root)?;
+    let canonical_parent = existing_parent.canonicalize().with_context(|| {
+        format!(
+            "failed to resolve parent path {}",
+            existing_parent.display()
+        )
+    })?;
+    if !canonical_parent.starts_with(&canonical_root) {
+        return Err(anyhow!("path escapes project root"));
+    }
+    Ok(path)
+}
+
+fn ensure_safe_relative_path(relative: &str) -> Result<()> {
+    let path = Path::new(relative);
+    if path.as_os_str().is_empty() || path.is_absolute() {
+        return Err(anyhow!("path escapes project root"));
+    }
+    for component in path.components() {
+        match component {
+            Component::Normal(_) => {}
+            _ => return Err(anyhow!("path escapes project root")),
+        }
+    }
+    Ok(())
+}
+
+fn nearest_existing_parent<'a>(path: &'a Path, root: &'a Path) -> Result<PathBuf> {
+    let mut current = path.parent().unwrap_or(root);
+    loop {
+        if current.exists() {
+            return Ok(current.to_path_buf());
+        }
+        if current == root {
+            return Ok(root.to_path_buf());
+        }
+        current = current.parent().unwrap_or(root);
+    }
 }
 
 fn walk_tree(
@@ -869,7 +936,7 @@ fn import_external_entries_blocking(
             .ok_or_else(|| anyhow!("source path has no final component: {}", source.display()))?;
         let destination = destination_root.join(source_name);
 
-        copy_external_entry(&source, &destination)?;
+        copy_external_entry(project_root, &source, &destination)?;
 
         let relative = destination
             .strip_prefix(project_root)
@@ -881,7 +948,8 @@ fn import_external_entries_blocking(
     Ok(imported)
 }
 
-fn copy_external_entry(source: &Path, destination: &Path) -> Result<()> {
+fn copy_external_entry(project_root: &Path, source: &Path, destination: &Path) -> Result<()> {
+    ensure_destination_under_root(project_root, destination)?;
     let metadata = stdfs::metadata(source)
         .with_context(|| format!("failed to read metadata for {}", source.display()))?;
 
@@ -900,7 +968,7 @@ fn copy_external_entry(source: &Path, destination: &Path) -> Result<()> {
                 entry.with_context(|| format!("failed to enumerate {}", source.display()))?;
             let child_source = entry.path();
             let child_destination = destination.join(entry.file_name());
-            copy_external_entry(&child_source, &child_destination)?;
+            copy_external_entry(project_root, &child_source, &child_destination)?;
         }
         return Ok(());
     }
@@ -924,12 +992,21 @@ fn copy_external_entry(source: &Path, destination: &Path) -> Result<()> {
     Ok(())
 }
 
+fn ensure_destination_under_root(project_root: &Path, destination: &Path) -> Result<()> {
+    let relative = destination
+        .strip_prefix(project_root)
+        .map_err(|_| anyhow!("import destination escaped project root"))?;
+    resolve_creatable_under_root(project_root, &relative.to_string_lossy())?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         copy_external_entry, decode_text_bytes, encode_text_content, file_version,
         import_external_entries_blocking, is_binary_bytes, nest_tree_entries,
-        parse_rg_match_record, search_paths_under_root, walk_tree, FsEntry, TreeReadOptions,
+        parse_rg_match_record, resolve_creatable_under_root, resolve_existing_under_root,
+        search_paths_under_root, walk_tree, FsEntry, TreeReadOptions,
     };
     use std::collections::HashMap;
     use std::fs;
@@ -1084,12 +1161,82 @@ mod tests {
             .expect("write nested file");
 
         let destination = project_root.path().join("imports").join("fixtures");
-        copy_external_entry(&nested_dir, &destination).expect("copy directory");
+        copy_external_entry(project_root.path(), &nested_dir, &destination)
+            .expect("copy directory");
 
         let imported_file = destination.join("nested").join("data.json");
         assert_eq!(
             fs::read_to_string(imported_file).expect("read imported file"),
             "{\"ok\":true}"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn existing_paths_reject_symlink_escape_from_project_root() {
+        use std::os::unix::fs::symlink;
+
+        let project_root = tempdir().expect("project temp dir");
+        let outside_root = tempdir().expect("outside temp dir");
+        let outside_file = outside_root.path().join("secret.txt");
+        fs::write(&outside_file, "outside").expect("write outside file");
+        symlink(&outside_file, project_root.path().join("linked.txt")).expect("symlink file");
+
+        assert!(
+            resolve_existing_under_root(project_root.path(), "linked.txt")
+                .expect_err("symlink target should escape")
+                .to_string()
+                .contains("path escapes project root")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn creatable_paths_reject_parent_symlink_escape_from_project_root() {
+        use std::os::unix::fs::symlink;
+
+        let project_root = tempdir().expect("project temp dir");
+        let outside_root = tempdir().expect("outside temp dir");
+        symlink(outside_root.path(), project_root.path().join("linked-dir"))
+            .expect("symlink directory");
+
+        assert!(
+            resolve_creatable_under_root(project_root.path(), "linked-dir/new.txt")
+                .expect_err("symlink parent should escape")
+                .to_string()
+                .contains("path escapes project root")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn import_rejects_nested_destination_symlink_escape() {
+        use std::os::unix::fs::symlink;
+
+        let source_root = tempdir().expect("source temp dir");
+        let project_root = tempdir().expect("project temp dir");
+        let outside_root = tempdir().expect("outside temp dir");
+        let source_dir = source_root.path().join("fixtures");
+        fs::create_dir_all(source_dir.join("nested")).expect("create source");
+        fs::write(source_dir.join("nested").join("data.json"), "{\"ok\":true}")
+            .expect("write source file");
+        let destination = project_root.path().join("imports").join("fixtures");
+        fs::create_dir_all(destination.join("nested")).expect("create destination");
+        symlink(outside_root.path(), destination.join("nested").join("link"))
+            .expect("symlink nested destination");
+        fs::create_dir_all(source_dir.join("nested").join("link")).expect("create source link dir");
+        fs::write(
+            source_dir.join("nested").join("link").join("escape.txt"),
+            "outside",
+        )
+        .expect("write nested source");
+
+        assert!(
+            copy_external_entry(project_root.path(), &source_dir, &destination)
+                .expect_err("nested symlink destination should escape")
+                .to_string()
+                .contains("path escapes project root")
+        );
+        assert!(!outside_root.path().join("escape.txt").exists());
     }
 }
