@@ -78,6 +78,11 @@ function collectPaneIds(layout: PaneLayout): PaneId[] {
   return layout.children.flatMap(collectPaneIds)
 }
 
+function collectLayoutTabIds(layout: PaneLayout): TabId[] {
+  if (layout.type === 'leaf') return layout.tabs
+  return layout.children.flatMap(collectLayoutTabIds)
+}
+
 function syncCountersFromWorkspace(layout: PaneLayout, tabs: Tab[]) {
   const paneIds = collectPaneIds(layout)
   const maxPane = paneIds.reduce((max, id) => {
@@ -90,6 +95,25 @@ function syncCountersFromWorkspace(layout: PaneLayout, tabs: Tab[]) {
   }, 0)
   _paneCounter = Math.max(_paneCounter, maxPane)
   _tabCounter = Math.max(_tabCounter, maxTab)
+}
+
+function normalizeHydratedLayout(layout: PaneLayout, tabIds: Set<TabId>, claimedTabs = new Set<TabId>()): PaneLayout {
+  if (layout.type === 'leaf') {
+    const tabs = layout.tabs.filter((tabId) => {
+      if (!tabIds.has(tabId) || claimedTabs.has(tabId)) return false
+      claimedTabs.add(tabId)
+      return true
+    })
+    const activeTabId = layout.activeTabId && tabs.includes(layout.activeTabId)
+      ? layout.activeTabId
+      : (tabs[0] ?? null)
+    return { ...layout, tabs, activeTabId }
+  }
+
+  return {
+    ...layout,
+    children: layout.children.map((child) => normalizeHydratedLayout(child, tabIds, claimedTabs)),
+  }
 }
 
 function simplifyLayout(layout: PaneLayout): PaneLayout {
@@ -125,11 +149,23 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
 
   hydrateWorkspace: (input) =>
     set(() => {
-      syncCountersFromWorkspace(input.layout, input.tabs)
+      const inputTabsById = new Map(input.tabs.map((tab) => [tab.id, tab]))
+      const layout = normalizeHydratedLayout(input.layout, new Set(inputTabsById.keys()))
+      const reachableTabIds = new Set(collectLayoutTabIds(layout))
+      const tabs = new Map(
+        input.tabs
+          .filter((tab) => reachableTabIds.has(tab.id))
+          .map((tab) => [tab.id, tab]),
+      )
+      const paneIds = collectPaneIds(layout)
+      const activePaneId = paneIds.includes(input.activePaneId)
+        ? input.activePaneId
+        : paneIds[0]
+      syncCountersFromWorkspace(layout, [...tabs.values()])
       return {
-        layout: input.layout,
-        tabs: new Map(input.tabs.map((tab) => [tab.id, tab])),
-        activePaneId: input.activePaneId,
+        layout,
+        tabs,
+        activePaneId,
         pendingFocusPaneId: null,
         sidebarOpen: input.sidebarOpen,
         sidebarWidth: input.sidebarWidth,
