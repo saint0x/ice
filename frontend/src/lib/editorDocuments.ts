@@ -88,6 +88,9 @@ export async function ensureEditorDocument(
 ) {
   const key = documentKey(projectId, path)
   const store = useEditorStore.getState()
+  if (store.removedProjectIds.has(projectId)) {
+    return null
+  }
   const current = store.documents.get(key)
   if (!options?.force && current && !current.isLoading && !current.readFailed) {
     store.touchDocument(projectId, path)

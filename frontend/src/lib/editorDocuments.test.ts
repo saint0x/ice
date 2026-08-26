@@ -268,4 +268,13 @@ describe('editor document prefetch planning', () => {
     })
     expect(useEditorStore.getState().documents.has('project-a:src/race.ts')).toBe(false)
   })
+
+  it('does not read from the backend after a project was removed', async () => {
+    useEditorStore.getState().removeProjectDocuments('project-a')
+
+    await expect(ensureEditorDocument('project-a', 'src/removed.ts')).resolves.toBeNull()
+
+    expect(fileRead).not.toHaveBeenCalled()
+    expect(useEditorStore.getState().documents.has('project-a:src/removed.ts')).toBe(false)
+  })
 })
