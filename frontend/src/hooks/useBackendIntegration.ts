@@ -403,14 +403,36 @@ export function useBackendIntegration() {
   }, [addApproval, addThread, appendScrollback, clearScrollback, closeBrowserTab, closeSession, hydrateApprovals, hydrateBrowserSidebarItems, hydrateBrowserTabs, hydrateCodexSidebarItems, hydrateGitState, hydrateProjects, hydrateSessions, hydrateThreads, hydrateTree, hydrateWorkspace, pushBrowserRuntimeNotice, pushError, recordGitMutation, resolveApproval, updateProject, updateThread, upsertBrowserTab, upsertMessage, upsertSession])
 
   useEffect(() => {
-    if (!hydratedRef.current || !activeProjectId) return
+    if (!hydratedRef.current) return
     let cancelled = false
+
+    const stopCurrentWatch = async () => {
+      const watchedProjectId = watchedProjectRef.current
+      if (!watchedProjectId) return
+      try {
+        await projectWatchStop(watchedProjectId)
+      } catch (error) {
+        if (!cancelled) {
+          pushError('Project watch stop failed', error)
+        }
+      } finally {
+        if (watchedProjectRef.current === watchedProjectId) {
+          watchedProjectRef.current = null
+        }
+      }
+    }
+
+    if (!activeProjectId) {
+      void stopCurrentWatch()
+      return () => {
+        cancelled = true
+      }
+    }
 
     const activateProject = async () => {
       try {
         if (watchedProjectRef.current && watchedProjectRef.current !== activeProjectId) {
-          await projectWatchStop(watchedProjectRef.current)
-          watchedProjectRef.current = null
+          await stopCurrentWatch()
         }
         const [tree, git, browserSidebarItems, codexSidebarItems] = await Promise.all([
           projectTreeReadNested(activeProjectId),

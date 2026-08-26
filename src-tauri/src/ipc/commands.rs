@@ -70,6 +70,7 @@ pub async fn project_remove(
     project_id: String,
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
+    state.fs.stop_watch(&project_id).await?;
     state.projects.remove_project(&project_id).await?;
     Ok(())
 }
