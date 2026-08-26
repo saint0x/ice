@@ -133,20 +133,11 @@ fn default_chrome_state() -> WorkspaceChromeState {
 fn default_session_state() -> WorkspaceSessionState {
     WorkspaceSessionState {
         active_pane_id: "pane-1".to_string(),
-        tabs: vec![WorkspaceTabRecord {
-            id: "tab-1".to_string(),
-            project_id: "system".to_string(),
-            kind: "settings".to_string(),
-            title: "Welcome".to_string(),
-            icon: Some("sparkles".to_string()),
-            dirty: false,
-            pinned: false,
-            meta: Some(serde_json::json!({"view":"welcome"})),
-        }],
+        tabs: Vec::new(),
         root: WorkspacePaneNode::Leaf {
             id: "pane-1".to_string(),
-            tabs: vec!["tab-1".to_string()],
-            active_tab_id: Some("tab-1".to_string()),
+            tabs: Vec::new(),
+            active_tab_id: None,
         },
     }
 }
@@ -187,6 +178,28 @@ fn validate_session_state(session_state: &WorkspaceSessionState) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_session_has_no_synthetic_project_tabs() {
+        let session = default_session_state();
+
+        assert_eq!(session.active_pane_id, "pane-1");
+        assert!(session.tabs.is_empty());
+        assert_eq!(
+            session.root,
+            WorkspacePaneNode::Leaf {
+                id: "pane-1".to_string(),
+                tabs: Vec::new(),
+                active_tab_id: None,
+            },
+        );
+        validate_session_state(&session).expect("default session should be valid");
+    }
 }
 
 fn collect_node_state(

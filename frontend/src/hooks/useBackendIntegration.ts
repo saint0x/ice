@@ -460,7 +460,9 @@ export function useBackendIntegration() {
         chatPanelOpen,
         chatPanelWidth,
       }),
-    )
+    ).catch((error: unknown) => {
+      pushError('Workspace chrome save failed', error, 'Failed to persist workspace chrome state')
+    })
   }, [
     sidebarOpen,
     sidebarWidth,
@@ -468,6 +470,7 @@ export function useBackendIntegration() {
     bottomDockHeight,
     chatPanelOpen,
     chatPanelWidth,
+    pushError,
   ])
 
   useEffect(() => {
@@ -478,8 +481,10 @@ export function useBackendIntegration() {
         layout,
         tabs,
       }),
-    )
-  }, [activePaneId, layout, tabs])
+    ).catch((error: unknown) => {
+      pushError('Workspace session save failed', error, 'Failed to persist workspace session state')
+    })
+  }, [activePaneId, layout, pushError, tabs])
 }
 
 function extractCodexThreadId(params?: Record<string, unknown>) {
