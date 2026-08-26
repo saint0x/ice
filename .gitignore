@@ -8,6 +8,8 @@ src-tauri/target/
 
 # Test artifacts
 .fozzy/
+artifacts/
+*.trace.fozzy
 tests/
 
 # IDE
@@ -17,6 +19,7 @@ tests/
 *.swo
 *~
 .DS_Store
+icon-explorations.html
 
 # Environment
 .env
