@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use parking_lot::RwLock;
 use serde::Serialize;
 use tauri::{
@@ -127,52 +127,15 @@ impl BrowserService {
         app: AppHandle,
         persistence: Arc<PersistenceService>,
         browser_root: PathBuf,
-    ) -> Self {
-        let history = persistence
-            .load_browser_history_sync()
-            .unwrap_or_default()
-            .into_iter()
-            .fold(
-                HashMap::<String, Vec<BrowserHistoryEntry>>::new(),
-                |mut acc, entry| {
-                    acc.entry(entry.tab_id.clone()).or_default().push(entry);
-                    acc
-                },
-            );
-        let tabs = persistence
-            .load_browser_tabs_sync()
-            .unwrap_or_default()
-            .into_iter()
-            .map(|tab| {
-                let entries = history.get(&tab.tab_id).cloned().unwrap_or_else(|| {
-                    vec![BrowserHistoryEntry {
-                        tab_id: tab.tab_id.clone(),
-                        position: 0,
-                        url: tab.url.clone(),
-                        title: tab.title.clone(),
-                    }]
-                });
-                let current_index = entries
-                    .iter()
-                    .position(|entry| entry.url == tab.url && entry.title == tab.title)
-                    .unwrap_or(entries.len().saturating_sub(1));
-                let mut state = BrowserTabState {
-                    record: tab,
-                    history: entries,
-                    current_index,
-                };
-                trim_browser_history(&mut state);
-                refresh_record_navigation(&mut state);
-                (state.record.tab_id.clone(), state)
-            })
-            .collect();
-        Self {
+    ) -> Result<Self> {
+        let tabs = load_browser_tabs_for_startup(&persistence)?;
+        Ok(Self {
             app,
             persistence,
             browser_root,
             tabs: RwLock::new(tabs),
             renderers: RwLock::new(HashMap::new()),
-        }
+        })
     }
 
     pub async fn create_tab(
@@ -951,6 +914,50 @@ fn infer_title_from_url(url: &str) -> String {
         .to_string()
 }
 
+fn load_browser_tabs_for_startup(
+    persistence: &PersistenceService,
+) -> Result<HashMap<String, BrowserTabState>> {
+    let history = persistence
+        .load_browser_history_sync()
+        .context("failed to load persisted browser history")?
+        .into_iter()
+        .fold(
+            HashMap::<String, Vec<BrowserHistoryEntry>>::new(),
+            |mut acc, entry| {
+                acc.entry(entry.tab_id.clone()).or_default().push(entry);
+                acc
+            },
+        );
+    let tabs = persistence
+        .load_browser_tabs_sync()
+        .context("failed to load persisted browser tabs")?
+        .into_iter()
+        .map(|tab| {
+            let entries = history.get(&tab.tab_id).cloned().unwrap_or_else(|| {
+                vec![BrowserHistoryEntry {
+                    tab_id: tab.tab_id.clone(),
+                    position: 0,
+                    url: tab.url.clone(),
+                    title: tab.title.clone(),
+                }]
+            });
+            let current_index = entries
+                .iter()
+                .position(|entry| entry.url == tab.url && entry.title == tab.title)
+                .unwrap_or(entries.len().saturating_sub(1));
+            let mut state = BrowserTabState {
+                record: tab,
+                history: entries,
+                current_index,
+            };
+            trim_browser_history(&mut state);
+            refresh_record_navigation(&mut state);
+            (state.record.tab_id.clone(), state)
+        })
+        .collect();
+    Ok(tabs)
+}
+
 fn browser_security_origin(url: &str) -> Option<String> {
     let origin = url.split('/').take(3).collect::<Vec<_>>().join("/");
     if origin.contains("://") {
@@ -1191,9 +1198,11 @@ fn browser_runtime_init_script(tab_id: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        browser_security_origin, is_secure_url, trim_browser_history, BrowserHistoryEntry,
-        BrowserTabRecord, BrowserTabState, MAX_BROWSER_HISTORY_ENTRIES,
+        browser_security_origin, is_secure_url, load_browser_tabs_for_startup, trim_browser_history,
+        BrowserHistoryEntry, BrowserTabRecord, BrowserTabState, MAX_BROWSER_HISTORY_ENTRIES,
     };
+    use crate::persistence::db::PersistenceService;
+    use tempfile::tempdir;
 
     #[test]
     fn infers_secure_origin_from_https_url() {
@@ -1241,5 +1250,57 @@ mod tests {
             state.history.first().map(|entry| entry.url.as_str()),
             Some("https://example.com/20")
         );
+    }
+
+    #[test]
+    fn startup_hydration_restores_browser_tabs_with_history() {
+        let temp = tempdir().expect("temp dir");
+        let db = PersistenceService::new(temp.path().join("ice.db")).expect("db");
+        let tab = BrowserTabRecord {
+            tab_id: "tab-1".to_string(),
+            project_id: "project-1".to_string(),
+            url: "https://example.com/two".to_string(),
+            title: "Two".to_string(),
+            is_pinned: true,
+            can_go_back: false,
+            can_go_forward: false,
+            is_loading: true,
+            favicon_url: None,
+            security_origin: Some("https://example.com".to_string()),
+            is_secure: true,
+        };
+        tauri::async_runtime::block_on(async {
+            db.upsert_browser_tab(tab.clone())
+                .await
+                .expect("browser tab write");
+            db.replace_browser_history(
+                tab.tab_id.clone(),
+                vec![
+                    BrowserHistoryEntry {
+                        tab_id: tab.tab_id.clone(),
+                        position: 0,
+                        url: "https://example.com/one".to_string(),
+                        title: "One".to_string(),
+                    },
+                    BrowserHistoryEntry {
+                        tab_id: tab.tab_id.clone(),
+                        position: 1,
+                        url: tab.url.clone(),
+                        title: tab.title.clone(),
+                    },
+                ],
+            )
+            .await
+            .expect("browser history write");
+        });
+
+        let tabs = load_browser_tabs_for_startup(&db).expect("startup browser tabs");
+        let state = tabs.get("tab-1").expect("restored tab");
+
+        assert_eq!(state.record.tab_id, "tab-1");
+        assert!(state.record.can_go_back);
+        assert!(!state.record.can_go_forward);
+        assert_eq!(state.current_index, 1);
+        assert_eq!(state.history.len(), 2);
     }
 }

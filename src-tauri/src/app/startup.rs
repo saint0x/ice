@@ -60,8 +60,8 @@ pub fn build_state(app: AppHandle) -> Result<AppState> {
         app.clone(),
         persistence.clone(),
         paths.concern_dir("browser"),
-    ));
-    let terminal = Arc::new(TerminalService::new(app.clone(), persistence.clone()));
+    )?);
+    let terminal = Arc::new(TerminalService::new(app.clone(), persistence.clone())?);
     let security = Arc::new(SecurityService::new(app.clone(), persistence.clone()));
     let syntax = Arc::new(SyntaxService::new());
     let codex = Arc::new(CodexService::new(

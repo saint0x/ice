@@ -50,6 +50,27 @@
         "cd src-tauri && cargo test persistence::db::tests::persists_workspace_browser_terminal_codex_and_config_state -- --exact"
       ],
       "expect_exit": 0
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test browser::service::tests::startup_hydration_restores_browser_tabs_with_history -- --exact && cargo test terminal::service::tests::startup_hydration_restores_terminal_metadata_and_scrollback -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test browser::service::tests::startup_hydration_restores_browser_tabs_with_history -- --exact && cargo test terminal::service::tests::startup_hydration_restores_terminal_metadata_and_scrollback -- --exact"
+      ],
+      "expect_exit": 0
     }
   ]
 }

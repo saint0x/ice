@@ -95,39 +95,15 @@ struct TerminalSpawnRequest {
 }
 
 impl TerminalService {
-    pub fn new(app: AppHandle, persistence: Arc<PersistenceService>) -> Self {
-        let mut metadata: HashMap<String, TerminalSessionRecord> = persistence
-            .load_terminal_sessions_sync()
-            .unwrap_or_default()
-            .into_iter()
-            .map(|mut session| {
-                let was_running = session.is_running;
-                session.is_running = false;
-                session.restored_from_persistence = true;
-                if was_running && session.last_exit_reason.is_none() {
-                    session.last_exit_reason = Some("app_restart".to_string());
-                }
-                (session.session_id.clone(), session)
-            })
-            .collect();
-        let scrollback = persistence
-            .load_terminal_scrollback_sync()
-            .unwrap_or_default();
-        for session in metadata.values_mut() {
-            session.scrollback_bytes = scrollback
-                .get(&session.session_id)
-                .map(|content| content.len())
-                .unwrap_or(0);
-            let _ = persistence.upsert_terminal_session_sync(session);
-        }
-
-        Self {
+    pub fn new(app: AppHandle, persistence: Arc<PersistenceService>) -> Result<Self> {
+        let (metadata, scrollback) = load_terminal_state_for_startup(&persistence)?;
+        Ok(Self {
             app,
             persistence,
             metadata: Arc::new(Mutex::new(metadata)),
             sessions: Arc::new(Mutex::new(HashMap::new())),
             scrollback: Arc::new(Mutex::new(scrollback)),
-        }
+        })
     }
 
     pub async fn create_session(
@@ -634,6 +610,38 @@ impl TerminalService {
     }
 }
 
+fn load_terminal_state_for_startup(
+    persistence: &PersistenceService,
+) -> Result<(HashMap<String, TerminalSessionRecord>, HashMap<String, String>)> {
+    let mut metadata: HashMap<String, TerminalSessionRecord> = persistence
+        .load_terminal_sessions_sync()
+        .context("failed to load persisted terminal sessions")?
+        .into_iter()
+        .map(|mut session| {
+            let was_running = session.is_running;
+            session.is_running = false;
+            session.restored_from_persistence = true;
+            if was_running && session.last_exit_reason.is_none() {
+                session.last_exit_reason = Some("app_restart".to_string());
+            }
+            (session.session_id.clone(), session)
+        })
+        .collect();
+    let scrollback = persistence
+        .load_terminal_scrollback_sync()
+        .context("failed to load persisted terminal scrollback")?;
+    for session in metadata.values_mut() {
+        session.scrollback_bytes = scrollback
+            .get(&session.session_id)
+            .map(|content| content.len())
+            .unwrap_or(0);
+        persistence
+            .upsert_terminal_session_sync(session)
+            .with_context(|| format!("failed to normalize terminal session {}", session.session_id))?;
+    }
+    Ok((metadata, scrollback))
+}
+
 fn default_shell() -> String {
     resolve_login_shell().unwrap_or_else(|| "/bin/zsh".to_string())
 }
@@ -728,7 +736,12 @@ fn scrollback_line_count(content: &str) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::{recent_scrollback_lines, scrollback_line_count, trim_scrollback};
+    use super::{
+        load_terminal_state_for_startup, recent_scrollback_lines, scrollback_line_count,
+        trim_scrollback, TerminalSessionRecord,
+    };
+    use crate::persistence::db::PersistenceService;
+    use tempfile::tempdir;
 
     #[test]
     fn trims_scrollback_to_bounded_size() {
@@ -748,5 +761,53 @@ mod tests {
     fn counts_scrollback_lines() {
         let content = "one\r\ntwo\r\nthree";
         assert_eq!(scrollback_line_count(content), 3);
+    }
+
+    #[test]
+    fn startup_hydration_restores_terminal_metadata_and_scrollback() {
+        let temp = tempdir().expect("temp dir");
+        let db = PersistenceService::new(temp.path().join("ice.db")).expect("db");
+        let session = TerminalSessionRecord {
+            session_id: "session-1".to_string(),
+            project_id: "project-1".to_string(),
+            cwd: temp.path().to_string_lossy().to_string(),
+            shell: "zsh".to_string(),
+            shell_path: "/bin/zsh".to_string(),
+            title: "Dev".to_string(),
+            cols: 120,
+            rows: 40,
+            is_running: true,
+            startup_command: None,
+            env_overrides: None,
+            restored_from_persistence: false,
+            last_exit_code: None,
+            last_exit_signal: None,
+            last_exit_reason: None,
+            scrollback_bytes: 0,
+        };
+        tauri::async_runtime::block_on(async {
+            db.upsert_terminal_session(session)
+                .await
+                .expect("terminal session write");
+            db.upsert_terminal_scrollback("session-1".to_string(), "ready\n".to_string())
+                .await
+                .expect("terminal scrollback write");
+        });
+
+        let (metadata, scrollback) =
+            load_terminal_state_for_startup(&db).expect("startup terminal state");
+        let restored = metadata.get("session-1").expect("restored session");
+
+        assert!(!restored.is_running);
+        assert!(restored.restored_from_persistence);
+        assert_eq!(restored.last_exit_reason.as_deref(), Some("app_restart"));
+        assert_eq!(restored.scrollback_bytes, "ready\n".len());
+        assert_eq!(scrollback.get("session-1").map(String::as_str), Some("ready\n"));
+        assert_eq!(
+            db.load_terminal_sessions_sync()
+                .expect("persisted terminal sessions")[0]
+                .scrollback_bytes,
+            "ready\n".len()
+        );
     }
 }
