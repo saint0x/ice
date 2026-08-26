@@ -879,14 +879,21 @@ async fn search_text_with_rg(
     query: &str,
     limit: usize,
 ) -> Result<Vec<ContentSearchMatch>> {
-    let output = Command::new("rg")
+    let mut command = Command::new("rg");
+    command
         .arg("--json")
-        .arg("--hidden")
         .arg("--glob")
         .arg("!.git")
         .arg("--smart-case")
         .arg("--max-count")
-        .arg(limit.to_string())
+        .arg(limit.to_string());
+
+    let project_ignore = root.join(".gitignore");
+    if project_ignore.is_file() {
+        command.arg("--ignore-file").arg(project_ignore);
+    }
+
+    let output = command
         .arg(query)
         .arg(root)
         .output()
@@ -1047,7 +1054,10 @@ fn ensure_import_directory_destination_available(destination: &Path) -> Result<(
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(error).with_context(|| {
-            format!("failed to inspect import destination {}", destination.display())
+            format!(
+                "failed to inspect import destination {}",
+                destination.display()
+            )
         }),
     }
 }
@@ -1060,7 +1070,10 @@ fn ensure_import_file_destination_available(destination: &Path) -> Result<()> {
         )),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(error).with_context(|| {
-            format!("failed to inspect import destination {}", destination.display())
+            format!(
+                "failed to inspect import destination {}",
+                destination.display()
+            )
         }),
     }
 }
@@ -1080,7 +1093,7 @@ mod tests {
         ensure_rename_destination_available, file_version, import_external_entries_blocking,
         is_binary_bytes, nest_tree_entries, normalize_search_limit, parse_rg_match_record,
         resolve_creatable_under_root, resolve_existing_under_root, search_paths_under_root,
-        walk_tree, FsEntry, TreeReadOptions,
+        search_text_with_rg, walk_tree, FsEntry, TreeReadOptions,
     };
     use std::collections::HashMap;
     use std::fs;
@@ -1125,6 +1138,26 @@ mod tests {
 
         let paths = search_paths_under_root(root, "src", 20).expect("search paths");
         assert_eq!(paths, vec!["src-main.ts".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn content_search_respects_gitignore_and_hidden_defaults() {
+        let temp = tempdir().expect("temp dir");
+        let root = temp.path();
+        fs::write(root.join(".gitignore"), "ignored.txt\n").expect("write gitignore");
+        fs::write(root.join("visible.txt"), "needle").expect("write visible");
+        fs::write(root.join("ignored.txt"), "needle").expect("write ignored");
+        fs::write(root.join(".hidden.txt"), "needle").expect("write hidden");
+
+        let matches = search_text_with_rg(root, "needle", 20)
+            .await
+            .expect("search text");
+        let paths = matches
+            .into_iter()
+            .map(|record| record.path)
+            .collect::<Vec<_>>();
+
+        assert_eq!(paths, vec!["visible.txt".to_string()]);
     }
 
     #[test]

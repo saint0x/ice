@@ -98,6 +98,27 @@
       "cmd": "/bin/sh",
       "args": [
         "-lc",
+        "cd src-tauri && cargo test fs::service::tests::content_search_respects_gitignore_and_hidden_defaults -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test fs::service::tests::content_search_respects_gitignore_and_hidden_defaults -- --exact"
+      ],
+      "expect_exit": 0
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
         "cd src-tauri && cargo test fs::service::tests::search_limit_has_production_bounds -- --exact"
       ],
       "exit_code": 0,
