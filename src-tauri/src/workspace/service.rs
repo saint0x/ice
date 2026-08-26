@@ -233,6 +233,14 @@ fn validate_session_state(session_state: &WorkspaceSessionState) -> Result<()> {
     if tab_id_set.len() != tab_ids.len() {
         return Err(anyhow!("workspace session contains duplicate tab ids"));
     }
+    for tab in &session_state.tabs {
+        if !is_valid_workspace_tab_kind(&tab.kind) {
+            return Err(anyhow!(
+                "workspace session contains unknown tab kind {}",
+                tab.kind
+            ));
+        }
+    }
 
     let referenced_tab_set: HashSet<_> = referenced_tabs.iter().cloned().collect();
     if referenced_tab_set.len() != referenced_tabs.len() {
@@ -468,6 +476,43 @@ mod tests {
     }
 
     #[test]
+    fn rejects_unknown_tab_kinds() {
+        let mut unknown = tab("tab-unknown");
+        unknown.kind = "banana".to_string();
+        let session = WorkspaceSessionState {
+            active_pane_id: "pane-1".to_string(),
+            tabs: vec![unknown],
+            root: WorkspacePaneNode::Leaf {
+                id: "pane-1".to_string(),
+                tabs: vec!["tab-unknown".to_string()],
+                active_tab_id: Some("tab-unknown".to_string()),
+            },
+        };
+
+        let error = validate_session_state(&session).expect_err("unknown tab kind should fail");
+        assert!(error
+            .to_string()
+            .contains("workspace session contains unknown tab kind banana"));
+    }
+
+    #[test]
+    fn recovers_unknown_tab_kind_to_default_on_read_boundary() {
+        let mut unknown = tab("tab-unknown");
+        unknown.kind = "banana".to_string();
+        let recovered = recover_session_state(WorkspaceSessionState {
+            active_pane_id: "pane-1".to_string(),
+            tabs: vec![unknown],
+            root: WorkspacePaneNode::Leaf {
+                id: "pane-1".to_string(),
+                tabs: vec!["tab-unknown".to_string()],
+                active_tab_id: Some("tab-unknown".to_string()),
+            },
+        });
+
+        assert_eq!(recovered, default_session_state());
+    }
+
+    #[test]
     fn rejects_orphan_tab_records() {
         let session = WorkspaceSessionState {
             active_pane_id: "pane-1".to_string(),
@@ -550,4 +595,11 @@ fn collect_node_state(
     }
 
     Ok(())
+}
+
+fn is_valid_workspace_tab_kind(kind: &str) -> bool {
+    matches!(
+        kind,
+        "editor" | "browser" | "terminal" | "git" | "codex" | "settings"
+    )
 }

@@ -12,6 +12,7 @@ import type {
   ProjectBrowserSidebarItem,
   ProjectCodexSidebarItem,
   CodexThread,
+  ContentType,
   FileEntry,
   GitChange,
   GitState,
@@ -42,7 +43,7 @@ interface WorkspaceChromeDto {
 interface WorkspaceTabDto {
   id: string
   projectId: string
-  kind: string
+  kind: ContentType
   title: string
   icon?: string | null
   dirty: boolean
@@ -1149,27 +1150,13 @@ function toTab(dto: WorkspaceTabDto): Tab {
   return {
     id: dto.id,
     projectId: dto.projectId,
-    type: normalizeContentType(dto.kind),
+    type: dto.kind,
     title: dto.title,
     icon: dto.icon ?? undefined,
     dirty: dto.dirty,
     pinned: dto.pinned,
     meta: dto.meta ?? undefined,
   }
-}
-
-function normalizeContentType(kind: string): Tab['type'] {
-  if (
-    kind === 'editor' ||
-    kind === 'browser' ||
-    kind === 'terminal' ||
-    kind === 'git' ||
-    kind === 'codex' ||
-    kind === 'settings'
-  ) {
-    return kind
-  }
-  return 'settings'
 }
 
 function normalizeCodexStatus(status: string): CodexThread['status'] {
