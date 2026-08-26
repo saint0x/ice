@@ -12,6 +12,21 @@ import { useNotificationsStore } from '@/stores/notifications'
 import { useProjectsStore } from '@/stores/projects'
 import { useWorkspaceStore } from '@/stores/workspace'
 
+type EditCommand = 'undo' | 'redo' | 'cut' | 'copy' | 'paste' | 'selectAll'
+
+const EDIT_MENU_COMMANDS: ReadonlyMap<string, EditCommand> = new Map([
+  ['edit.undo', 'undo'],
+  ['edit.redo', 'redo'],
+  ['edit.cut', 'cut'],
+  ['edit.copy', 'copy'],
+  ['edit.paste', 'paste'],
+  ['edit.select_all', 'selectAll'],
+])
+
+export function editMenuCommandForId(id: string): EditCommand | null {
+  return EDIT_MENU_COMMANDS.get(id) ?? null
+}
+
 /**
  * Dispatch a semantic action to the UI. Shared with the native menu so menu
  * items and keyboard shortcuts stay in lock-step.
@@ -106,13 +121,8 @@ async function dispatchMenuAction(id: string): Promise<void> {
     case 'edit.copy':
     case 'edit.paste':
     case 'edit.select_all': {
-      const command = id.replace('edit.', '').replace('_', '') as
-        | 'undo'
-        | 'redo'
-        | 'cut'
-        | 'copy'
-        | 'paste'
-        | 'selectAll'
+      const command = editMenuCommandForId(id)
+      if (!command) return
       window.dispatchEvent(new CustomEvent('ice:menu:edit-command', { detail: command }))
       return
     }
