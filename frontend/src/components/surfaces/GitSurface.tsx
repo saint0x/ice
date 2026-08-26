@@ -20,6 +20,7 @@ import {
   gitUnstagePaths,
   toGitState,
 } from '@/lib/backend'
+import { runGitBranchMutationWithRefresh } from '@/lib/gitBranchActions'
 import { nextSelectedHistoryCommit } from '@/lib/gitHistorySelection'
 import { useGitStore } from '@/stores/git'
 import styles from './GitSurface.module.css'
@@ -294,18 +295,29 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
   }
 
   const runBranchMutation = async (operation: () => Promise<Awaited<ReturnType<typeof gitStagePaths>>>) => {
-    await runMutation(operation)
+    setIsMutating(true)
     try {
-      const result = await gitBranchesList(tab.projectId)
-      const localBranches = result.filter((branch) => !branch.isRemote)
-      setBranches(localBranches)
-      const current = localBranches.find((branch) => branch.current)
-      setCheckoutBranch(current?.name ?? checkoutBranch)
-      if (current?.name === normalizedNewBranchName) {
-        setNewBranchName('')
-      }
-    } catch {
-      // Keep the previous branch picker state if the refresh fails after mutation.
+      await runGitBranchMutationWithRefresh({
+        mutate: operation,
+        refreshBranches: () => gitBranchesList(tab.projectId),
+        onMutationSuccess: applySummary,
+        onBranchRefreshSuccess: (result) => {
+          const localBranches = result.filter((branch) => !branch.isRemote)
+          setBranches(localBranches)
+          const current = localBranches.find((branch) => branch.current)
+          setCheckoutBranch(current?.name ?? checkoutBranch)
+          if (current?.name === normalizedNewBranchName) {
+            setNewBranchName('')
+          }
+        },
+        onBranchRefreshError: (error) => {
+          setSurfaceError(error instanceof Error ? error.message : 'Git branch list refresh failed')
+        },
+      })
+    } catch (error) {
+      setSurfaceError(error instanceof Error ? error.message : 'Git operation failed')
+    } finally {
+      setIsMutating(false)
     }
   }
 

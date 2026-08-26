@@ -6,7 +6,7 @@
       "type": "trace_event",
       "name": "verify_git_mutation_contract",
       "fields": {
-        "target": "src-tauri/git"
+        "target": "src-tauri/git+frontend/git-branch-actions"
       }
     },
     {
@@ -111,6 +111,27 @@
       "args": [
         "-lc",
         "cd src-tauri && cargo test git::service::tests::ensure_paths_requires_non_empty_input -- --exact"
+      ],
+      "expect_exit": 0
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd frontend && npm test -- --run src/lib/gitBranchActions.test.ts src/stores/git.test.ts"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd frontend && npm test -- --run src/lib/gitBranchActions.test.ts src/stores/git.test.ts"
       ],
       "expect_exit": 0
     }
