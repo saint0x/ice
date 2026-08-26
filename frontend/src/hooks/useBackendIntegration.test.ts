@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { registerBackendEventListener } from '@/hooks/useBackendIntegration'
+import { registerBackendEventListener, startProjectWatchForActiveProject } from '@/hooks/useBackendIntegration'
 
 describe('backend event listener registration', () => {
   it('stores the backend unlisten callback when registration succeeds', async () => {
@@ -86,5 +86,64 @@ describe('backend event listener registration', () => {
 
     expect(setUnlisten).not.toHaveBeenCalled()
     expect(pushError).not.toHaveBeenCalled()
+  })
+})
+
+describe('active project watch startup', () => {
+  it('starts and records the active project watcher', async () => {
+    const watchedProjectRef = { current: null as string | null }
+    const projectWatchStart = vi.fn().mockResolvedValue(undefined)
+    const projectWatchStop = vi.fn().mockResolvedValue(undefined)
+
+    await startProjectWatchForActiveProject({
+      projectId: 'project-a',
+      watchedProjectRef,
+      projectWatchStart,
+      projectWatchStop,
+      isCancelled: () => false,
+    })
+
+    expect(projectWatchStart).toHaveBeenCalledWith('project-a')
+    expect(projectWatchStop).not.toHaveBeenCalled()
+    expect(watchedProjectRef.current).toBe('project-a')
+  })
+
+  it('does not restart a watcher that is already active', async () => {
+    const watchedProjectRef = { current: 'project-a' }
+    const projectWatchStart = vi.fn().mockResolvedValue(undefined)
+    const projectWatchStop = vi.fn().mockResolvedValue(undefined)
+
+    await startProjectWatchForActiveProject({
+      projectId: 'project-a',
+      watchedProjectRef,
+      projectWatchStart,
+      projectWatchStop,
+      isCancelled: () => false,
+    })
+
+    expect(projectWatchStart).not.toHaveBeenCalled()
+    expect(projectWatchStop).not.toHaveBeenCalled()
+    expect(watchedProjectRef.current).toBe('project-a')
+  })
+
+  it('stops a watcher that starts after project activation was cancelled', async () => {
+    const watchedProjectRef = { current: null as string | null }
+    let cancelled = false
+    const projectWatchStart = vi.fn().mockImplementation(async () => {
+      cancelled = true
+    })
+    const projectWatchStop = vi.fn().mockResolvedValue(undefined)
+
+    await startProjectWatchForActiveProject({
+      projectId: 'project-a',
+      watchedProjectRef,
+      projectWatchStart,
+      projectWatchStop,
+      isCancelled: () => cancelled,
+    })
+
+    expect(projectWatchStart).toHaveBeenCalledWith('project-a')
+    expect(projectWatchStop).toHaveBeenCalledWith('project-a')
+    expect(watchedProjectRef.current).toBeNull()
   })
 })

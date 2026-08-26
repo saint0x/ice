@@ -87,6 +87,23 @@ export function registerBackendEventListener<TPayload>(input: {
     })
 }
 
+export async function startProjectWatchForActiveProject(input: {
+  projectId: string
+  watchedProjectRef: { current: string | null }
+  projectWatchStart: (projectId: string) => Promise<unknown>
+  projectWatchStop: (projectId: string) => Promise<unknown>
+  isCancelled: () => boolean
+}) {
+  if (input.watchedProjectRef.current === input.projectId) return
+
+  await input.projectWatchStart(input.projectId)
+  if (input.isCancelled()) {
+    await input.projectWatchStop(input.projectId)
+    return
+  }
+  input.watchedProjectRef.current = input.projectId
+}
+
 export function useBackendIntegration() {
   const hydrateProjects = useProjectsStore((state) => state.hydrateProjects)
   const activeProjectId = useProjectsStore((state) => state.activeProjectId)
@@ -548,10 +565,13 @@ export function useBackendIntegration() {
           openTabs: Array.from(useWorkspaceStore.getState().tabs.values()),
           eager: true,
         })
-        if (watchedProjectRef.current !== activeProjectContextId) {
-          await projectWatchStart(activeProjectContextId)
-          watchedProjectRef.current = activeProjectContextId
-        }
+        await startProjectWatchForActiveProject({
+          projectId: activeProjectContextId,
+          watchedProjectRef,
+          projectWatchStart,
+          projectWatchStop,
+          isCancelled: () => cancelled,
+        })
       } catch (error) {
         if (!cancelled) {
           pushError('Active project load failed', error)
