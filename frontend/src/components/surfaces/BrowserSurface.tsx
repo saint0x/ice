@@ -14,6 +14,7 @@ import {
   browserTabReload,
   toBrowserTab,
 } from '@/lib/backend'
+import { runBrowserSurfaceAction } from '@/lib/browserSurfaceActions'
 import { tabMetaString } from '@/lib/tabMeta'
 import { useBrowserStore } from '@/stores/browser'
 import { useNotificationsStore } from '@/stores/notifications'
@@ -74,7 +75,9 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
       })
     return () => {
       disposed = true
-      void browserRendererDetach(browserTabId)
+      void browserRendererDetach(browserTabId).catch((error: unknown) => {
+        pushError('Browser renderer detach failed', error, 'Failed to detach native browser renderer')
+      })
     }
   }, [browserTabId, pushError, rendererId, tab.id])
 
@@ -134,12 +137,16 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
     if (!query) {
       return
     }
-    setSurfaceError(null)
-    await browserFindInPage({
+    await runBrowserSurfaceAction(browserFindInPage({
       tabId: browserTabId,
       query,
       forward: true,
       findNext: mode === 'next',
+    }), {
+      title: 'Browser find failed',
+      fallbackMessage: 'Failed to search page',
+      setSurfaceError,
+      pushError,
     })
   }
 
@@ -175,7 +182,13 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
             disabled={!browserTab?.canGoBack}
             onClick={() => {
               if (!browserTabId) return
-              void browserTabBack(browserTabId).then((next) => upsertBrowserTab(toBrowserTab(next)))
+              void runBrowserSurfaceAction(browserTabBack(browserTabId), {
+                title: 'Browser back failed',
+                fallbackMessage: 'Failed to go back',
+                setSurfaceError,
+                pushError,
+                onSuccess: (next) => upsertBrowserTab(toBrowserTab(next)),
+              })
             }}
           >
             <ArrowLeft size={14} />
@@ -186,7 +199,13 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
             disabled={!browserTab?.canGoForward}
             onClick={() => {
               if (!browserTabId) return
-              void browserTabForward(browserTabId).then((next) => upsertBrowserTab(toBrowserTab(next)))
+              void runBrowserSurfaceAction(browserTabForward(browserTabId), {
+                title: 'Browser forward failed',
+                fallbackMessage: 'Failed to go forward',
+                setSurfaceError,
+                pushError,
+                onSuccess: (next) => upsertBrowserTab(toBrowserTab(next)),
+              })
             }}
           >
             <ArrowRight size={14} />
@@ -196,7 +215,13 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
             aria-label="Reload"
             onClick={() => {
               if (!browserTabId) return
-              void browserTabReload(browserTabId).then((next) => upsertBrowserTab(toBrowserTab(next)))
+              void runBrowserSurfaceAction(browserTabReload(browserTabId), {
+                title: 'Browser reload failed',
+                fallbackMessage: 'Failed to reload page',
+                setSurfaceError,
+                pushError,
+                onSuccess: (next) => upsertBrowserTab(toBrowserTab(next)),
+              })
             }}
           >
             <RotateCw size={13} />
@@ -224,8 +249,12 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
             aria-label={browserTab?.isPinned ? 'Unpin tab' : 'Pin tab'}
             onClick={() => {
               if (!browserTabId || !browserTab) return
-              void browserTabPinSet(browserTabId, !browserTab.isPinned).then((next) => {
-                upsertBrowserTab(toBrowserTab(next))
+              void runBrowserSurfaceAction(browserTabPinSet(browserTabId, !browserTab.isPinned), {
+                title: 'Browser pin failed',
+                fallbackMessage: 'Failed to update browser tab pin',
+                setSurfaceError,
+                pushError,
+                onSuccess: (next) => upsertBrowserTab(toBrowserTab(next)),
               })
             }}
           >
@@ -244,9 +273,15 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
             onBlur={() => setDraftUrl(null)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' && browserTabId) {
-                void browserTabNavigate(browserTabId, url).then((next) => {
-                  setDraftUrl(null)
-                  upsertBrowserTab(toBrowserTab(next))
+                void runBrowserSurfaceAction(browserTabNavigate(browserTabId, url), {
+                  title: 'Browser navigation failed',
+                  fallbackMessage: 'Failed to navigate browser tab',
+                  setSurfaceError,
+                  pushError,
+                  onSuccess: (next) => {
+                    setDraftUrl(null)
+                    upsertBrowserTab(toBrowserTab(next))
+                  },
                 })
               }
             }}

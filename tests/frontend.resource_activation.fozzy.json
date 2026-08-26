@@ -6,7 +6,7 @@
       "type": "trace_event",
       "name": "verify_active_resource_backing_contract",
       "fields": {
-        "target": "frontend/lib/projectResolution+hooks/useBackendIntegration+stores/browser+terminal+codex"
+        "target": "frontend/lib/projectResolution+browserSurfaceActions+hooks/useBackendIntegration+stores/browser+terminal+codex"
       }
     },
     {
