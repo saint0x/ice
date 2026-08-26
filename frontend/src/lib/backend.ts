@@ -589,24 +589,6 @@ export async function fileWriteText(input: {
   return invoke<void>('file_write_text', { input })
 }
 
-export async function dirCreate(projectId: string, path: string) {
-  return invoke<void>('dir_create', {
-    input: { projectId, path },
-  })
-}
-
-export async function entryDelete(projectId: string, path: string, recursive = false) {
-  return invoke<void>('entry_delete', {
-    input: { projectId, path, recursive },
-  })
-}
-
-export async function entryRename(projectId: string, from: string, to: string) {
-  return invoke<void>('entry_rename', {
-    input: { projectId, from, to },
-  })
-}
-
 export async function fileImportExternal(input: {
   projectId: string
   sourcePaths: string[]
@@ -827,20 +809,6 @@ export async function browserRendererDetach(tabId: string) {
   return invoke<void>('browser_renderer_detach', { tabId })
 }
 
-export async function browserTabRendererStateSet(input: {
-  tabId: string
-  url?: string
-  title?: string
-  isLoading?: boolean
-  faviconUrl?: string | null
-  securityOrigin?: string | null
-  isSecure?: boolean
-  canGoBack?: boolean
-  canGoForward?: boolean
-}) {
-  return invoke<BrowserTabDto>('browser_tab_renderer_state_set', { input })
-}
-
 export async function browserTabOpenExternal(tabId: string) {
   return invoke<BrowserExternalOpenRequestDto>('browser_tab_open_external', { tabId })
 }
@@ -852,16 +820,6 @@ export async function browserFindInPage(input: {
   findNext?: boolean
 }) {
   return invoke<void>('browser_find_in_page', { input })
-}
-
-export async function browserFindInPageReport(input: {
-  tabId: string
-  query: string
-  matches: number
-  activeMatchOrdinal: number
-  finalUpdate?: boolean
-}) {
-  return invoke<BrowserFindInPageResultDto>('browser_find_in_page_report', { input })
 }
 
 export function listenGitEvents(handler: (payload: GitEventPayload) => void): Promise<UnlistenFn> {

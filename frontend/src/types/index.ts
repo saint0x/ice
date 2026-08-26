@@ -10,8 +10,6 @@ export type SidebarSection = 'files' | 'git' | 'browser' | 'terminal' | 'codex'
 
 export type SplitDirection = 'horizontal' | 'vertical'
 
-export type DockPosition = 'bottom'
-
 export interface Project {
   id: ProjectId
   name: string
