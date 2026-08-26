@@ -601,13 +601,9 @@ fn parse_status(raw: &str) -> GitStatusSummary {
             let mut parts = line.split_whitespace();
             let kind = parts.next().unwrap_or_default();
             let xy = parts.next().unwrap_or_default();
-            let path = line
-                .split_whitespace()
-                .last()
-                .unwrap_or_default()
-                .to_string();
             let x = xy.chars().next().unwrap_or('.');
             let y = xy.chars().nth(1).unwrap_or('.');
+            let path = parse_changed_path(line, kind);
             if x != '.' {
                 summary.staged += 1;
             }
@@ -638,11 +634,7 @@ fn parse_status(raw: &str) -> GitStatusSummary {
             });
         } else if let Some(rest) = line.strip_prefix("u ") {
             summary.conflicted += 1;
-            let path = rest
-                .split_whitespace()
-                .last()
-                .unwrap_or_default()
-                .to_string();
+            let path = parse_unmerged_path(rest);
             summary.changes.push(GitChangeRecord {
                 path,
                 status: "conflict".to_string(),
@@ -652,6 +644,33 @@ fn parse_status(raw: &str) -> GitStatusSummary {
     }
 
     summary
+}
+
+fn field_payload(value: &str, fields_before_payload: usize) -> &str {
+    let mut remaining = value;
+    for _ in 0..fields_before_payload {
+        let Some((_, rest)) = remaining.split_once(' ') else {
+            return "";
+        };
+        remaining = rest;
+    }
+    remaining
+}
+
+fn parse_changed_path(line: &str, kind: &str) -> String {
+    let payload = field_payload(line, if kind == "2" { 9 } else { 8 });
+    if kind == "2" {
+        payload
+            .split_once('\t')
+            .map_or(payload, |(path, _)| path)
+            .to_string()
+    } else {
+        payload.to_string()
+    }
+}
+
+fn parse_unmerged_path(rest: &str) -> String {
+    field_payload(rest, 9).to_string()
 }
 
 fn read_status_for_root_blocking(root_path: &str) -> Result<GitStatusSummary> {
@@ -877,6 +896,39 @@ mod tests {
         assert_eq!(summary.staged, 1);
         assert_eq!(summary.untracked, 1);
         assert_eq!(summary.changes.len(), 2);
+    }
+
+    #[test]
+    fn parse_status_preserves_paths_with_spaces() {
+        let summary = parse_status(
+            "# branch.head main\n1 .M N... 100644 100644 100644 abc def src/has spaces.rs\n",
+        );
+        assert_eq!(summary.changes.len(), 1);
+        assert_eq!(summary.changes[0].path, "src/has spaces.rs");
+        assert_eq!(summary.changes[0].status, "modified");
+        assert!(!summary.changes[0].staged);
+    }
+
+    #[test]
+    fn parse_status_uses_current_path_for_renames() {
+        let summary = parse_status(
+            "# branch.head main\n2 R. N... 100644 100644 100644 abc def R100 src/new name.rs\tsrc/old name.rs\n",
+        );
+        assert_eq!(summary.changes.len(), 1);
+        assert_eq!(summary.changes[0].path, "src/new name.rs");
+        assert_eq!(summary.changes[0].status, "renamed");
+        assert!(summary.changes[0].staged);
+    }
+
+    #[test]
+    fn parse_status_preserves_conflict_paths_with_spaces() {
+        let summary = parse_status(
+            "# branch.head main\nu UU N... 100644 100644 100644 100644 abc def ghi src/conflicted file.rs\n",
+        );
+        assert_eq!(summary.conflicted, 1);
+        assert_eq!(summary.changes.len(), 1);
+        assert_eq!(summary.changes[0].path, "src/conflicted file.rs");
+        assert_eq!(summary.changes[0].status, "conflict");
     }
 
     #[test]

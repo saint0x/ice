@@ -35,6 +35,69 @@
       "cmd": "/bin/sh",
       "args": [
         "-lc",
+        "cd src-tauri && cargo test git::service::tests::parse_status_preserves_paths_with_spaces -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test git::service::tests::parse_status_preserves_paths_with_spaces -- --exact"
+      ],
+      "expect_exit": 0
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test git::service::tests::parse_status_uses_current_path_for_renames -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test git::service::tests::parse_status_uses_current_path_for_renames -- --exact"
+      ],
+      "expect_exit": 0
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test git::service::tests::parse_status_preserves_conflict_paths_with_spaces -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test git::service::tests::parse_status_preserves_conflict_paths_with_spaces -- --exact"
+      ],
+      "expect_exit": 0
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
         "cd src-tauri && cargo test git::service::tests::ensure_paths_requires_non_empty_input -- --exact"
       ],
       "exit_code": 0,
