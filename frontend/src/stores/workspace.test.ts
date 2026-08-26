@@ -37,6 +37,159 @@ describe('workspace store focus synchronization', () => {
     expect(state.pendingFocusPaneId).toBe('pane-2')
   })
 
+  it('opens tabs in an existing pane when the requested pane is stale', () => {
+    const tabId = useWorkspaceStore.getState().openTab('pane-missing', 'settings', 'Search', 'project-1')
+
+    const state = useWorkspaceStore.getState()
+    expect(state.tabs.has(tabId)).toBe(true)
+    expect(state.layout).toMatchObject({
+      id: 'pane-1',
+      tabs: [tabId],
+      activeTabId: tabId,
+    })
+    expect(state.activePaneId).toBe('pane-1')
+  })
+
+  it('ignores activation when the pane does not own the tab', () => {
+    useWorkspaceStore.getState().hydrateWorkspace({
+      layout: {
+        id: 'split-root',
+        type: 'split',
+        direction: 'horizontal',
+        ratio: 0.5,
+        children: [
+          {
+            id: 'pane-1',
+            type: 'leaf',
+            tabs: ['tab-1'],
+            activeTabId: 'tab-1',
+          },
+          {
+            id: 'pane-2',
+            type: 'leaf',
+            tabs: ['tab-2'],
+            activeTabId: 'tab-2',
+          },
+        ],
+      },
+      tabs: [
+        {
+          id: 'tab-1',
+          type: 'editor',
+          title: 'index.ts',
+          projectId: 'project-1',
+        },
+        {
+          id: 'tab-2',
+          type: 'git',
+          title: 'Git',
+          projectId: 'project-1',
+        },
+      ],
+      activePaneId: 'pane-1',
+      sidebarOpen: true,
+      sidebarWidth: 240,
+      bottomDockOpen: true,
+      bottomDockHeight: 240,
+      chatPanelOpen: false,
+      chatPanelWidth: 360,
+    })
+
+    useWorkspaceStore.getState().activateTab('pane-1', 'tab-2')
+
+    const state = useWorkspaceStore.getState()
+    expect(state.activePaneId).toBe('pane-1')
+    expect(state.layout).toMatchObject({
+      children: [
+        {
+          id: 'pane-1',
+          activeTabId: 'tab-1',
+        },
+        {
+          id: 'pane-2',
+          activeTabId: 'tab-2',
+        },
+      ],
+    })
+  })
+
+  it('does not delete a tab when close targets the wrong pane', () => {
+    useWorkspaceStore.getState().hydrateWorkspace({
+      layout: {
+        id: 'split-root',
+        type: 'split',
+        direction: 'horizontal',
+        ratio: 0.5,
+        children: [
+          {
+            id: 'pane-1',
+            type: 'leaf',
+            tabs: ['tab-1'],
+            activeTabId: 'tab-1',
+          },
+          {
+            id: 'pane-2',
+            type: 'leaf',
+            tabs: ['tab-2'],
+            activeTabId: 'tab-2',
+          },
+        ],
+      },
+      tabs: [
+        {
+          id: 'tab-1',
+          type: 'editor',
+          title: 'index.ts',
+          projectId: 'project-1',
+        },
+        {
+          id: 'tab-2',
+          type: 'git',
+          title: 'Git',
+          projectId: 'project-1',
+        },
+      ],
+      activePaneId: 'pane-1',
+      sidebarOpen: true,
+      sidebarWidth: 240,
+      bottomDockOpen: true,
+      bottomDockHeight: 240,
+      chatPanelOpen: false,
+      chatPanelWidth: 360,
+    })
+
+    useWorkspaceStore.getState().closeTab('pane-1', 'tab-2')
+
+    const state = useWorkspaceStore.getState()
+    expect(state.tabs.has('tab-2')).toBe(true)
+    expect(state.layout).toMatchObject({
+      children: [
+        {
+          id: 'pane-1',
+          tabs: ['tab-1'],
+        },
+        {
+          id: 'pane-2',
+          tabs: ['tab-2'],
+        },
+      ],
+    })
+  })
+
+  it('ignores pane focus and split requests for missing panes', () => {
+    useWorkspaceStore.getState().setActivePane('pane-missing')
+    useWorkspaceStore.getState().splitPane('pane-missing', 'vertical')
+
+    const state = useWorkspaceStore.getState()
+    expect(state.activePaneId).toBe('pane-1')
+    expect(state.layout).toEqual({
+      id: 'pane-1',
+      type: 'leaf',
+      tabs: [],
+      activeTabId: null,
+    })
+  })
+
   it('normalizes stale tab and pane references during hydration', () => {
     useWorkspaceStore.getState().hydrateWorkspace({
       layout: {

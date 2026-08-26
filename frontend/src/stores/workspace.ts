@@ -78,6 +78,24 @@ function collectPaneIds(layout: PaneLayout): PaneId[] {
   return layout.children.flatMap(collectPaneIds)
 }
 
+function findFirstPaneId(layout: PaneLayout): PaneId {
+  if (layout.type === 'leaf') return layout.id
+  const firstChild = layout.children[0]
+  return firstChild ? findFirstPaneId(firstChild) : layout.id
+}
+
+function layoutHasPane(layout: PaneLayout, paneId: PaneId): boolean {
+  if (layout.type === 'leaf') return layout.id === paneId
+  return layout.children.some((child) => layoutHasPane(child, paneId))
+}
+
+function paneHasTab(layout: PaneLayout, paneId: PaneId, tabId: TabId): boolean {
+  if (layout.type === 'leaf') {
+    return layout.id === paneId && layout.tabs.includes(tabId)
+  }
+  return layout.children.some((child) => paneHasTab(child, paneId, tabId))
+}
+
 function collectLayoutTabIds(layout: PaneLayout): TabId[] {
   if (layout.type === 'leaf') return layout.tabs
   return layout.children.flatMap(collectLayoutTabIds)
@@ -180,14 +198,17 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     const tabId = nextTabId()
     const tab: Tab = { id: tabId, projectId, type, title, meta }
     set((s) => {
+      const targetPaneId = layoutHasPane(s.layout, paneId)
+        ? paneId
+        : (layoutHasPane(s.layout, s.activePaneId) ? s.activePaneId : findFirstPaneId(s.layout))
       const tabs = new Map(s.tabs)
       tabs.set(tabId, tab)
-      const layout = findAndUpdatePane(s.layout, paneId, (pane) => ({
+      const layout = findAndUpdatePane(s.layout, targetPaneId, (pane) => ({
         ...pane,
         tabs: [...pane.tabs, tabId],
         activeTabId: tabId,
       }))
-      return { tabs, layout, activePaneId: paneId, pendingFocusPaneId: paneId }
+      return { tabs, layout, activePaneId: targetPaneId, pendingFocusPaneId: targetPaneId }
     })
     return tabId
   },
@@ -203,6 +224,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
 
   closeTab: (paneId, tabId) =>
     set((s) => {
+      if (!paneHasTab(s.layout, paneId, tabId)) return s
       const tabs = new Map(s.tabs)
       tabs.delete(tabId)
       let layout = findAndUpdatePane(s.layout, paneId, (pane) => {
@@ -222,15 +244,19 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     }),
 
   activateTab: (paneId, tabId) =>
-    set((s) => ({
-      layout: findAndUpdatePane(s.layout, paneId, (pane) => ({ ...pane, activeTabId: tabId })),
-      activePaneId: paneId,
-      pendingFocusPaneId: paneId,
-    })),
+    set((s) => (
+      paneHasTab(s.layout, paneId, tabId) && s.tabs.has(tabId)
+        ? {
+            layout: findAndUpdatePane(s.layout, paneId, (pane) => ({ ...pane, activeTabId: tabId })),
+            activePaneId: paneId,
+            pendingFocusPaneId: paneId,
+          }
+        : s
+    )),
 
   setActivePane: (paneId) =>
     set((state) => (
-      state.activePaneId === paneId
+      state.activePaneId === paneId || !layoutHasPane(state.layout, paneId)
         ? state
         : { activePaneId: paneId }
     )),
@@ -244,6 +270,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
 
   splitPane: (paneId, direction) =>
     set((s) => {
+      if (!layoutHasPane(s.layout, paneId)) return s
       const newPaneId = nextPaneId()
       const layout = findAndReplace(s.layout, paneId, (pane): PaneSplit => ({
         id: `split-${pane.id}-${newPaneId}`,
