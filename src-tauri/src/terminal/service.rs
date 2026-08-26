@@ -5,9 +5,9 @@ use std::process::Command as StdCommand;
 use std::sync::Arc;
 use std::thread;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use parking_lot::Mutex;
-use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
@@ -503,8 +503,20 @@ impl TerminalService {
                             record.last_exit_reason = Some("process_exit".to_string());
                             let persisted = record.clone();
                             let persistence = persistence.clone();
+                            let app_for_persistence = app.clone();
+                            let session_id_for_persistence = session_id.clone();
+                            let project_id_for_persistence = record.project_id.clone();
                             tauri::async_runtime::spawn(async move {
-                                let _ = persistence.upsert_terminal_session(persisted).await;
+                                if let Err(error) =
+                                    persistence.upsert_terminal_session(persisted).await
+                                {
+                                    emit_terminal_persistence_failed(
+                                        &app_for_persistence,
+                                        &session_id_for_persistence,
+                                        &project_id_for_persistence,
+                                        format!("Terminal exit state was not saved: {error}"),
+                                    );
+                                }
                             });
                             let _ = app.emit(
                                 TERMINAL_EVENT,
@@ -531,14 +543,34 @@ impl TerminalService {
                             let persisted = record.clone();
                             let persistence = persistence.clone();
                             let scrollback_session_id = session_id.clone();
+                            let app_for_persistence = app.clone();
+                            let project_id_for_persistence = record.project_id.clone();
                             tauri::async_runtime::spawn(async move {
-                                let _ = persistence.upsert_terminal_session(persisted).await;
-                                let _ = persistence
+                                if let Err(error) =
+                                    persistence.upsert_terminal_session(persisted).await
+                                {
+                                    emit_terminal_persistence_failed(
+                                        &app_for_persistence,
+                                        &scrollback_session_id,
+                                        &project_id_for_persistence,
+                                        format!("Terminal metadata was not saved: {error}"),
+                                    );
+                                    return;
+                                }
+                                if let Err(error) = persistence
                                     .upsert_terminal_scrollback(
-                                        scrollback_session_id,
+                                        scrollback_session_id.clone(),
                                         persisted_scrollback,
                                     )
-                                    .await;
+                                    .await
+                                {
+                                    emit_terminal_persistence_failed(
+                                        &app_for_persistence,
+                                        &scrollback_session_id,
+                                        &project_id_for_persistence,
+                                        format!("Terminal scrollback was not saved: {error}"),
+                                    );
+                                }
                             });
                         }
                         let _ = app.emit(
@@ -558,8 +590,20 @@ impl TerminalService {
                             record.last_exit_reason = Some(format!("read_error:{error}"));
                             let persistence = persistence.clone();
                             let persisted = record.clone();
+                            let app_for_persistence = app.clone();
+                            let session_id_for_persistence = session_id.clone();
+                            let project_id_for_persistence = record.project_id.clone();
                             tauri::async_runtime::spawn(async move {
-                                let _ = persistence.upsert_terminal_session(persisted).await;
+                                if let Err(error) =
+                                    persistence.upsert_terminal_session(persisted).await
+                                {
+                                    emit_terminal_persistence_failed(
+                                        &app_for_persistence,
+                                        &session_id_for_persistence,
+                                        &project_id_for_persistence,
+                                        format!("Terminal read-error state was not saved: {error}"),
+                                    );
+                                }
                             });
                             let _ = app.emit(
                                 TERMINAL_EVENT,
@@ -610,9 +654,29 @@ impl TerminalService {
     }
 }
 
+fn emit_terminal_persistence_failed(
+    app: &AppHandle,
+    session_id: &str,
+    project_id: &str,
+    message: String,
+) {
+    let _ = app.emit(
+        TERMINAL_EVENT,
+        serde_json::json!({
+            "type": "persistenceFailed",
+            "sessionId": session_id,
+            "projectId": project_id,
+            "message": message,
+        }),
+    );
+}
+
 fn load_terminal_state_for_startup(
     persistence: &PersistenceService,
-) -> Result<(HashMap<String, TerminalSessionRecord>, HashMap<String, String>)> {
+) -> Result<(
+    HashMap<String, TerminalSessionRecord>,
+    HashMap<String, String>,
+)> {
     let mut metadata: HashMap<String, TerminalSessionRecord> = persistence
         .load_terminal_sessions_sync()
         .context("failed to load persisted terminal sessions")?
@@ -637,7 +701,12 @@ fn load_terminal_state_for_startup(
             .unwrap_or(0);
         persistence
             .upsert_terminal_session_sync(session)
-            .with_context(|| format!("failed to normalize terminal session {}", session.session_id))?;
+            .with_context(|| {
+                format!(
+                    "failed to normalize terminal session {}",
+                    session.session_id
+                )
+            })?;
     }
     Ok((metadata, scrollback))
 }
@@ -737,8 +806,8 @@ fn scrollback_line_count(content: &str) -> usize {
 #[cfg(test)]
 mod tests {
     use super::{
-        load_terminal_state_for_startup, recent_scrollback_lines, scrollback_line_count,
-        trim_scrollback, TerminalSessionRecord,
+        TerminalSessionRecord, load_terminal_state_for_startup, recent_scrollback_lines,
+        scrollback_line_count, trim_scrollback,
     };
     use crate::persistence::db::PersistenceService;
     use tempfile::tempdir;
@@ -802,7 +871,10 @@ mod tests {
         assert!(restored.restored_from_persistence);
         assert_eq!(restored.last_exit_reason.as_deref(), Some("app_restart"));
         assert_eq!(restored.scrollback_bytes, "ready\n".len());
-        assert_eq!(scrollback.get("session-1").map(String::as_str), Some("ready\n"));
+        assert_eq!(
+            scrollback.get("session-1").map(String::as_str),
+            Some("ready\n")
+        );
         assert_eq!(
             db.load_terminal_sessions_sync()
                 .expect("persisted terminal sessions")[0]

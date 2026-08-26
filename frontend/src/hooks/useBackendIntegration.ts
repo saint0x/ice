@@ -27,6 +27,7 @@ import {
   toGitState,
   toGitMutationEvent,
   toProject,
+  toTerminalRuntimeError,
   toTerminalSession,
   toWorkspaceChromePersist,
   toWorkspaceInput,
@@ -352,6 +353,11 @@ export function useBackendIntegration() {
         }
         if (payload.type === 'data' && payload.sessionId && payload.data) {
           appendScrollback(payload.sessionId, payload.data)
+          return
+        }
+        const terminalRuntimeError = toTerminalRuntimeError(payload)
+        if (terminalRuntimeError) {
+          pushError(terminalRuntimeError.title, terminalRuntimeError.message)
           return
         }
         if (payload.type === 'scrollbackCleared' && payload.sessionId) {

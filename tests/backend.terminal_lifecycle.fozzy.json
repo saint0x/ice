@@ -50,6 +50,27 @@
         "cd src-tauri && cargo test persistence::db::tests::persists_workspace_browser_terminal_codex_and_config_state -- --exact"
       ],
       "expect_exit": 0
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd frontend && npm test -- --run src/lib/backend.test.ts"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd frontend && npm test -- --run src/lib/backend.test.ts"
+      ],
+      "expect_exit": 0
     }
   ]
 }

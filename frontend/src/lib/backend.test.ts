@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { toBrowserRuntimeNotice, toCodexThread, toGitMutationEvent, toProjectCodexSidebarItem } from '@/lib/backend'
+import {
+  toBrowserRuntimeNotice,
+  toCodexThread,
+  toGitMutationEvent,
+  toProjectCodexSidebarItem,
+  toTerminalRuntimeError,
+} from '@/lib/backend'
 
 describe('backend mappers', () => {
   it('maps browser download completion notices', () => {
@@ -33,6 +39,20 @@ describe('backend mappers', () => {
     expect(notice?.kind).toBe('persistenceFailed')
     expect(notice?.projectId).toBe('project-1')
     expect(notice?.message).toBe('Browser history was not saved: disk full')
+  })
+
+  it('maps terminal persistence failures to runtime errors', () => {
+    const error = toTerminalRuntimeError({
+      type: 'persistenceFailed',
+      sessionId: 'terminal-1',
+      projectId: 'project-1',
+      message: 'Terminal scrollback was not saved: disk full',
+    })
+
+    expect(error).toEqual({
+      title: 'Terminal persistence failed',
+      message: 'Terminal scrollback was not saved: disk full',
+    })
   })
 
   it('maps structured git mutation events', () => {

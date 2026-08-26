@@ -255,7 +255,14 @@ interface TerminalEventPayload {
   type: string
   session?: TerminalSessionRecordDto
   sessionId?: string
+  projectId?: string
   data?: string
+  message?: string
+}
+
+interface RuntimeErrorNotice {
+  title: string
+  message: string
 }
 
 async function invokeCodex<T>(
@@ -917,6 +924,16 @@ export function toTerminalSession(dto: TerminalSessionRecordDto): TerminalSessio
     scrollbackBytes: dto.scrollbackBytes,
     startupCommand: dto.startupCommand ?? undefined,
     lastExitReason: dto.lastExitReason ?? undefined,
+  }
+}
+
+export function toTerminalRuntimeError(payload: TerminalEventPayload): RuntimeErrorNotice | null {
+  if (payload.type !== 'persistenceFailed' || !payload.sessionId) {
+    return null
+  }
+  return {
+    title: 'Terminal persistence failed',
+    message: payload.message ?? 'Terminal state could not be saved.',
   }
 }
 
