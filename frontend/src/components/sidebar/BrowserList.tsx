@@ -39,13 +39,14 @@ export const BrowserList = memo(function BrowserList({ projectId }: { projectId:
       .catch(() => {
         if (!disposed) {
           setRestorePolicy('pinned')
+          pushError('Browser restore policy load failed', 'Failed to load browser restore policy')
         }
       })
 
     return () => {
       disposed = true
     }
-  }, [projectId])
+  }, [projectId, pushError])
 
   return (
     <div className={styles.list}>
@@ -56,9 +57,15 @@ export const BrowserList = memo(function BrowserList({ projectId }: { projectId:
           value={restorePolicy ?? 'pinned'}
           onChange={(event) => {
             const nextPolicy = event.target.value as BrowserRestorePolicy
+            const previousPolicy = restorePolicy
             setRestorePolicy(nextPolicy)
-            void projectBrowserRestorePolicySet(projectId, nextPolicy).catch(() => {
-              void projectBrowserRestorePolicyGet(projectId).then(setRestorePolicy).catch(() => {})
+            void projectBrowserRestorePolicySet(projectId, nextPolicy).catch((error: unknown) => {
+              pushError('Browser restore policy save failed', error, 'Failed to save browser restore policy')
+              void projectBrowserRestorePolicyGet(projectId)
+                .then(setRestorePolicy)
+                .catch(() => {
+                  setRestorePolicy(previousPolicy ?? 'pinned')
+                })
             })
           }}
           disabled={restorePolicy === null}
@@ -85,9 +92,13 @@ export const BrowserList = memo(function BrowserList({ projectId }: { projectId:
             className={styles.iconBtn}
             onClick={(event) => {
               event.stopPropagation()
-              void browserTabPinSet(tab.tabId, !tab.isPinned).then((next) => {
-                upsertTab(toBrowserTab(next))
-              })
+              void browserTabPinSet(tab.tabId, !tab.isPinned)
+                .then((next) => {
+                  upsertTab(toBrowserTab(next))
+                })
+                .catch((error: unknown) => {
+                  pushError('Browser pin failed', error, 'Failed to update browser tab pin')
+                })
             }}
             aria-label={tab.isPinned ? 'Unpin browser tab' : 'Pin browser tab'}
           >
@@ -112,6 +123,9 @@ export const BrowserList = memo(function BrowserList({ projectId }: { projectId:
         className={styles.addBtn}
         onClick={() => {
           void createAndOpenBrowserTab(projectId)
+            .catch((error: unknown) => {
+              pushError('Browser tab failed', error, 'Failed to create browser tab')
+            })
         }}
       >
         <Plus size={12} />
