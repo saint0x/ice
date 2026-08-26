@@ -140,9 +140,11 @@ export function closeWorkspaceTabsForProject(projectId: string) {
 export function reconcileWorkspaceBackingResources(input: {
   browserTabIds: Iterable<string>
   terminalSessionIds: Iterable<string>
+  codexThreadIds?: Iterable<string>
 }) {
   const browserTabIds = new Set(input.browserTabIds)
   const terminalSessionIds = new Set(input.terminalSessionIds)
+  const codexThreadIds = input.codexThreadIds ? new Set(input.codexThreadIds) : null
   const workspace = useWorkspaceStore.getState()
   const matches: Array<{ paneId: PaneId; tabId: TabId }> = []
 
@@ -158,6 +160,10 @@ export function reconcileWorkspaceBackingResources(input: {
       if (tab.type === 'terminal') {
         const terminalSessionId = typeof tab.meta?.sessionId === 'string' ? tab.meta.sessionId : tab.id
         return !terminalSessionIds.has(terminalSessionId)
+      }
+      if (tab.type === 'codex' && codexThreadIds) {
+        const threadId = typeof tab.meta?.threadId === 'string' ? tab.meta.threadId : null
+        return Boolean(threadId && !codexThreadIds.has(threadId))
       }
       return false
     },

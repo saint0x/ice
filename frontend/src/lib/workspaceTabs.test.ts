@@ -426,7 +426,7 @@ describe('closeWorkspaceTab', () => {
     expect([...useWorkspaceStore.getState().tabs.values()].map((tab) => tab.projectId)).toEqual(['project-2'])
   })
 
-  it('removes restored browser and terminal workspace tabs whose backing resources are absent', () => {
+  it('removes restored workspace tabs whose backing resources are absent', () => {
     useWorkspaceStore.setState({
       layout: {
         id: 'split-root',
@@ -443,7 +443,15 @@ describe('closeWorkspaceTab', () => {
           {
             id: 'pane-2',
             type: 'leaf',
-            tabs: ['tab-terminal-live', 'tab-terminal-stale', 'tab-editor-live', 'tab-git-live'],
+            tabs: [
+              'tab-terminal-live',
+              'tab-terminal-stale',
+              'tab-codex-live',
+              'tab-codex-stale',
+              'tab-codex-new',
+              'tab-editor-live',
+              'tab-git-live',
+            ],
             activeTabId: 'tab-terminal-stale',
           },
         ],
@@ -483,6 +491,26 @@ describe('closeWorkspaceTab', () => {
           title: 'old zsh',
           meta: { sessionId: 'terminal-stale' },
         }],
+        ['tab-codex-live', {
+          id: 'tab-codex-live',
+          projectId: 'project-1',
+          type: 'codex',
+          title: 'Thread',
+          meta: { threadId: 'thread-live' },
+        }],
+        ['tab-codex-stale', {
+          id: 'tab-codex-stale',
+          projectId: 'project-1',
+          type: 'codex',
+          title: 'Old thread',
+          meta: { threadId: 'thread-stale' },
+        }],
+        ['tab-codex-new', {
+          id: 'tab-codex-new',
+          projectId: 'project-1',
+          type: 'codex',
+          title: 'New Thread',
+        }],
         ['tab-editor-live', {
           id: 'tab-editor-live',
           projectId: 'project-1',
@@ -510,12 +538,15 @@ describe('closeWorkspaceTab', () => {
     reconcileWorkspaceBackingResources({
       browserTabIds: ['browser-live'],
       terminalSessionIds: ['terminal-live'],
+      codexThreadIds: ['thread-live'],
     })
 
     const state = useWorkspaceStore.getState()
     expect([...state.tabs.keys()]).toEqual([
       'tab-browser-live',
       'tab-terminal-live',
+      'tab-codex-live',
+      'tab-codex-new',
       'tab-editor-live',
       'tab-git-live',
     ])
@@ -529,7 +560,7 @@ describe('closeWorkspaceTab', () => {
         },
         {
           id: 'pane-2',
-          tabs: ['tab-terminal-live', 'tab-editor-live', 'tab-git-live'],
+          tabs: ['tab-terminal-live', 'tab-codex-live', 'tab-codex-new', 'tab-editor-live', 'tab-git-live'],
           activeTabId: 'tab-git-live',
         },
       ],

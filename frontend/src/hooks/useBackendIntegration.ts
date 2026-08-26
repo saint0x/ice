@@ -207,13 +207,15 @@ export function useBackendIntegration() {
       if (disposed) return
       const hydratedBrowserTabs = browserTabs.map(toBrowserTab)
       const hydratedTerminalSessions = terminalSessions.map(toTerminalSession)
+      const hydratedCodexThreads = codexThreads.map(toCodexThread)
       hydrateBrowserTabs(hydratedBrowserTabs)
       hydrateSessions(hydratedTerminalSessions)
+      hydrateThreads(hydratedCodexThreads)
       reconcileWorkspaceBackingResources({
         browserTabIds: hydratedBrowserTabs.map((tab) => tab.id),
         terminalSessionIds: hydratedTerminalSessions.map((session) => session.id),
+        codexThreadIds: hydratedCodexThreads.map((thread) => thread.id),
       })
-      hydrateThreads(codexThreads.map(toCodexThread))
       hydrateApprovals(pendingApprovals.map(toCodexApproval))
       hydratedRef.current = true
       await logFrontendEvent('info', 'backend.bootstrap', 'workspace hydration complete', {
