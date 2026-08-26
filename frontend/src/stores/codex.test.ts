@@ -284,4 +284,56 @@ describe('codex store reconciliation', () => {
     expect(useCodexStore.getState().activeThreadId.get('project-a')).toBeNull()
     expect(useCodexStore.getState().messagesByThread.has('thread-stale')).toBe(false)
   })
+
+  it('ignores attempts to activate missing or cross-project Codex threads', () => {
+    useCodexStore.getState().hydrateThreads([
+      {
+        id: 'thread-live',
+        projectId: 'project-a',
+        title: 'Live',
+        unread: true,
+        status: 'idle',
+      },
+      {
+        id: 'thread-other',
+        projectId: 'project-b',
+        title: 'Other',
+        unread: true,
+        status: 'running',
+      },
+    ])
+    useCodexStore.getState().setActiveThread('project-a', 'thread-live')
+
+    useCodexStore.getState().setActiveThread('project-a', 'thread-missing')
+    expect(useCodexStore.getState().activeThreadId.get('project-a')).toBe('thread-live')
+
+    useCodexStore.getState().setActiveThread('project-a', 'thread-other')
+    expect(useCodexStore.getState().activeThreadId.get('project-a')).toBe('thread-live')
+  })
+
+  it('falls back to the preferred project thread when the stored active Codex thread is stale', () => {
+    useCodexStore.setState({
+      threads: new Map([
+        ['thread-idle', {
+          id: 'thread-idle',
+          projectId: 'project-a',
+          title: 'Idle',
+          unread: true,
+          status: 'idle',
+        }],
+        ['thread-running', {
+          id: 'thread-running',
+          projectId: 'project-a',
+          title: 'Running',
+          unread: true,
+          status: 'running',
+        }],
+      ]),
+      activeThreadId: new Map([['project-a', 'thread-stale']]),
+    })
+
+    useCodexStore.getState().setActiveThread('project-a', 'thread-missing')
+
+    expect(useCodexStore.getState().activeThreadId.get('project-a')).toBe('thread-running')
+  })
 })

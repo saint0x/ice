@@ -273,12 +273,20 @@ export const useCodexStore = create<CodexState>((set) => ({
   setActiveThread: (projectId, threadId) =>
     set((s) => {
       const activeThreadId = new Map(s.activeThreadId)
-      activeThreadId.set(projectId, threadId)
       const threads = new Map(s.threads)
       const thread = threads.get(threadId)
-      if (thread) {
-        threads.set(threadId, { ...thread, unread: false })
+      if (!thread || thread.projectId !== projectId) {
+        const currentId = activeThreadId.get(projectId)
+        const currentThread = currentId ? threads.get(currentId) : undefined
+        if (currentThread?.projectId === projectId) {
+          return {}
+        }
+        const fallback = choosePreferredThread([...threads.values()].filter((candidate) => candidate.projectId === projectId))
+        activeThreadId.set(projectId, fallback?.id ?? null)
+        return { activeThreadId, messagesByThread: pruneMessagesByThread(s.messagesByThread, activeThreadId) }
       }
+      activeThreadId.set(projectId, threadId)
+      threads.set(threadId, { ...thread, unread: false })
       return { activeThreadId, threads, messagesByThread: pruneMessagesByThread(s.messagesByThread, activeThreadId) }
     }),
 
