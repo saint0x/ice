@@ -70,6 +70,7 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
   const documentIsLoading = document?.isLoading ?? false
   const documentIsSaving = document?.isSaving ?? false
   const documentSyntaxMode = document?.syntaxMode
+  const documentReadFailed = document?.readFailed ?? false
 
   const [languageLabel, setLanguageLabel] = useState<string | null>(null)
   const [findOpen, setFindOpen] = useState(false)
@@ -80,7 +81,7 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
   useEffect(() => {
     let disposed = false
     const existing = useEditorStore.getState().documents.get(documentKey)
-    if (existing && !existing.isLoading) {
+    if (existing && !existing.isLoading && !existing.readFailed) {
       touchDocument(tab.projectId, filePath)
       return
     }
@@ -257,7 +258,7 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
   }
 
   useEffect(() => {
-    if (!editorRootRef.current || !document || documentIsBinary || documentIsLoading) {
+    if (!editorRootRef.current || !document || documentIsBinary || documentIsLoading || documentReadFailed) {
       if (editorViewRef.current) {
         editorViewRef.current.destroy()
         editorViewRef.current = null
@@ -329,11 +330,11 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
         documentKeyRef.current = null
       }
     }
-  }, [document, documentIsBinary, documentIsLoading, documentIsSaving, documentKey, filePath, tab.projectId, updateContent])
+  }, [document, documentIsBinary, documentIsLoading, documentIsSaving, documentKey, documentReadFailed, filePath, tab.projectId, updateContent])
 
   useEffect(() => {
     const editor = editorViewRef.current
-    if (!editor || documentContent == null || documentIsBinary || documentIsLoading) return
+    if (!editor || documentContent == null || documentIsBinary || documentIsLoading || documentReadFailed) return
     const currentContent = editor.state.doc.toString()
     if (currentContent === documentContent) return
     editor.dispatch({
@@ -344,19 +345,19 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
       },
       annotations: externalUpdate.of(true),
     })
-  }, [documentContent, documentIsBinary, documentIsLoading])
+  }, [documentContent, documentIsBinary, documentIsLoading, documentReadFailed])
 
   useEffect(() => {
     const editor = editorViewRef.current
-    if (!editor || documentContent == null || documentIsBinary || documentIsLoading) return
+    if (!editor || documentContent == null || documentIsBinary || documentIsLoading || documentReadFailed) return
     editor.dispatch({
       effects: editableCompartmentRef.current.reconfigure(EditorView.editable.of(!documentIsSaving)),
     })
-  }, [documentContent, documentIsBinary, documentIsLoading, documentIsSaving])
+  }, [documentContent, documentIsBinary, documentIsLoading, documentIsSaving, documentReadFailed])
 
   useEffect(() => {
     let cancelled = false
-    if (documentContent == null || documentIsBinary || documentIsLoading) {
+    if (documentContent == null || documentIsBinary || documentIsLoading || documentReadFailed) {
       setLanguageLabel(null)
       return
     }
@@ -396,12 +397,12 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
     return () => {
       cancelled = true
     }
-  }, [documentContent, documentIsBinary, documentIsLoading, documentKey, documentSyntaxMode, ext, filePath, tab.projectId])
+  }, [documentContent, documentIsBinary, documentIsLoading, documentKey, documentReadFailed, documentSyntaxMode, ext, filePath, tab.projectId])
 
   useEffect(() => {
     const editor = editorViewRef.current
     if (!editor) return
-    if (documentContent == null || documentIsBinary || documentIsLoading) {
+    if (documentContent == null || documentIsBinary || documentIsLoading || documentReadFailed) {
       editor.dispatch({ effects: setSyntaxDecorations.of([]) })
       return
     }
@@ -433,7 +434,7 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
       cancelled = true
       window.clearTimeout(timeoutId)
     }
-  }, [documentContent, documentIsBinary, documentIsLoading, documentKey, documentSyntaxMode, filePath, tab.projectId])
+  }, [documentContent, documentIsBinary, documentIsLoading, documentKey, documentReadFailed, documentSyntaxMode, filePath, tab.projectId])
 
   const focusMatch = (nextIndex: number) => {
     const editor = editorViewRef.current
@@ -524,7 +525,7 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
           </button>
         </div>
       </div>
-      {findOpen && !document?.isBinary && !document?.isLoading && document ? (
+      {findOpen && !document?.isBinary && !document?.isLoading && !document?.readFailed && document ? (
         <div className={styles.findBar}>
           <div className={styles.findGroup}>
             <Search size={12} />
@@ -631,6 +632,11 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
           <span className={styles.binaryHint}>
             This file is tracked by the IDE, but it cannot be edited safely in the text surface.
           </span>
+        </div>
+      ) : document?.readFailed ? (
+        <div className={styles.loadingState}>
+          <AlertTriangle size={16} />
+          <span>File could not be loaded.</span>
         </div>
       ) : document?.isLoading || !document ? (
         <div className={styles.loadingState}>

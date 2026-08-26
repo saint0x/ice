@@ -85,7 +85,7 @@ export async function ensureEditorDocument(
   const key = documentKey(projectId, path)
   const store = useEditorStore.getState()
   const current = store.documents.get(key)
-  if (!options?.force && current && !current.isLoading) {
+  if (!options?.force && current && !current.isLoading && !current.readFailed) {
     store.touchDocument(projectId, path)
     return current
   }
@@ -107,7 +107,7 @@ export async function ensureEditorDocument(
       if (!options?.silent) {
         useEditorStore.getState().setError(projectId, path, message)
       } else {
-        useEditorStore.getState().setError(projectId, path, undefined)
+        useEditorStore.getState().discardPendingLoad(projectId, path)
       }
       return null
     })

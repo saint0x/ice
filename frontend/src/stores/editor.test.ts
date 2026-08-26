@@ -72,4 +72,41 @@ describe('editor cache retention', () => {
     expect(documents.has('project-a:src/main.ts')).toBe(true)
     expect(documents.has('project-a:src/old.ts')).toBe(false)
   })
+
+  it('does not create a fake document when setting an error for an unknown path', () => {
+    useEditorStore.getState().setError('project-a', 'src/missing.ts', 'missing from disk')
+
+    expect(useEditorStore.getState().documents.has('project-a:src/missing.ts')).toBe(false)
+  })
+
+  it('can discard a clean pending background load without deleting user edits', () => {
+    useEditorStore.getState().setLoading('project-a', 'src/prefetch.ts')
+
+    useEditorStore.getState().discardPendingLoad('project-a', 'src/prefetch.ts')
+
+    expect(useEditorStore.getState().documents.has('project-a:src/prefetch.ts')).toBe(false)
+
+    useEditorStore.setState({
+      documents: new Map([
+        ['project-a:src/dirty.ts', {
+          projectId: 'project-a',
+          path: 'src/dirty.ts',
+          content: 'draft',
+          isBinary: false,
+          sizeBytes: 5,
+          hasBom: false,
+          loadedAt: 1,
+          lastTouchedAt: 1,
+          syntaxMode: 'full',
+          isDirty: true,
+          isLoading: true,
+          isSaving: false,
+        }],
+      ]),
+    })
+
+    useEditorStore.getState().discardPendingLoad('project-a', 'src/dirty.ts')
+
+    expect(useEditorStore.getState().documents.has('project-a:src/dirty.ts')).toBe(true)
+  })
 })

@@ -1,8 +1,19 @@
-import { describe, expect, it } from 'vitest'
-import { buildProjectPrefetchPlan } from '@/lib/editorDocuments'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { buildProjectPrefetchPlan, ensureEditorDocument } from '@/lib/editorDocuments'
+import { fileRead } from '@/lib/backend'
+import { useEditorStore } from '@/stores/editor'
 import type { FileEntry, Tab } from '@/types'
 
+vi.mock('@/lib/backend', () => ({
+  fileRead: vi.fn(),
+}))
+
 describe('editor document prefetch planning', () => {
+  beforeEach(() => {
+    vi.mocked(fileRead).mockReset()
+    useEditorStore.setState({ documents: new Map() })
+  })
+
   it('prioritizes open editor tabs and the selected path ahead of the full tree', () => {
     const tree: FileEntry[] = [
       {
@@ -79,5 +90,61 @@ describe('editor document prefetch planning', () => {
         tree,
       }),
     ).toHaveLength(12)
+  })
+
+  it('keeps a visible read failure as an explicit non-editable document state', async () => {
+    vi.mocked(fileRead).mockRejectedValue(new Error('missing from disk'))
+
+    await expect(ensureEditorDocument('project-a', 'src/missing.ts')).resolves.toBeNull()
+
+    const document = useEditorStore.getState().documents.get('project-a:src/missing.ts')
+    expect(document).toMatchObject({
+      projectId: 'project-a',
+      path: 'src/missing.ts',
+      content: '',
+      isLoading: false,
+      isSaving: false,
+      isDirty: false,
+      readFailed: true,
+      error: 'missing from disk',
+    })
+  })
+
+  it('drops silent prefetch failures instead of caching fake empty documents', async () => {
+    vi.mocked(fileRead).mockRejectedValue(new Error('permission denied'))
+
+    await expect(ensureEditorDocument('project-a', 'src/private.ts', { silent: true })).resolves.toBeNull()
+
+    expect(useEditorStore.getState().documents.has('project-a:src/private.ts')).toBe(false)
+  })
+
+  it('retries a document that previously failed to read', async () => {
+    vi.mocked(fileRead)
+      .mockRejectedValueOnce(new Error('temporarily unavailable'))
+      .mockResolvedValueOnce({
+        path: 'src/flaky.ts',
+        content: 'export const ok = true',
+        isBinary: false,
+        sizeBytes: 22,
+        encoding: 'utf-8',
+        hasBom: false,
+        modifiedAtMs: 10,
+        versionToken: 'v2',
+      })
+
+    await expect(ensureEditorDocument('project-a', 'src/flaky.ts')).resolves.toBeNull()
+    await expect(ensureEditorDocument('project-a', 'src/flaky.ts')).resolves.toMatchObject({
+      content: 'export const ok = true',
+      versionToken: 'v2',
+    })
+
+    expect(fileRead).toHaveBeenCalledTimes(2)
+    const document = useEditorStore.getState().documents.get('project-a:src/flaky.ts')
+    expect(document).toMatchObject({
+      content: 'export const ok = true',
+      isLoading: false,
+    })
+    expect(document).not.toHaveProperty('readFailed', true)
+    expect(document).not.toHaveProperty('error')
   })
 })

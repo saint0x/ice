@@ -17,6 +17,7 @@ export interface EditorDocument {
   isDirty: boolean
   isLoading: boolean
   isSaving: boolean
+  readFailed?: boolean
   error?: string
   conflict?: {
     latestContent: string
@@ -38,6 +39,7 @@ interface EditorState {
   markSaved: (projectId: string, path: string, payload: Omit<EditorDocument, 'isDirty' | 'isLoading' | 'isSaving'>) => void
   setSaving: (projectId: string, path: string, isSaving: boolean) => void
   setError: (projectId: string, path: string, error?: string) => void
+  discardPendingLoad: (projectId: string, path: string) => void
   setConflict: (
     projectId: string,
     path: string,
@@ -83,6 +85,7 @@ export const useEditorStore = create<EditorState>((set) => ({
         isDirty: current?.isDirty ?? false,
         isLoading: true,
         isSaving: current?.isSaving ?? false,
+        readFailed: false,
         error: undefined,
         conflict: current?.conflict,
       })
@@ -174,6 +177,7 @@ export const useEditorStore = create<EditorState>((set) => ({
         isDirty: false,
         isLoading: false,
         isSaving: false,
+        readFailed: false,
         loadedAt: payload.loadedAt ?? Date.now(),
         lastTouchedAt: Date.now(),
         error: undefined,
@@ -196,26 +200,39 @@ export const useEditorStore = create<EditorState>((set) => ({
     set((state) => {
       const key = documentKey(projectId, path)
       const current = state.documents.get(key)
+      if (!current) return state
+      const readFailed = current.isLoading && !current.isDirty && !current.isSaving
       const documents = new Map(state.documents)
       documents.set(key, {
         projectId,
         path,
-        content: current?.content ?? '',
-        isBinary: current?.isBinary ?? false,
-        sizeBytes: current?.sizeBytes ?? 0,
-        encoding: current?.encoding,
-        hasBom: current?.hasBom ?? false,
-        modifiedAtMs: current?.modifiedAtMs,
-        versionToken: current?.versionToken,
-        loadedAt: current?.loadedAt ?? Date.now(),
+        content: current.content,
+        isBinary: current.isBinary,
+        sizeBytes: current.sizeBytes,
+        encoding: current.encoding,
+        hasBom: current.hasBom,
+        modifiedAtMs: current.modifiedAtMs,
+        versionToken: current.versionToken,
+        loadedAt: current.loadedAt,
         lastTouchedAt: Date.now(),
-        syntaxMode: current?.syntaxMode ?? 'full',
-        isDirty: current?.isDirty ?? false,
+        syntaxMode: current.syntaxMode,
+        isDirty: current.isDirty,
         isLoading: false,
         isSaving: false,
+        readFailed,
         error,
-        conflict: current?.conflict,
+        conflict: current.conflict,
       })
+      return { documents }
+    }),
+
+  discardPendingLoad: (projectId, path) =>
+    set((state) => {
+      const key = documentKey(projectId, path)
+      const current = state.documents.get(key)
+      if (!current || !current.isLoading || current.isDirty || current.isSaving) return state
+      const documents = new Map(state.documents)
+      documents.delete(key)
       return { documents }
     }),
 
@@ -229,6 +246,7 @@ export const useEditorStore = create<EditorState>((set) => ({
         ...current,
         isLoading: false,
         isSaving: false,
+        readFailed: false,
         error,
         conflict,
       })
@@ -261,6 +279,7 @@ export const useEditorStore = create<EditorState>((set) => ({
         isDirty: false,
         isLoading: false,
         isSaving: false,
+        readFailed: false,
         loadedAt: payload.loadedAt ?? Date.now(),
         lastTouchedAt: Date.now(),
         error: undefined,
