@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { findActiveTabId, resolveProjectIdFromWorkspace, resolveWorkbenchProjectId } from '@/lib/projectResolution'
+import {
+  findActiveTabId,
+  resolveProjectIdFromWorkspace,
+  resolveWorkbenchProjectId,
+  resolveWorkbenchProjectIdFromState,
+} from '@/lib/projectResolution'
 import { useProjectsStore } from '@/stores/projects'
 import { useWorkspaceStore } from '@/stores/workspace'
 import type { PaneLayout, Project, Tab } from '@/types'
@@ -154,5 +159,22 @@ describe('project resolution', () => {
     })
 
     expect(resolveWorkbenchProjectId()).toBe('project-1')
+  })
+
+  it('resolves lifecycle context from live projects only', () => {
+    expect(resolveWorkbenchProjectIdFromState({
+      activeProjectId: 'missing-project',
+      projects: new Map([
+        ['project-1', project('project-1')],
+        ['project-2', project('project-2')],
+      ]),
+      projectOrder: ['project-1', 'project-2'],
+      layout: splitLayout,
+      tabs: new Map([
+        ['tab-a', tab('tab-a', 'missing-project')],
+        ['tab-b', tab('tab-b', 'project-2')],
+      ]),
+      activePaneId: 'pane-2',
+    })).toBe('project-2')
   })
 })

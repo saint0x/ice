@@ -38,6 +38,7 @@ import {
 } from '@/lib/backend'
 import { prefetchProjectDocuments as prefetchEditorProjectDocuments } from '@/lib/editorDocuments'
 import { logFrontendEvent } from '@/lib/diagnostics'
+import { resolveWorkbenchProjectIdFromState } from '@/lib/projectResolution'
 import { closeWorkspaceTabsForBrowserTab, closeWorkspaceTabsForTerminalSession, reconcileWorkspaceBackingResources } from '@/lib/workspaceTabs'
 import { useFilesStore } from '@/stores/files'
 import { useGitStore } from '@/stores/git'
@@ -89,6 +90,8 @@ export function registerBackendEventListener<TPayload>(input: {
 export function useBackendIntegration() {
   const hydrateProjects = useProjectsStore((state) => state.hydrateProjects)
   const activeProjectId = useProjectsStore((state) => state.activeProjectId)
+  const projects = useProjectsStore((state) => state.projects)
+  const projectOrder = useProjectsStore((state) => state.projectOrder)
   const updateProject = useProjectsStore((state) => state.updateProject)
   const hydrateTree = useFilesStore((state) => state.hydrateTree)
   const hydrateGitState = useGitStore((state) => state.hydrateGitState)
@@ -123,6 +126,14 @@ export function useBackendIntegration() {
   const layout = useWorkspaceStore((state) => state.layout)
   const tabs = useWorkspaceStore((state) => state.tabs)
   const activePaneId = useWorkspaceStore((state) => state.activePaneId)
+  const activeProjectContextId = resolveWorkbenchProjectIdFromState({
+    activeProjectId,
+    projects,
+    projectOrder,
+    layout,
+    activePaneId,
+    tabs,
+  })
 
   const hydratedRef = useRef(false)
   const watchedProjectRef = useRef<string | null>(null)
@@ -505,7 +516,7 @@ export function useBackendIntegration() {
       }
     }
 
-    if (!activeProjectId) {
+    if (!activeProjectContextId) {
       void stopCurrentWatch()
       return () => {
         cancelled = true
@@ -514,32 +525,32 @@ export function useBackendIntegration() {
 
     const activateProject = async () => {
       try {
-        if (watchedProjectRef.current && watchedProjectRef.current !== activeProjectId) {
+        if (watchedProjectRef.current && watchedProjectRef.current !== activeProjectContextId) {
           await stopCurrentWatch()
         }
         const [tree, git, browserSidebarItems, codexSidebarItems] = await Promise.all([
-          projectTreeReadNested(activeProjectId),
-          gitStatusRead(activeProjectId),
-          projectBrowserSidebar(activeProjectId),
-          projectCodexSidebar(activeProjectId),
+          projectTreeReadNested(activeProjectContextId),
+          gitStatusRead(activeProjectContextId),
+          projectBrowserSidebar(activeProjectContextId),
+          projectCodexSidebar(activeProjectContextId),
         ])
         if (cancelled) return
         const mappedTree = toFileTree(tree)
-        hydrateTree(activeProjectId, mappedTree)
-        hydrateGitState(activeProjectId, toGitState(git))
-        hydrateBrowserSidebarItems(activeProjectId, browserSidebarItems.map(toProjectBrowserSidebarItem))
-        hydrateCodexSidebarItems(activeProjectId, codexSidebarItems.map(toProjectCodexSidebarItem))
-        updateProject(activeProjectId, { branch: git.branch ?? 'detached' })
+        hydrateTree(activeProjectContextId, mappedTree)
+        hydrateGitState(activeProjectContextId, toGitState(git))
+        hydrateBrowserSidebarItems(activeProjectContextId, browserSidebarItems.map(toProjectBrowserSidebarItem))
+        hydrateCodexSidebarItems(activeProjectContextId, codexSidebarItems.map(toProjectCodexSidebarItem))
+        updateProject(activeProjectContextId, { branch: git.branch ?? 'detached' })
         prefetchEditorProjectDocuments({
-          projectId: activeProjectId,
+          projectId: activeProjectContextId,
           tree: mappedTree,
-          selectedPath: useFilesStore.getState().selectedPath.get(activeProjectId),
+          selectedPath: useFilesStore.getState().selectedPath.get(activeProjectContextId),
           openTabs: Array.from(useWorkspaceStore.getState().tabs.values()),
           eager: true,
         })
-        if (watchedProjectRef.current !== activeProjectId) {
-          await projectWatchStart(activeProjectId)
-          watchedProjectRef.current = activeProjectId
+        if (watchedProjectRef.current !== activeProjectContextId) {
+          await projectWatchStart(activeProjectContextId)
+          watchedProjectRef.current = activeProjectContextId
         }
       } catch (error) {
         if (!cancelled) {
@@ -552,7 +563,7 @@ export function useBackendIntegration() {
     return () => {
       cancelled = true
     }
-  }, [activeProjectId, hydrateBrowserSidebarItems, hydrateCodexSidebarItems, hydrateGitState, hydrateTree, pushError, updateProject])
+  }, [activeProjectContextId, hydrateBrowserSidebarItems, hydrateCodexSidebarItems, hydrateGitState, hydrateTree, pushError, updateProject])
 
   useEffect(() => {
     if (!hydratedRef.current) return
