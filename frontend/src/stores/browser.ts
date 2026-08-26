@@ -26,18 +26,29 @@ export const useBrowserStore = create<BrowserState>((set) => ({
     set((s) => {
       const nextTabs = new Map<string, BrowserTab>()
       const nextActiveTabId = new Map(s.activeTabId)
+      const tabsByProject = new Map<ProjectId, BrowserTab[]>()
       for (const tab of tabs) {
         nextTabs.set(tab.id, tab)
+        tabsByProject.set(tab.projectId, [...(tabsByProject.get(tab.projectId) ?? []), tab])
       }
-      const projectIds = new Set<string>(tabs.map((tab) => tab.projectId))
+      const projectIds = new Set<string>([
+        ...tabsByProject.keys(),
+        ...nextActiveTabId.keys(),
+      ])
       for (const projectId of projectIds) {
         const activeId = nextActiveTabId.get(projectId)
-        const projectTabs = tabs.filter((tab) => tab.projectId === projectId)
+        const projectTabs = tabsByProject.get(projectId) ?? []
         if (!activeId || !nextTabs.has(activeId)) {
           nextActiveTabId.set(projectId, projectTabs[0]?.id ?? null)
         }
       }
-      return { tabs: nextTabs, activeTabId: nextActiveTabId }
+      const runtimeNotices = new Map(s.runtimeNotices)
+      for (const tabId of runtimeNotices.keys()) {
+        if (!nextTabs.has(tabId)) {
+          runtimeNotices.delete(tabId)
+        }
+      }
+      return { tabs: nextTabs, activeTabId: nextActiveTabId, runtimeNotices }
     }),
 
   hydrateSidebarItems: (projectId, items) =>

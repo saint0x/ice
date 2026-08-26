@@ -37,18 +37,35 @@ export const useTerminalStore = create<TerminalState>((set) => ({
     set((s) => {
       const nextSessions = new Map<TerminalId, TerminalSession>()
       const nextActiveSessionId = new Map(s.activeSessionId)
+      const sessionsByProject = new Map<ProjectId, TerminalSession[]>()
       for (const session of sessions) {
         nextSessions.set(session.id, session)
+        sessionsByProject.set(session.projectId, [...(sessionsByProject.get(session.projectId) ?? []), session])
       }
-      const projectIds = new Set<string>(sessions.map((session) => session.projectId))
+      const projectIds = new Set<string>([
+        ...sessionsByProject.keys(),
+        ...nextActiveSessionId.keys(),
+      ])
       for (const projectId of projectIds) {
         const activeId = nextActiveSessionId.get(projectId)
-        const projectSessions = sessions.filter((session) => session.projectId === projectId)
+        const projectSessions = sessionsByProject.get(projectId) ?? []
         if (!activeId || !nextSessions.has(activeId)) {
           nextActiveSessionId.set(projectId, projectSessions[0]?.id ?? null)
         }
       }
-      return { sessions: nextSessions, activeSessionId: nextActiveSessionId }
+      const scrollback = new Map(s.scrollback)
+      for (const sessionId of scrollback.keys()) {
+        if (!nextSessions.has(sessionId)) {
+          scrollback.delete(sessionId)
+        }
+      }
+      const diagnostics = new Map(s.diagnostics)
+      for (const sessionId of diagnostics.keys()) {
+        if (!nextSessions.has(sessionId)) {
+          diagnostics.delete(sessionId)
+        }
+      }
+      return { sessions: nextSessions, activeSessionId: nextActiveSessionId, scrollback, diagnostics }
     }),
 
   upsertSession: (session) =>

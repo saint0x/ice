@@ -237,6 +237,12 @@ export const useCodexStore = create<CodexState>((set) => ({
       for (const thread of nextThreads.values()) {
         messagesByThread = reconcileThreadMessages(messagesByThread, thread.id, thread.status)
       }
+      messagesByThread = new Map(messagesByThread)
+      for (const threadId of messagesByThread.keys()) {
+        if (!nextThreads.has(threadId)) {
+          messagesByThread.delete(threadId)
+        }
+      }
       messagesByThread = pruneMessagesByThread(messagesByThread, nextActiveThreadId)
       return { threads: nextThreads, activeThreadId: nextActiveThreadId, messagesByThread }
     }),

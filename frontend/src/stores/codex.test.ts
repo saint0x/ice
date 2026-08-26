@@ -261,4 +261,27 @@ describe('codex store reconciliation', () => {
     expect(assistant?.content).toBe('Final answer')
     expect(assistant?.state).toBe('complete')
   })
+
+  it('drops cached messages for threads missing from backend hydration', () => {
+    useCodexStore.setState({
+      activeThreadId: new Map([['project-a', 'thread-stale']]),
+      messagesByThread: new Map([
+        ['thread-stale', [{
+          id: 'message-stale',
+          threadId: 'thread-stale',
+          projectId: 'project-a',
+          role: 'assistant',
+          content: 'stale',
+          state: 'complete',
+          createdAt: '2026-05-01T00:00:00Z',
+          updatedAt: '2026-05-01T00:00:00Z',
+        }]],
+      ]),
+    })
+
+    useCodexStore.getState().hydrateThreads([])
+
+    expect(useCodexStore.getState().activeThreadId.get('project-a')).toBeNull()
+    expect(useCodexStore.getState().messagesByThread.has('thread-stale')).toBe(false)
+  })
 })
