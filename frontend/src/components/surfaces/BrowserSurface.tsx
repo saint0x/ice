@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, RotateCw, Lock, Globe, ExternalLink, Search, X, AlertTriangle, Pin, Download, Info } from 'lucide-react'
 import type { BrowserRuntimeNotice, Tab } from '@/types'
 import {
@@ -15,6 +15,7 @@ import {
   toBrowserTab,
 } from '@/lib/backend'
 import { runBrowserSurfaceAction } from '@/lib/browserSurfaceActions'
+import { clearSourcedSurfaceError, setSourcedSurfaceError, setUnsourcedSurfaceError } from '@/lib/surfaceErrors'
 import { tabMetaString } from '@/lib/tabMeta'
 import { useBrowserStore } from '@/stores/browser'
 import { useNotificationsStore } from '@/stores/notifications'
@@ -25,6 +26,8 @@ interface Props {
 }
 
 const EMPTY_NOTICES: readonly BrowserRuntimeNotice[] = []
+const RENDERER_ATTACH_ERROR_SOURCE = 'browser-renderer-attach'
+const RENDERER_BOUNDS_ERROR_SOURCE = 'browser-renderer-bounds'
 
 export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
   const browserTabId = tabMetaString(tab, 'tabId') ?? undefined
@@ -36,8 +39,13 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
   const [draftUrl, setDraftUrl] = useState<string | null>(null)
   const [findQuery, setFindQuery] = useState('')
   const [surfaceError, setSurfaceError] = useState<string | null>(null)
+  const surfaceErrorSourceRef = useRef<string | null>(null)
   const viewportRef = useRef<HTMLDivElement>(null)
   const findInputRef = useRef<HTMLInputElement | null>(null)
+
+  const setActionSurfaceError = useCallback((message: string | null) => {
+    setUnsourcedSurfaceError(surfaceErrorSourceRef, setSurfaceError, message)
+  }, [])
 
   const rendererId = useMemo(() => (
     browserTabId ? `renderer-${browserTabId}-${tab.id}` : undefined
@@ -66,10 +74,15 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
     if (!browserTabId || !rendererId) return
     let disposed = false
     void browserRendererAttach(browserTabId, rendererId, tab.id)
+      .then(() => {
+        if (!disposed) {
+          clearSourcedSurfaceError(surfaceErrorSourceRef, setSurfaceError, RENDERER_ATTACH_ERROR_SOURCE)
+        }
+      })
       .catch((error: unknown) => {
         if (!disposed) {
           const message = error instanceof Error ? error.message : 'Failed to attach native browser renderer'
-          setSurfaceError(message)
+          setSourcedSurfaceError(surfaceErrorSourceRef, setSurfaceError, RENDERER_ATTACH_ERROR_SOURCE, message)
           pushError('Browser renderer attach failed', error, message)
         }
       })
@@ -92,18 +105,16 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
       const rect = element.getBoundingClientRect()
       if (rect.width < 1 || rect.height < 1) return
       void browserRendererBoundsSet(browserTabId, rect.left, rect.top, rect.width, rect.height)
+        .then(() => {
+          if (!disposed) {
+            clearSourcedSurfaceError(surfaceErrorSourceRef, setSurfaceError, RENDERER_BOUNDS_ERROR_SOURCE)
+          }
+        })
         .catch((error: unknown) => {
           if (!disposed) {
             const message = error instanceof Error ? error.message : 'Failed to position native browser renderer'
-            setSurfaceError(message)
+            setSourcedSurfaceError(surfaceErrorSourceRef, setSurfaceError, RENDERER_BOUNDS_ERROR_SOURCE, message)
             pushError('Browser renderer bounds failed', error, message)
-          }
-        })
-        .then(() => {
-          if (!disposed) {
-            setSurfaceError((current) => (
-              current === 'Failed to position native browser renderer' ? null : current
-            ))
           }
         })
     }
@@ -145,7 +156,7 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
     }), {
       title: 'Browser find failed',
       fallbackMessage: 'Failed to search page',
-      setSurfaceError,
+      setSurfaceError: setActionSurfaceError,
       pushError,
     })
   }
@@ -185,7 +196,7 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
               void runBrowserSurfaceAction(browserTabBack(browserTabId), {
                 title: 'Browser back failed',
                 fallbackMessage: 'Failed to go back',
-                setSurfaceError,
+                setSurfaceError: setActionSurfaceError,
                 pushError,
                 onSuccess: (next) => upsertBrowserTab(toBrowserTab(next)),
               })
@@ -202,7 +213,7 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
               void runBrowserSurfaceAction(browserTabForward(browserTabId), {
                 title: 'Browser forward failed',
                 fallbackMessage: 'Failed to go forward',
-                setSurfaceError,
+                setSurfaceError: setActionSurfaceError,
                 pushError,
                 onSuccess: (next) => upsertBrowserTab(toBrowserTab(next)),
               })
@@ -218,7 +229,7 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
               void runBrowserSurfaceAction(browserTabReload(browserTabId), {
                 title: 'Browser reload failed',
                 fallbackMessage: 'Failed to reload page',
-                setSurfaceError,
+                setSurfaceError: setActionSurfaceError,
                 pushError,
                 onSuccess: (next) => upsertBrowserTab(toBrowserTab(next)),
               })
@@ -237,7 +248,7 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
                 })
                 .catch((error: unknown) => {
                   const message = error instanceof Error ? error.message : 'Failed to open external browser'
-                  setSurfaceError(message)
+                  setActionSurfaceError(message)
                   pushError('External browser open failed', error, message)
                 })
             }}
@@ -252,7 +263,7 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
               void runBrowserSurfaceAction(browserTabPinSet(browserTabId, !browserTab.isPinned), {
                 title: 'Browser pin failed',
                 fallbackMessage: 'Failed to update browser tab pin',
-                setSurfaceError,
+                setSurfaceError: setActionSurfaceError,
                 pushError,
                 onSuccess: (next) => upsertBrowserTab(toBrowserTab(next)),
               })
@@ -276,7 +287,7 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
                 void runBrowserSurfaceAction(browserTabNavigate(browserTabId, url), {
                   title: 'Browser navigation failed',
                   fallbackMessage: 'Failed to navigate browser tab',
-                  setSurfaceError,
+                  setSurfaceError: setActionSurfaceError,
                   pushError,
                   onSuccess: (next) => {
                     setDraftUrl(null)
