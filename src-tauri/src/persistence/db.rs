@@ -1,7 +1,7 @@
 use anyhow::Result;
 use rusqlite::{params, types::Type, Connection, OptionalExtension};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -23,6 +23,7 @@ impl PersistenceService {
     pub fn new(db_path: PathBuf) -> Result<Self> {
         let this = Self { db_path };
         this.migrate()?;
+        this.prune_orphaned_project_state_sync()?;
         Ok(this)
     }
 
@@ -246,6 +247,104 @@ impl PersistenceService {
             "ALTER TABLE browser_tabs ADD COLUMN is_secure INTEGER NOT NULL DEFAULT 0",
         )?;
         write_schema_version(&conn, existing_version.unwrap_or(CURRENT_SCHEMA_VERSION))?;
+        Ok(())
+    }
+
+    fn prune_orphaned_project_state_sync(&self) -> Result<()> {
+        let mut conn = self.connect()?;
+        let tx = conn.transaction()?;
+        let project_ids = {
+            let mut stmt = tx.prepare("SELECT id FROM projects")?;
+            let rows = stmt
+                .query_map([], |row| row.get::<_, String>(0))?
+                .collect::<rusqlite::Result<HashSet<_>>>()?;
+            rows
+        };
+
+        tx.execute(
+            "
+            DELETE FROM browser_history
+            WHERE tab_id IN (
+              SELECT tab_id FROM browser_tabs
+              WHERE project_id NOT IN (SELECT id FROM projects)
+            )
+            ",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM browser_tabs WHERE project_id NOT IN (SELECT id FROM projects)",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM browser_history WHERE tab_id NOT IN (SELECT tab_id FROM browser_tabs)",
+            [],
+        )?;
+        tx.execute(
+            "
+            DELETE FROM terminal_scrollback
+            WHERE session_id IN (
+              SELECT session_id FROM terminal_sessions
+              WHERE project_id NOT IN (SELECT id FROM projects)
+            )
+            ",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM terminal_sessions WHERE project_id NOT IN (SELECT id FROM projects)",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM terminal_scrollback WHERE session_id NOT IN (SELECT session_id FROM terminal_sessions)",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM codex_messages WHERE project_id NOT IN (SELECT id FROM projects)",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM codex_threads WHERE project_id NOT IN (SELECT id FROM projects)",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM codex_approvals WHERE project_id NOT IN (SELECT id FROM projects)",
+            [],
+        )?;
+        tx.execute(
+            "
+            DELETE FROM app_config
+            WHERE key LIKE 'browser.restorePolicy.%'
+              AND substr(key, length('browser.restorePolicy.') + 1) NOT IN (SELECT id FROM projects)
+            ",
+            [],
+        )?;
+
+        let workspace_sessions = {
+            let mut stmt =
+                tx.prepare("SELECT workspace_id, session_json FROM workspace_sessions")?;
+            let rows = stmt
+                .query_map([], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                })?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            rows
+        };
+        for (workspace_id, session_json) in workspace_sessions {
+            let session = serde_json::from_str::<WorkspaceSessionState>(&session_json)?;
+            let (pruned, changed) = prune_workspace_session_projects(session, &project_ids);
+            if changed {
+                tx.execute(
+                    "
+                    UPDATE workspace_sessions
+                    SET session_json = ?2,
+                        updated_at = datetime('now')
+                    WHERE workspace_id = ?1
+                    ",
+                    params![workspace_id, serde_json::to_string(&pruned)?],
+                )?;
+            }
+        }
+
+        tx.commit()?;
         Ok(())
     }
 
@@ -1528,6 +1627,56 @@ fn read_codex_message_by_id(conn: &Connection, message_id: &str) -> Result<Codex
         .ok_or_else(|| anyhow::anyhow!("missing codex message {}", message_id))
 }
 
+fn prune_workspace_session_projects(
+    mut session: WorkspaceSessionState,
+    project_ids: &HashSet<String>,
+) -> (WorkspaceSessionState, bool) {
+    let original_tabs = session.tabs.clone();
+    session
+        .tabs
+        .retain(|tab| project_ids.contains(&tab.project_id));
+    let retained_tab_ids = session
+        .tabs
+        .iter()
+        .map(|tab| tab.id.clone())
+        .collect::<HashSet<_>>();
+    let changed_node = prune_workspace_node_tabs(&mut session.root, &retained_tab_ids);
+    let changed = changed_node || session.tabs != original_tabs;
+    (session, changed)
+}
+
+fn prune_workspace_node_tabs(
+    node: &mut crate::workspace::service::WorkspacePaneNode,
+    tab_ids: &HashSet<String>,
+) -> bool {
+    match node {
+        crate::workspace::service::WorkspacePaneNode::Leaf {
+            tabs,
+            active_tab_id,
+            ..
+        } => {
+            let original_tabs = tabs.clone();
+            tabs.retain(|tab_id| tab_ids.contains(tab_id));
+            let active_changed = match active_tab_id.as_ref() {
+                Some(active_tab_id) if tabs.iter().any(|tab_id| tab_id == active_tab_id) => false,
+                Some(_) => {
+                    *active_tab_id = tabs.first().cloned();
+                    true
+                }
+                None => false,
+            };
+            active_changed || *tabs != original_tabs
+        }
+        crate::workspace::service::WorkspacePaneNode::Split(split) => {
+            let mut changed = false;
+            for child in &mut split.children {
+                changed = prune_workspace_node_tabs(child, tab_ids) || changed;
+            }
+            changed
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{PersistenceService, CURRENT_SCHEMA_VERSION};
@@ -1795,6 +1944,225 @@ mod tests {
             .load_pending_approvals_sync()
             .expect("approval empty")
             .is_empty());
+    }
+
+    #[tokio::test]
+    async fn startup_prunes_state_for_missing_projects() {
+        let temp = tempdir().expect("temp dir");
+        let db_path = temp.path().join("ice.db");
+        {
+            let db = PersistenceService::new(db_path.clone()).expect("db");
+            db.insert_project_sync(&ProjectRecord {
+                id: "project-live".to_string(),
+                name: "Live".to_string(),
+                root_path: "/tmp/live".to_string(),
+                color_token: "blue".to_string(),
+                icon_hint: None,
+                is_trusted: true,
+                created_at: "2026-01-01T00:00:00Z".to_string(),
+                last_opened_at: "2026-01-01T00:00:00Z".to_string(),
+            })
+            .expect("insert live project");
+
+            db.upsert_workspace_session(
+                "workspace-a".to_string(),
+                &WorkspaceSessionState {
+                    active_pane_id: "pane-1".to_string(),
+                    tabs: vec![
+                        WorkspaceTabRecord {
+                            id: "workspace-live".to_string(),
+                            project_id: "project-live".to_string(),
+                            kind: "editor".to_string(),
+                            title: "live.rs".to_string(),
+                            icon: None,
+                            dirty: false,
+                            pinned: false,
+                            meta: Some(json!({"path":"src/live.rs"})),
+                        },
+                        WorkspaceTabRecord {
+                            id: "workspace-orphan".to_string(),
+                            project_id: "project-missing".to_string(),
+                            kind: "editor".to_string(),
+                            title: "orphan.rs".to_string(),
+                            icon: None,
+                            dirty: false,
+                            pinned: false,
+                            meta: Some(json!({"path":"src/orphan.rs"})),
+                        },
+                    ],
+                    root: WorkspacePaneNode::Leaf {
+                        id: "pane-1".to_string(),
+                        tabs: vec!["workspace-live".to_string(), "workspace-orphan".to_string()],
+                        active_tab_id: Some("workspace-orphan".to_string()),
+                    },
+                },
+            )
+            .await
+            .expect("workspace write");
+
+            for project_id in ["project-live", "project-missing"] {
+                db.upsert_browser_tab(BrowserTabRecord {
+                    tab_id: format!("browser-{project_id}"),
+                    project_id: project_id.to_string(),
+                    url: "https://example.com".to_string(),
+                    title: project_id.to_string(),
+                    is_pinned: false,
+                    can_go_back: false,
+                    can_go_forward: false,
+                    is_loading: false,
+                    favicon_url: None,
+                    security_origin: Some("https://example.com".to_string()),
+                    is_secure: true,
+                })
+                .await
+                .expect("browser write");
+                db.replace_browser_history(
+                    format!("browser-{project_id}"),
+                    vec![BrowserHistoryEntry {
+                        tab_id: format!("browser-{project_id}"),
+                        position: 0,
+                        url: "https://example.com".to_string(),
+                        title: project_id.to_string(),
+                    }],
+                )
+                .await
+                .expect("browser history write");
+
+                db.upsert_terminal_session(TerminalSessionRecord {
+                    session_id: format!("terminal-{project_id}"),
+                    project_id: project_id.to_string(),
+                    cwd: "/tmp/live".to_string(),
+                    shell: "zsh".to_string(),
+                    shell_path: "/bin/zsh".to_string(),
+                    title: "Terminal".to_string(),
+                    cols: 80,
+                    rows: 24,
+                    is_running: false,
+                    startup_command: None,
+                    env_overrides: None,
+                    restored_from_persistence: false,
+                    last_exit_code: None,
+                    last_exit_signal: None,
+                    last_exit_reason: None,
+                    scrollback_bytes: 0,
+                })
+                .await
+                .expect("terminal write");
+                db.upsert_terminal_scrollback(
+                    format!("terminal-{project_id}"),
+                    format!("scrollback for {project_id}"),
+                )
+                .await
+                .expect("terminal scrollback write");
+
+                db.upsert_codex_thread(CodexThreadBinding {
+                    project_id: project_id.to_string(),
+                    thread_id: format!("thread-{project_id}"),
+                    title: Some("Thread".to_string()),
+                    model: Some("gpt-5-codex".to_string()),
+                    status: "idle".to_string(),
+                    last_turn_id: Some("turn-1".to_string()),
+                    last_assistant_message: Some("Ready".to_string()),
+                    unread: false,
+                })
+                .await
+                .expect("codex thread write");
+                db.upsert_codex_message(CodexMessageRecord {
+                    message_id: format!("message-{project_id}"),
+                    project_id: project_id.to_string(),
+                    thread_id: format!("thread-{project_id}"),
+                    turn_id: Some("turn-1".to_string()),
+                    role: "assistant".to_string(),
+                    content: "Ready".to_string(),
+                    state: "complete".to_string(),
+                    created_at: "2026-01-01T00:00:00Z".to_string(),
+                    updated_at: "2026-01-01T00:00:00Z".to_string(),
+                })
+                .await
+                .expect("codex message write");
+                db.upsert_pending_approval(PendingApprovalRecord {
+                    request_id: if project_id == "project-live" { 1 } else { 2 },
+                    project_id: project_id.to_string(),
+                    thread_id: Some(format!("thread-{project_id}")),
+                    action_type: "approval/request".to_string(),
+                    category: "filesystem".to_string(),
+                    risk_level: "medium".to_string(),
+                    policy_action: "prompt".to_string(),
+                    policy_reason: None,
+                    description: "Allow edit".to_string(),
+                    context_json: Some(json!({"path":"src/main.rs"})),
+                })
+                .await
+                .expect("approval write");
+                db.config_set(
+                    format!("browser.restorePolicy.{project_id}"),
+                    json!("restore"),
+                )
+                .await
+                .expect("config write");
+            }
+        }
+
+        let db = PersistenceService::new(db_path).expect("reopen db");
+        assert_eq!(db.load_browser_tabs_sync().expect("browser read").len(), 1);
+        assert_eq!(
+            db.load_browser_history_sync()
+                .expect("browser history read")
+                .len(),
+            1
+        );
+        assert_eq!(
+            db.load_terminal_sessions_sync()
+                .expect("terminal read")
+                .len(),
+            1
+        );
+        assert_eq!(
+            db.load_terminal_scrollback_sync()
+                .expect("terminal scrollback read")
+                .len(),
+            1
+        );
+        assert_eq!(db.load_codex_threads_sync().expect("codex read").len(), 1);
+        assert_eq!(
+            db.load_codex_messages_sync()
+                .expect("codex message read")
+                .len(),
+            1
+        );
+        assert_eq!(
+            db.load_pending_approvals_sync()
+                .expect("approval read")
+                .len(),
+            1
+        );
+        assert_eq!(
+            db.config_get("browser.restorePolicy.project-live")
+                .await
+                .expect("live restore policy"),
+            Some(json!("restore"))
+        );
+        assert_eq!(
+            db.config_get("browser.restorePolicy.project-missing")
+                .await
+                .expect("orphan restore policy"),
+            None
+        );
+        let session = db
+            .read_workspace_session("workspace-a")
+            .await
+            .expect("workspace read")
+            .expect("workspace exists");
+        assert_eq!(session.tabs.len(), 1);
+        assert_eq!(session.tabs[0].id, "workspace-live");
+        assert_eq!(
+            session.root,
+            WorkspacePaneNode::Leaf {
+                id: "pane-1".to_string(),
+                tabs: vec!["workspace-live".to_string()],
+                active_tab_id: Some("workspace-live".to_string()),
+            },
+        );
     }
 
     #[test]
