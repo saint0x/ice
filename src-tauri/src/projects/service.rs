@@ -1,4 +1,6 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
+use serde::de::DeserializeOwned;
+use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -164,12 +166,12 @@ impl ProjectService {
 
     pub async fn browser_restore_policy(&self, project_id: &str) -> Result<BrowserRestorePolicy> {
         let _ = self.require_project(project_id).await?;
-        Ok(self
-            .persistence
-            .config_get(&browser_restore_policy_key(project_id))
-            .await?
-            .and_then(|value| serde_json::from_value(value).ok())
-            .unwrap_or_default())
+        decode_optional_config(
+            self.persistence
+                .config_get(&browser_restore_policy_key(project_id))
+                .await?,
+            &browser_restore_policy_key(project_id),
+        )
     }
 
     pub async fn set_browser_restore_policy(
@@ -205,12 +207,8 @@ impl ProjectService {
 
     async fn list_project_records(&self) -> Result<Vec<ProjectRecord>> {
         let records = self.list_project_records_unsorted().await?;
-        let stored_order = self
-            .persistence
-            .config_get("projects.order")
-            .await?
-            .and_then(|value| serde_json::from_value::<Vec<String>>(value).ok())
-            .unwrap_or_default();
+        let stored_order =
+            decode_project_order_config(self.persistence.config_get("projects.order").await?)?;
         Ok(order_projects(records, &stored_order))
     }
 
@@ -220,12 +218,8 @@ impl ProjectService {
     }
 
     async fn prepend_project_order(&self, project_id: String) -> Result<()> {
-        let mut order = self
-            .persistence
-            .config_get("projects.order")
-            .await?
-            .and_then(|value| serde_json::from_value::<Vec<String>>(value).ok())
-            .unwrap_or_default();
+        let mut order =
+            decode_project_order_config(self.persistence.config_get("projects.order").await?)?;
         order.retain(|candidate| candidate != &project_id);
         order.insert(0, project_id);
         self.persistence
@@ -234,17 +228,28 @@ impl ProjectService {
     }
 
     async fn remove_project_order(&self, project_id: &str) -> Result<()> {
-        let mut order = self
-            .persistence
-            .config_get("projects.order")
-            .await?
-            .and_then(|value| serde_json::from_value::<Vec<String>>(value).ok())
-            .unwrap_or_default();
+        let mut order =
+            decode_project_order_config(self.persistence.config_get("projects.order").await?)?;
         order.retain(|candidate| candidate != project_id);
         self.persistence
             .config_set("projects.order".to_string(), serde_json::json!(order))
             .await
     }
+}
+
+fn decode_optional_config<T>(value: Option<Value>, key: &str) -> Result<T>
+where
+    T: DeserializeOwned + Default,
+{
+    match value {
+        Some(value) => serde_json::from_value(value)
+            .with_context(|| format!("stored config {key} has an invalid shape")),
+        None => Ok(T::default()),
+    }
+}
+
+fn decode_project_order_config(value: Option<Value>) -> Result<Vec<String>> {
+    decode_optional_config(value, "projects.order")
 }
 
 fn browser_restore_policy_key(project_id: &str) -> String {
@@ -320,9 +325,11 @@ mod tests {
         )
         .expect_err("unknown project should fail");
 
-        assert!(error
-            .to_string()
-            .contains("unknown project project-missing"));
+        assert!(
+            error
+                .to_string()
+                .contains("unknown project project-missing")
+        );
     }
 
     #[test]
@@ -334,5 +341,36 @@ mod tests {
         .expect_err("duplicate project should fail");
 
         assert!(error.to_string().contains("duplicate project project-a"));
+    }
+
+    #[test]
+    fn missing_config_decodes_to_default_without_error() {
+        let policy: BrowserRestorePolicy =
+            decode_optional_config(None, "browser.restorePolicy.project-1")
+                .expect("missing config should default");
+        let order = decode_project_order_config(None).expect("missing order should default");
+
+        assert_eq!(policy, BrowserRestorePolicy::Pinned);
+        assert!(order.is_empty());
+    }
+
+    #[test]
+    fn invalid_config_shape_returns_contextual_error() {
+        let policy_error =
+            decode_optional_config::<BrowserRestorePolicy>(Some(serde_json::json!(42)), "policy")
+                .expect_err("invalid policy config should fail");
+        let order_error = decode_project_order_config(Some(serde_json::json!({"order": []})))
+            .expect_err("invalid order config should fail");
+
+        assert!(
+            policy_error
+                .to_string()
+                .contains("stored config policy has an invalid shape")
+        );
+        assert!(
+            order_error
+                .to_string()
+                .contains("stored config projects.order has an invalid shape")
+        );
     }
 }
