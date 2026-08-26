@@ -6,12 +6,14 @@ import { BottomDock } from './BottomDock'
 import { ChatPanel } from './ChatPanel'
 import { ToastViewport } from './ToastViewport'
 import { useWorkspaceStore } from '@/stores/workspace'
+import { useAppMenuCommands } from '@/hooks/useAppMenuCommands'
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts'
 import { useBackendIntegration } from '@/hooks/useBackendIntegration'
 import { useMenuEvents } from '@/hooks/useMenuEvents'
 import styles from './AppShell.module.css'
 
 export const AppShell = memo(function AppShell() {
+  useAppMenuCommands()
   useKeyboardShortcuts()
   useBackendIntegration()
   useMenuEvents()

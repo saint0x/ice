@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
-import { terminalCreate, terminalInterrupt, terminalRespawn, terminalScrollbackClear, terminalSendEof, toTerminalSession } from '@/lib/backend'
+import { terminalInterrupt, terminalRespawn, terminalScrollbackClear, terminalSendEof, toTerminalSession } from '@/lib/backend'
 import { createAndOpenBrowserTab } from '@/lib/browserTabs'
+import { createAndFocusTerminalSession } from '@/lib/terminalSessions'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useProjectsStore } from '@/stores/projects'
 import { useTerminalStore } from '@/stores/terminal'
@@ -80,11 +81,8 @@ export function useKeyboardShortcuts() {
         workspace.splitPane(workspace.activePaneId, 'vertical')
       } else if (meta && e.shiftKey && e.key.toLowerCase() === 't' && activeProjectId && !editable) {
         e.preventDefault()
-        workspace.setBottomDockOpen(true)
-        void terminalCreate(activeProjectId).then((session) => {
-          const mapped = toTerminalSession(session)
-          useTerminalStore.getState().upsertSession(mapped)
-          useTerminalStore.getState().setActiveSession(activeProjectId, mapped.id)
+        void createAndFocusTerminalSession(activeProjectId).catch((error: unknown) => {
+          notifications.pushError('Terminal create failed', error, 'Failed to create terminal')
         })
       } else if (meta && e.key === '.' && activeSession?.isRunning && !editable) {
         e.preventDefault()

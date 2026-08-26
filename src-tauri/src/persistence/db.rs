@@ -3,6 +3,7 @@ use rusqlite::{params, types::Type, Connection, OptionalExtension};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use crate::browser::service::{BrowserHistoryEntry, BrowserTabRecord};
 use crate::codex::service::{CodexMessageRecord, CodexThreadBinding};
@@ -26,7 +27,12 @@ impl PersistenceService {
     }
 
     fn connect(&self) -> Result<Connection> {
-        Ok(Connection::open(&self.db_path)?)
+        if let Some(parent) = self.db_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let connection = Connection::open(&self.db_path)?;
+        connection.busy_timeout(Duration::from_secs(5))?;
+        Ok(connection)
     }
 
     fn migrate(&self) -> Result<()> {
@@ -391,12 +397,66 @@ impl PersistenceService {
         tokio::task::spawn_blocking(move || this.read_project_sync(&project_id)).await?
     }
 
+    pub fn read_project_by_root_path_sync(&self, root_path: &str) -> Result<Option<ProjectRecord>> {
+        let conn = self.connect()?;
+        conn.query_row(
+            "
+            SELECT id, name, root_path, color_token, icon_hint, is_trusted, created_at, last_opened_at
+            FROM projects
+            WHERE root_path = ?1
+            ",
+            params![root_path],
+            |row| {
+                Ok(ProjectRecord {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    root_path: row.get(2)?,
+                    color_token: row.get(3)?,
+                    icon_hint: row.get(4)?,
+                    is_trusted: row.get::<_, i64>(5)? != 0,
+                    created_at: row.get(6)?,
+                    last_opened_at: row.get(7)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(Into::into)
+    }
+
     pub fn insert_project_sync(&self, project: &ProjectRecord) -> Result<()> {
         let conn = self.connect()?;
         conn.execute(
             "
             INSERT INTO projects (id, name, root_path, color_token, icon_hint, is_trusted, created_at, last_opened_at)
             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            ",
+            params![
+                project.id,
+                project.name,
+                project.root_path,
+                project.color_token,
+                project.icon_hint,
+                project.is_trusted as i64,
+                project.created_at,
+                project.last_opened_at
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn update_project_sync(&self, project: &ProjectRecord) -> Result<()> {
+        let conn = self.connect()?;
+        conn.execute(
+            "
+            UPDATE projects
+            SET name = ?2,
+                root_path = ?3,
+                color_token = ?4,
+                icon_hint = ?5,
+                is_trusted = ?6,
+                created_at = ?7,
+                last_opened_at = ?8
+            WHERE id = ?1
             ",
             params![
                 project.id,
@@ -440,6 +500,43 @@ impl PersistenceService {
             })
         })?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    pub fn delete_codex_thread_sync(&self, thread_id: &str) -> Result<()> {
+        let conn = self.connect()?;
+        conn.execute(
+            "DELETE FROM codex_messages WHERE thread_id = ?1",
+            params![thread_id],
+        )?;
+        conn.execute(
+            "DELETE FROM codex_threads WHERE thread_id = ?1",
+            params![thread_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn delete_scoped_prompt_assistant_messages_sync(&self) -> Result<usize> {
+        let conn = self.connect()?;
+        Ok(conn.execute(
+            "
+            DELETE FROM codex_messages
+            WHERE role = 'assistant'
+              AND content LIKE '[ICE PROJECT SCOPE]%'
+            ",
+            [],
+        )?)
+    }
+
+    pub fn delete_empty_assistant_messages_sync(&self) -> Result<usize> {
+        let conn = self.connect()?;
+        Ok(conn.execute(
+            "
+            DELETE FROM codex_messages
+            WHERE role = 'assistant'
+              AND trim(content) = ''
+            ",
+            [],
+        )?)
     }
 
     pub async fn upsert_codex_thread(&self, thread: CodexThreadBinding) -> Result<()> {
@@ -624,6 +721,61 @@ impl PersistenceService {
         .await?
     }
 
+    pub async fn finalize_streaming_codex_messages(
+        &self,
+        thread_id: String,
+        turn_id: Option<String>,
+    ) -> Result<Vec<CodexMessageRecord>> {
+        let this = self.clone();
+        tokio::task::spawn_blocking(move || -> Result<Vec<CodexMessageRecord>> {
+            let conn = this.connect()?;
+            let mut stmt = conn.prepare(
+                "
+                SELECT message_id, project_id, thread_id, turn_id, role, content, state, created_at, updated_at
+                FROM codex_messages
+                WHERE thread_id = ?1
+                  AND role = 'assistant'
+                  AND state = 'streaming'
+                  AND (?2 IS NULL OR turn_id = ?2)
+                ORDER BY created_at ASC, rowid ASC
+                ",
+            )?;
+            let rows = stmt.query_map(params![thread_id, turn_id], |row| {
+                Ok(CodexMessageRecord {
+                    message_id: row.get(0)?,
+                    project_id: row.get(1)?,
+                    thread_id: row.get(2)?,
+                    turn_id: row.get(3)?,
+                    role: row.get(4)?,
+                    content: row.get(5)?,
+                    state: row.get(6)?,
+                    created_at: row.get(7)?,
+                    updated_at: row.get(8)?,
+                })
+            })?;
+            let streaming = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+            if streaming.is_empty() {
+                return Ok(Vec::new());
+            }
+            for message in &streaming {
+                conn.execute(
+                    "
+                    UPDATE codex_messages
+                    SET state = 'complete',
+                        updated_at = datetime('now')
+                    WHERE message_id = ?1
+                    ",
+                    params![message.message_id],
+                )?;
+            }
+            streaming
+                .iter()
+                .map(|message| read_codex_message_by_id(&conn, &message.message_id))
+                .collect::<Result<Vec<_>>>()
+        })
+        .await?
+    }
+
     pub async fn delete_codex_threads_for_project(&self, project_id: String) -> Result<()> {
         let this = self.clone();
         tokio::task::spawn_blocking(move || -> Result<()> {
@@ -637,6 +789,15 @@ impl PersistenceService {
                 params![project_id],
             )?;
             Ok(())
+        })
+        .await??;
+        Ok(())
+    }
+
+    pub async fn delete_codex_thread(&self, thread_id: String) -> Result<()> {
+        let this = self.clone();
+        tokio::task::spawn_blocking(move || -> Result<()> {
+            this.delete_codex_thread_sync(&thread_id)
         })
         .await??;
         Ok(())
@@ -725,7 +886,16 @@ impl PersistenceService {
         let mut stmt = conn.prepare(
             "
             SELECT tab_id, position, url, title
-            FROM browser_history
+            FROM (
+              SELECT
+                tab_id,
+                position,
+                url,
+                title,
+                ROW_NUMBER() OVER (PARTITION BY tab_id ORDER BY position DESC) AS rn
+              FROM browser_history
+            )
+            WHERE rn <= 100
             ORDER BY tab_id ASC, position ASC
             ",
         )?;
@@ -1356,6 +1526,7 @@ mod tests {
     use super::{PersistenceService, CURRENT_SCHEMA_VERSION};
     use crate::browser::service::{BrowserHistoryEntry, BrowserTabRecord};
     use crate::codex::service::{CodexMessageRecord, CodexThreadBinding};
+    use crate::projects::models::ProjectRecord;
     use crate::security::approvals::PendingApprovalRecord;
     use crate::terminal::service::TerminalSessionRecord;
     use crate::workspace::service::{
@@ -1620,5 +1791,245 @@ mod tests {
             db.schema_version().expect("schema version"),
             CURRENT_SCHEMA_VERSION
         );
+    }
+
+    #[test]
+    fn reads_and_updates_project_by_root_path() {
+        let temp = tempdir().expect("temp dir");
+        let db = PersistenceService::new(temp.path().join("ice.db")).expect("db");
+        let mut project = ProjectRecord {
+            id: "project-1".to_string(),
+            name: "Alpha".to_string(),
+            root_path: "/tmp/alpha".to_string(),
+            color_token: "blue".to_string(),
+            icon_hint: None,
+            is_trusted: false,
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            last_opened_at: "2026-01-01T00:00:00Z".to_string(),
+        };
+
+        db.insert_project_sync(&project).expect("insert project");
+        assert_eq!(
+            db.read_project_by_root_path_sync(&project.root_path)
+                .expect("read project by root"),
+            Some(project.clone())
+        );
+
+        project.is_trusted = true;
+        project.last_opened_at = "2026-01-02T00:00:00Z".to_string();
+        db.update_project_sync(&project).expect("update project");
+
+        assert_eq!(
+            db.read_project_by_root_path_sync(&project.root_path)
+                .expect("read updated project by root"),
+            Some(project)
+        );
+    }
+
+    #[tokio::test]
+    async fn deletes_scoped_prompt_assistant_messages_only() {
+        let temp = tempdir().expect("temp dir");
+        let db = PersistenceService::new(temp.path().join("ice.db")).expect("db");
+        let assistant_scope = CodexMessageRecord {
+            message_id: "assistant-scope".to_string(),
+            project_id: "project-a".to_string(),
+            thread_id: "thread-1".to_string(),
+            turn_id: Some("turn-1".to_string()),
+            role: "assistant".to_string(),
+            content: "[ICE PROJECT SCOPE]\n[USER PROMPT]\ntest".to_string(),
+            state: "complete".to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            updated_at: "2026-01-01T00:00:00Z".to_string(),
+        };
+        let user_prompt = CodexMessageRecord {
+            message_id: "user-prompt".to_string(),
+            project_id: "project-a".to_string(),
+            thread_id: "thread-1".to_string(),
+            turn_id: Some("turn-1".to_string()),
+            role: "user".to_string(),
+            content: "test".to_string(),
+            state: "complete".to_string(),
+            created_at: "2026-01-01T00:00:01Z".to_string(),
+            updated_at: "2026-01-01T00:00:01Z".to_string(),
+        };
+        let assistant_real = CodexMessageRecord {
+            message_id: "assistant-real".to_string(),
+            project_id: "project-a".to_string(),
+            thread_id: "thread-1".to_string(),
+            turn_id: Some("turn-1".to_string()),
+            role: "assistant".to_string(),
+            content: "Real assistant reply".to_string(),
+            state: "complete".to_string(),
+            created_at: "2026-01-01T00:00:02Z".to_string(),
+            updated_at: "2026-01-01T00:00:02Z".to_string(),
+        };
+
+        db.upsert_codex_message(assistant_scope)
+            .await
+            .expect("assistant scope write");
+        db.upsert_codex_message(user_prompt.clone())
+            .await
+            .expect("user prompt write");
+        db.upsert_codex_message(assistant_real.clone())
+            .await
+            .expect("assistant real write");
+
+        let deleted = db
+            .delete_scoped_prompt_assistant_messages_sync()
+            .expect("cleanup");
+        assert_eq!(deleted, 1);
+        let messages = db
+            .load_codex_messages_sync()
+            .expect("messages after cleanup");
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].message_id, user_prompt.message_id);
+        assert_eq!(messages[0].role, user_prompt.role);
+        assert_eq!(messages[0].content, user_prompt.content);
+        assert_eq!(messages[1].message_id, assistant_real.message_id);
+        assert_eq!(messages[1].role, assistant_real.role);
+        assert_eq!(messages[1].content, assistant_real.content);
+    }
+
+    #[tokio::test]
+    async fn deletes_empty_assistant_messages_only() {
+        let temp = tempdir().expect("temp dir");
+        let db = PersistenceService::new(temp.path().join("ice.db")).expect("db");
+        let empty_assistant = CodexMessageRecord {
+            message_id: "assistant-empty".to_string(),
+            project_id: "project-a".to_string(),
+            thread_id: "thread-1".to_string(),
+            turn_id: Some("turn-1".to_string()),
+            role: "assistant".to_string(),
+            content: String::new(),
+            state: "complete".to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            updated_at: "2026-01-01T00:00:00Z".to_string(),
+        };
+        let real_assistant = CodexMessageRecord {
+            message_id: "assistant-real".to_string(),
+            project_id: "project-a".to_string(),
+            thread_id: "thread-1".to_string(),
+            turn_id: Some("turn-2".to_string()),
+            role: "assistant".to_string(),
+            content: "OK".to_string(),
+            state: "complete".to_string(),
+            created_at: "2026-01-01T00:00:01Z".to_string(),
+            updated_at: "2026-01-01T00:00:01Z".to_string(),
+        };
+
+        db.upsert_codex_message(empty_assistant)
+            .await
+            .expect("empty assistant write");
+        db.upsert_codex_message(real_assistant.clone())
+            .await
+            .expect("real assistant write");
+
+        let deleted = db
+            .delete_empty_assistant_messages_sync()
+            .expect("cleanup empty assistants");
+        assert_eq!(deleted, 1);
+        let messages = db
+            .load_codex_messages_sync()
+            .expect("messages after cleanup");
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].message_id, real_assistant.message_id);
+        assert_eq!(messages[0].content, real_assistant.content);
+    }
+
+    #[tokio::test]
+    async fn codex_message_updates_append_chunks_and_finalize_without_overwriting() {
+        let temp = tempdir().expect("temp dir");
+        let db = PersistenceService::new(temp.path().join("ice.db")).expect("db");
+
+        let first = db
+            .apply_codex_message_update(crate::codex::service::CodexMessageUpdate {
+                message_id: "thread-1:turn-1:assistant".to_string(),
+                project_id: "project-a".to_string(),
+                thread_id: "thread-1".to_string(),
+                turn_id: Some("turn-1".to_string()),
+                role: "assistant".to_string(),
+                content: "Hello".to_string(),
+                state: "streaming".to_string(),
+                append: true,
+            })
+            .await
+            .expect("first chunk");
+        assert_eq!(first.content, "Hello");
+        assert_eq!(first.state, "streaming");
+
+        let second = db
+            .apply_codex_message_update(crate::codex::service::CodexMessageUpdate {
+                message_id: "thread-1:turn-1:assistant".to_string(),
+                project_id: "project-a".to_string(),
+                thread_id: "thread-1".to_string(),
+                turn_id: Some("turn-1".to_string()),
+                role: "assistant".to_string(),
+                content: " world".to_string(),
+                state: "streaming".to_string(),
+                append: true,
+            })
+            .await
+            .expect("second chunk");
+        assert_eq!(second.content, "Hello world");
+        assert_eq!(second.state, "streaming");
+
+        let final_message = db
+            .apply_codex_message_update(crate::codex::service::CodexMessageUpdate {
+                message_id: "thread-1:turn-1:assistant".to_string(),
+                project_id: "project-a".to_string(),
+                thread_id: "thread-1".to_string(),
+                turn_id: Some("turn-1".to_string()),
+                role: "assistant".to_string(),
+                content: String::new(),
+                state: "complete".to_string(),
+                append: true,
+            })
+            .await
+            .expect("final chunk");
+        assert_eq!(final_message.content, "Hello world");
+        assert_eq!(final_message.state, "complete");
+    }
+
+    #[tokio::test]
+    async fn finalize_streaming_codex_messages_marks_assistant_rows_complete() {
+        let temp = tempdir().expect("temp dir");
+        let db = PersistenceService::new(temp.path().join("ice.db")).expect("db");
+
+        db.upsert_codex_message(CodexMessageRecord {
+            message_id: "assistant-1".to_string(),
+            project_id: "project-a".to_string(),
+            thread_id: "thread-1".to_string(),
+            turn_id: Some("turn-1".to_string()),
+            role: "assistant".to_string(),
+            content: "partial".to_string(),
+            state: "streaming".to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            updated_at: "2026-01-01T00:00:00Z".to_string(),
+        })
+        .await
+        .expect("assistant write");
+        db.upsert_codex_message(CodexMessageRecord {
+            message_id: "user-1".to_string(),
+            project_id: "project-a".to_string(),
+            thread_id: "thread-1".to_string(),
+            turn_id: Some("turn-1".to_string()),
+            role: "user".to_string(),
+            content: "hello".to_string(),
+            state: "complete".to_string(),
+            created_at: "2026-01-01T00:00:01Z".to_string(),
+            updated_at: "2026-01-01T00:00:01Z".to_string(),
+        })
+        .await
+        .expect("user write");
+
+        let finalized = db
+            .finalize_streaming_codex_messages("thread-1".to_string(), Some("turn-1".to_string()))
+            .await
+            .expect("finalize");
+
+        assert_eq!(finalized.len(), 1);
+        assert_eq!(finalized[0].message_id, "assistant-1");
+        assert_eq!(finalized[0].state, "complete");
+        assert_eq!(finalized[0].content, "partial");
     }
 }

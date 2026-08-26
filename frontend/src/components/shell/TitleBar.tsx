@@ -1,9 +1,8 @@
 import { memo, useState, useRef, useEffect, useCallback } from 'react'
 import {
-  Minus, Square, X, Snowflake, PanelLeft, PanelBottom, MessageSquare,
+  Snowflake, PanelLeft, PanelBottom, MessageSquare,
   Palette, Check, FolderTree, Globe, Terminal
 } from 'lucide-react'
-import { getCurrentWindow } from '@tauri-apps/api/window'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useProjectsStore } from '@/stores/projects'
 import { createAndOpenBrowserTab } from '@/lib/browserTabs'
@@ -46,24 +45,6 @@ export const TitleBar = memo(function TitleBar() {
     setTheme(id)
     setThemeMenuOpen(false)
   }
-
-  const onWindowClose = useCallback(() => {
-    void getCurrentWindow().close().catch((error: unknown) => {
-      pushError('Window close failed', error, 'Failed to close window')
-    })
-  }, [pushError])
-
-  const onWindowMinimize = useCallback(() => {
-    void getCurrentWindow().minimize().catch((error: unknown) => {
-      pushError('Window minimize failed', error, 'Failed to minimize window')
-    })
-  }, [pushError])
-
-  const onWindowMaximize = useCallback(() => {
-    void getCurrentWindow().toggleMaximize().catch((error: unknown) => {
-      pushError('Window maximize failed', error, 'Failed to maximize window')
-    })
-  }, [pushError])
 
   const onOpenFiles = useCallback(() => {
     if (!activeProjectId || !activeProject) {
@@ -108,32 +89,6 @@ export const TitleBar = memo(function TitleBar() {
   return (
     <div className={styles.titleBar} data-tauri-drag-region>
       <div className={styles.left}>
-        <div className={styles.trafficLights}>
-          <button
-            type="button"
-            className={`${styles.trafficBtn} ${styles.close}`}
-            aria-label="Close"
-            onClick={onWindowClose}
-          >
-            <X size={8} />
-          </button>
-          <button
-            type="button"
-            className={`${styles.trafficBtn} ${styles.minimize}`}
-            aria-label="Minimize"
-            onClick={onWindowMinimize}
-          >
-            <Minus size={8} />
-          </button>
-          <button
-            type="button"
-            className={`${styles.trafficBtn} ${styles.maximize}`}
-            aria-label="Maximize"
-            onClick={onWindowMaximize}
-          >
-            <Square size={7} />
-          </button>
-        </div>
         <button
           className={`${styles.toolBtn} ${sidebarOpen ? styles.toolBtnActive : ''}`}
           onClick={() => setSidebarOpen(!sidebarOpen)}

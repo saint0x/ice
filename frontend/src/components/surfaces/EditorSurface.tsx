@@ -1,13 +1,46 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, FileCode2, Loader2, Save, Search, ChevronUp, ChevronDown, Replace, X, RefreshCcw } from 'lucide-react'
+import { basicSetup } from 'codemirror'
+import { Compartment, EditorState, type Extension, Annotation, RangeSetBuilder, StateEffect, StateField } from '@codemirror/state'
+import { Decoration, type DecorationSet, EditorView, keymap } from '@codemirror/view'
+import { LanguageDescription, defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language'
+import { languages } from '@codemirror/language-data'
 import type { Tab } from '@/types'
-import { fileRead, fileWriteText } from '@/lib/backend'
+import { fileSyntaxProfile, fileSyntaxTokens, fileWriteText } from '@/lib/backend'
+import { ensureEditorDocument } from '@/lib/editorDocuments'
 import { useEditorStore } from '@/stores/editor'
 import { useWorkspaceStore } from '@/stores/workspace'
 import styles from './EditorSurface.module.css'
 
 interface Props {
   tab: Tab
+}
+
+const externalUpdate = Annotation.define<boolean>()
+const setSyntaxDecorations = StateEffect.define<BackendSyntaxToken[]>()
+const syntaxDecorationsField = StateField.define<DecorationSet>({
+  create() {
+    return Decoration.none
+  },
+  update(value, transaction) {
+    let next = value.map(transaction.changes)
+    for (const effect of transaction.effects) {
+      if (effect.is(setSyntaxDecorations)) {
+        next = buildSyntaxDecorations(transaction.state, effect.value)
+      }
+    }
+    return next
+  },
+  provide(field) {
+    return EditorView.decorations.from(field)
+  },
+})
+
+interface BackendSyntaxToken {
+  line: number
+  start: number
+  length: number
+  tokenType: string
 }
 
 export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
@@ -23,8 +56,17 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
   const setConflict = useEditorStore((state) => state.setConflict)
   const updateConflictMergeDraft = useEditorStore((state) => state.updateConflictMergeDraft)
   const reloadFromDisk = useEditorStore((state) => state.reloadFromDisk)
+  const touchDocument = useEditorStore((state) => state.touchDocument)
   const updateTab = useWorkspaceStore((state) => state.updateTab)
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+
+  const editorRootRef = useRef<HTMLDivElement | null>(null)
+  const editorViewRef = useRef<EditorView | null>(null)
+  const languageCompartmentRef = useRef(new Compartment())
+  const editableCompartmentRef = useRef(new Compartment())
+  const documentKeyRef = useRef<string | null>(null)
+  const saveRef = useRef<() => Promise<void>>(async () => {})
+
+  const [languageLabel, setLanguageLabel] = useState<string | null>(null)
   const [findOpen, setFindOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [replaceQuery, setReplaceQuery] = useState('')
@@ -32,35 +74,22 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
 
   useEffect(() => {
     let disposed = false
-    if (document && !document.error && !document.isLoading) return
+    const existing = useEditorStore.getState().documents.get(documentKey)
+    if (existing && !existing.isLoading) {
+      touchDocument(tab.projectId, filePath)
+      return
+    }
     setLoading(tab.projectId, filePath)
-    void fileRead(tab.projectId, filePath)
-      .then((result) => {
-        if (disposed) return
-        hydrateDocument({
-          projectId: tab.projectId,
-          path: filePath,
-          content: result.content ?? '',
-          isBinary: result.isBinary,
-          encoding: result.encoding ?? undefined,
-          hasBom: result.hasBom,
-          modifiedAtMs: result.modifiedAtMs ?? undefined,
-          versionToken: result.versionToken ?? undefined,
-          isDirty: false,
-          isLoading: false,
-          isSaving: false,
-          conflict: undefined,
-        })
+    void ensureEditorDocument(tab.projectId, filePath)
+      .then((nextDocument) => {
+        if (disposed || !nextDocument) return
+        hydrateDocument(nextDocument)
         updateTab(tab.id, { dirty: false, title: filePath.split('/').pop() ?? filePath })
-      })
-      .catch((error: unknown) => {
-        if (disposed) return
-        setError(tab.projectId, filePath, error instanceof Error ? error.message : 'Failed to read file')
       })
     return () => {
       disposed = true
     }
-  }, [document, filePath, hydrateDocument, setError, setLoading, tab.id, tab.projectId, updateTab])
+  }, [documentKey, filePath, hydrateDocument, setLoading, tab.id, tab.projectId, touchDocument, updateTab])
 
   useEffect(() => {
     updateTab(tab.id, { dirty: document?.isDirty ?? false })
@@ -86,16 +115,23 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
         encoding: document.encoding,
         hasBom: document.hasBom,
       })
-      const refreshed = await fileRead(tab.projectId, filePath)
+      const refreshed = await ensureEditorDocument(tab.projectId, filePath, { force: true })
+      if (!refreshed) {
+        throw new Error('Failed to reload file after save')
+      }
       markSaved(tab.projectId, filePath, {
         projectId: tab.projectId,
         path: filePath,
-        content: refreshed.content ?? '',
+        content: refreshed.content,
         isBinary: refreshed.isBinary,
-        encoding: refreshed.encoding ?? undefined,
+        sizeBytes: refreshed.sizeBytes,
+        encoding: refreshed.encoding,
         hasBom: refreshed.hasBom,
-        modifiedAtMs: refreshed.modifiedAtMs ?? undefined,
-        versionToken: refreshed.versionToken ?? undefined,
+        modifiedAtMs: refreshed.modifiedAtMs,
+        versionToken: refreshed.versionToken,
+        loadedAt: refreshed.loadedAt,
+        lastTouchedAt: refreshed.lastTouchedAt,
+        syntaxMode: refreshed.syntaxMode,
         error: undefined,
       })
       updateTab(tab.id, { dirty: false })
@@ -103,17 +139,20 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
       const message = error instanceof Error ? error.message : 'Failed to save file'
       if (message.startsWith('save conflict:')) {
         try {
-          const latest = await fileRead(tab.projectId, filePath)
+          const latest = await ensureEditorDocument(tab.projectId, filePath, { force: true })
+          if (!latest) {
+            throw new Error('Failed to reload conflicting file from disk')
+          }
           setConflict(
             tab.projectId,
             filePath,
             {
-              latestContent: latest.content ?? '',
-              latestVersionToken: latest.versionToken ?? undefined,
-              latestModifiedAtMs: latest.modifiedAtMs ?? undefined,
-              latestEncoding: latest.encoding ?? undefined,
+              latestContent: latest.content,
+              latestVersionToken: latest.versionToken,
+              latestModifiedAtMs: latest.modifiedAtMs,
+              latestEncoding: latest.encoding,
               latestHasBom: latest.hasBom,
-              mergeDraft: buildMergedDraft(document.content, latest.content ?? ''),
+              mergeDraft: buildMergedDraft(document.content, latest.content),
             },
             message,
           )
@@ -130,17 +169,24 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
     }
   }
 
+  saveRef.current = onSave
+
   const onReloadFromDisk = () => {
     if (!document?.conflict) return
+    const latestContent = document.conflict.latestContent
     reloadFromDisk(tab.projectId, filePath, {
       projectId: tab.projectId,
       path: filePath,
-      content: document.conflict.latestContent,
+      content: latestContent,
       isBinary: false,
+      sizeBytes: new TextEncoder().encode(latestContent).length,
       encoding: document.conflict.latestEncoding,
       hasBom: document.conflict.latestHasBom,
       modifiedAtMs: document.conflict.latestModifiedAtMs,
       versionToken: document.conflict.latestVersionToken,
+      loadedAt: Date.now(),
+      lastTouchedAt: Date.now(),
+      syntaxMode: document.syntaxMode,
       error: undefined,
     })
     updateTab(tab.id, { dirty: false })
@@ -157,16 +203,23 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
         encoding: document.encoding,
         hasBom: document.hasBom,
       })
-      const refreshed = await fileRead(tab.projectId, filePath)
+      const refreshed = await ensureEditorDocument(tab.projectId, filePath, { force: true })
+      if (!refreshed) {
+        throw new Error('Failed to reload file after overwrite')
+      }
       markSaved(tab.projectId, filePath, {
         projectId: tab.projectId,
         path: filePath,
-        content: refreshed.content ?? '',
+        content: refreshed.content,
         isBinary: refreshed.isBinary,
-        encoding: refreshed.encoding ?? undefined,
+        sizeBytes: refreshed.sizeBytes,
+        encoding: refreshed.encoding,
         hasBom: refreshed.hasBom,
-        modifiedAtMs: refreshed.modifiedAtMs ?? undefined,
-        versionToken: refreshed.versionToken ?? undefined,
+        modifiedAtMs: refreshed.modifiedAtMs,
+        versionToken: refreshed.versionToken,
+        loadedAt: refreshed.loadedAt,
+        lastTouchedAt: refreshed.lastTouchedAt,
+        syntaxMode: refreshed.syntaxMode,
         error: undefined,
       })
       updateTab(tab.id, { dirty: false })
@@ -186,13 +239,196 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
     await onOverwriteDisk()
   }
 
+  useEffect(() => {
+    if (!editorRootRef.current || !document || document.isBinary || document.isLoading) {
+      if (editorViewRef.current) {
+        editorViewRef.current.destroy()
+        editorViewRef.current = null
+        documentKeyRef.current = null
+      }
+      return
+    }
+
+    if (documentKeyRef.current === documentKey && editorViewRef.current) {
+      return
+    }
+
+    editorViewRef.current?.destroy()
+
+    const languageCompartment = languageCompartmentRef.current
+    const editableCompartment = editableCompartmentRef.current
+    const editor = new EditorView({
+      state: EditorState.create({
+        doc: document.content,
+        extensions: [
+          basicSetup,
+          buildEditorTheme(),
+          syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+          syntaxDecorationsField,
+          EditorState.tabSize.of(2),
+          languageCompartment.of([]),
+          editableCompartment.of(EditorView.editable.of(!document.isSaving)),
+          EditorView.updateListener.of((update) => {
+            if (!update.docChanged) return
+            if (update.transactions.some((transaction) => transaction.annotation(externalUpdate))) {
+              return
+            }
+            const nextContent = update.state.doc.toString()
+            if (nextContent !== useEditorStore.getState().documents.get(documentKey)?.content) {
+              updateContent(tab.projectId, filePath, nextContent)
+            }
+          }),
+          keymap.of([
+            {
+              key: 'Mod-s',
+              run: () => {
+                void saveRef.current()
+                return true
+              },
+            },
+            {
+              key: 'Mod-f',
+              run: () => {
+                setFindOpen(true)
+                queueMicrotask(() => {
+                  editorViewRef.current?.focus()
+                })
+                return true
+              },
+            },
+          ]),
+        ],
+      }),
+      parent: editorRootRef.current,
+    })
+
+    editorViewRef.current = editor
+    documentKeyRef.current = documentKey
+
+    return () => {
+      if (editorViewRef.current === editor) {
+        editor.destroy()
+        editorViewRef.current = null
+        documentKeyRef.current = null
+      }
+    }
+  }, [document?.isBinary, document?.isLoading, documentKey, filePath, tab.projectId, updateContent])
+
+  useEffect(() => {
+    const editor = editorViewRef.current
+    if (!editor || !document || document.isBinary || document.isLoading) return
+    const currentContent = editor.state.doc.toString()
+    if (currentContent === document.content) return
+    editor.dispatch({
+      changes: {
+        from: 0,
+        to: currentContent.length,
+        insert: document.content,
+      },
+      annotations: externalUpdate.of(true),
+    })
+  }, [document?.content, document?.isBinary, document?.isLoading])
+
+  useEffect(() => {
+    const editor = editorViewRef.current
+    if (!editor || !document || document.isBinary || document.isLoading) return
+    editor.dispatch({
+      effects: editableCompartmentRef.current.reconfigure(EditorView.editable.of(!document.isSaving)),
+    })
+  }, [document?.isBinary, document?.isLoading, document?.isSaving])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!document || document.isBinary || document.isLoading) {
+      setLanguageLabel(null)
+      return
+    }
+
+    if (document.syntaxMode === 'none') {
+      setLanguageLabel(`${ext} LARGE`)
+      if (editorViewRef.current) {
+        editorViewRef.current.dispatch({
+          effects: languageCompartmentRef.current.reconfigure([]),
+        })
+      }
+      return
+    }
+
+    void fileSyntaxProfile(tab.projectId, filePath)
+      .then(async (profile) => {
+        if (cancelled) return
+        setLanguageLabel(profile.displayName)
+        if (document.syntaxMode !== 'full') {
+          if (!editorViewRef.current) return
+          editorViewRef.current.dispatch({
+            effects: languageCompartmentRef.current.reconfigure([]),
+          })
+          return
+        }
+        const support = await resolveLanguageExtension(profile.languageId, filePath)
+        if (cancelled || !editorViewRef.current) return
+        editorViewRef.current.dispatch({
+          effects: languageCompartmentRef.current.reconfigure(support),
+        })
+      })
+      .catch(() => {
+        if (cancelled) return
+        setLanguageLabel(null)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [document?.syntaxMode, documentKey, document?.isBinary, document?.isLoading, ext, filePath, tab.projectId])
+
+  useEffect(() => {
+    const editor = editorViewRef.current
+    if (!editor) return
+    if (!document || document.isBinary || document.isLoading) {
+      editor.dispatch({ effects: setSyntaxDecorations.of([]) })
+      return
+    }
+    if (document.syntaxMode !== 'full') {
+      editor.dispatch({ effects: setSyntaxDecorations.of([]) })
+      return
+    }
+
+    let cancelled = false
+    const timeoutId = window.setTimeout(() => {
+      void fileSyntaxTokens({
+        projectId: tab.projectId,
+        path: filePath,
+        content: document.content,
+      })
+        .then((response) => {
+          if (cancelled || !editorViewRef.current) return
+          editorViewRef.current.dispatch({
+            effects: setSyntaxDecorations.of(response.tokens),
+          })
+        })
+        .catch(() => {
+          if (cancelled || !editorViewRef.current) return
+          editorViewRef.current.dispatch({ effects: setSyntaxDecorations.of([]) })
+        })
+    }, 90)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timeoutId)
+    }
+  }, [document?.content, document?.isBinary, document?.isLoading, document?.syntaxMode, documentKey, filePath, tab.projectId])
+
   const focusMatch = (nextIndex: number) => {
-    if (!textareaRef.current || matches.length === 0) return
+    const editor = editorViewRef.current
+    if (!editor || matches.length === 0) return
     const bounded = ((nextIndex % matches.length) + matches.length) % matches.length
     const match = matches[bounded]
     if (!match) return
-    textareaRef.current.focus()
-    textareaRef.current.setSelectionRange(match.start, match.end)
+    editor.dispatch({
+      selection: { anchor: match.start, head: match.end },
+      scrollIntoView: true,
+    })
+    editor.focus()
     setActiveMatchIndex(bounded)
   }
 
@@ -213,6 +449,30 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
     updateContent(tab.projectId, filePath, replaceAll(document.content, searchQuery, replaceQuery))
   }
 
+  useEffect(() => {
+    const onSurfaceSave = (event: Event) => {
+      const detail = (event as CustomEvent<{ tabId?: string; type?: string }>).detail
+      if (!detail || detail.tabId !== tab.id || detail.type !== 'editor') return
+      void onSave()
+    }
+
+    const onSurfaceFind = (event: Event) => {
+      const detail = (event as CustomEvent<{ tabId?: string; type?: string }>).detail
+      if (!detail || detail.tabId !== tab.id || detail.type !== 'editor') return
+      setFindOpen(true)
+      queueMicrotask(() => {
+        editorViewRef.current?.focus()
+      })
+    }
+
+    window.addEventListener('ice:surface:save', onSurfaceSave as EventListener)
+    window.addEventListener('ice:surface:find', onSurfaceFind as EventListener)
+    return () => {
+      window.removeEventListener('ice:surface:save', onSurfaceSave as EventListener)
+      window.removeEventListener('ice:surface:find', onSurfaceFind as EventListener)
+    }
+  }, [onSave, tab.id])
+
   return (
     <div className={styles.surface}>
       <div className={styles.toolbar}>
@@ -228,7 +488,7 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
         </div>
         <div className={styles.toolbarMeta}>
           {document?.encoding && <span className={styles.metaBadge}>{document.encoding}</span>}
-          <span className={styles.langBadge}>{ext}</span>
+          <span className={styles.langBadge}>{languageLabel ?? ext}</span>
           <button
             className={styles.findBtn}
             onClick={() => setFindOpen((value) => !value)}
@@ -362,45 +622,12 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
         </div>
       ) : (
         <div className={styles.editorShell}>
-          <div className={styles.lineNumbers}>
-            {lineNumbersFor(document.content).map((line) => (
-              <div key={line} className={styles.lineNum}>{line}</div>
-            ))}
-          </div>
-          <textarea
-            ref={textareaRef}
-            className={styles.editorInput}
-            value={document.content}
-            spellCheck={false}
-            onChange={(event) => updateContent(tab.projectId, filePath, event.target.value)}
-            onKeyDown={(event) => {
-              if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
-                event.preventDefault()
-                void onSave()
-              }
-              if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'f') {
-                event.preventDefault()
-                setFindOpen(true)
-              }
-              if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'h') {
-                event.preventDefault()
-                setFindOpen(true)
-              }
-              if (event.key === 'Enter' && findOpen && searchQuery) {
-                event.preventDefault()
-                focusMatch(activeMatchIndex + (event.shiftKey ? -1 : 1))
-              }
-            }}
-          />
+          <div ref={editorRootRef} className={styles.editorRoot} />
         </div>
       )}
     </div>
   )
 })
-
-function lineNumbersFor(content: string) {
-  return Array.from({ length: Math.max(content.split('\n').length, 1) }, (_, index) => index + 1)
-}
 
 function findMatches(content: string, query: string) {
   if (!query) return [] as Array<{ start: number; end: number }>
@@ -430,4 +657,142 @@ function buildMergedDraft(localContent: string, latestContent: string) {
     latestContent,
     '>>>>>>> Disk Version',
   ].join('\n')
+}
+
+function buildEditorTheme(): Extension {
+  return EditorView.theme({
+    '&': {
+      height: '100%',
+      width: '100%',
+      minWidth: '0',
+      minHeight: '0',
+      backgroundColor: 'transparent',
+      color: 'var(--text-primary)',
+      fontFamily: 'var(--font-mono)',
+      fontSize: 'var(--text-sm)',
+    },
+    '.cm-scroller': {
+      minWidth: '0',
+      fontFamily: 'var(--font-mono)',
+      lineHeight: '20px',
+      overflow: 'auto',
+    },
+    '.cm-content': {
+      minWidth: '0',
+      padding: '12px 16px',
+      caretColor: 'var(--text-primary)',
+    },
+    '.cm-focused': {
+      outline: 'none',
+    },
+    '.cm-gutters': {
+      backgroundColor: 'color-mix(in srgb, var(--bg-panel) 72%, var(--bg-surface))',
+      color: 'var(--text-disabled)',
+      borderRight: '1px solid var(--border-variant)',
+    },
+    '.cm-lineNumbers .cm-gutterElement': {
+      padding: '0 12px 0 0',
+      minWidth: '44px',
+    },
+    '.cm-activeLine': {
+      backgroundColor: 'color-mix(in srgb, var(--bg-element-selected) 14%, transparent)',
+    },
+    '.cm-activeLineGutter': {
+      backgroundColor: 'transparent',
+    },
+    '.cm-selectionBackground, &.cm-focused .cm-selectionBackground, ::selection': {
+      backgroundColor: 'color-mix(in srgb, var(--bg-element-selected) 42%, transparent)',
+    },
+    '.cm-matchingBracket': {
+      backgroundColor: 'color-mix(in srgb, var(--bg-element-selected) 28%, transparent)',
+      outline: '1px solid var(--border-variant)',
+    },
+    '.cm-ice-token-keyword': {
+      color: 'var(--syn-keyword)',
+      fontWeight: 'var(--weight-medium)',
+    },
+    '.cm-ice-token-function': {
+      color: 'var(--syn-function)',
+    },
+    '.cm-ice-token-type': {
+      color: 'var(--syn-type)',
+    },
+    '.cm-ice-token-variable': {
+      color: 'var(--text-primary)',
+    },
+    '.cm-ice-token-string': {
+      color: 'var(--syn-string)',
+    },
+    '.cm-ice-token-number': {
+      color: 'var(--syn-constant)',
+    },
+    '.cm-ice-token-comment': {
+      color: 'var(--syn-comment)',
+    },
+    '.cm-ice-token-operator': {
+      color: 'var(--text-primary)',
+    },
+  })
+}
+
+function buildSyntaxDecorations(state: EditorState, tokens: BackendSyntaxToken[]): DecorationSet {
+  const builder = new RangeSetBuilder<Decoration>()
+
+  for (const token of tokens) {
+    if (token.length <= 0 || token.line < 0 || token.line >= state.doc.lines) {
+      continue
+    }
+
+    const line = state.doc.line(token.line + 1)
+    const start = Math.min(Math.max(token.start, 0), line.length)
+    const end = Math.min(start + token.length, line.length)
+    if (end <= start) continue
+
+    builder.add(
+      line.from + start,
+      line.from + end,
+      Decoration.mark({ class: syntaxTokenClass(token.tokenType) }),
+    )
+  }
+
+  return builder.finish()
+}
+
+function syntaxTokenClass(tokenType: string) {
+  switch (tokenType) {
+    case 'keyword':
+      return 'cm-ice-token-keyword'
+    case 'function':
+      return 'cm-ice-token-function'
+    case 'type':
+      return 'cm-ice-token-type'
+    case 'string':
+      return 'cm-ice-token-string'
+    case 'number':
+      return 'cm-ice-token-number'
+    case 'comment':
+      return 'cm-ice-token-comment'
+    case 'operator':
+      return 'cm-ice-token-operator'
+    default:
+      return 'cm-ice-token-variable'
+  }
+}
+
+async function resolveLanguageExtension(languageId: string, filePath: string): Promise<Extension> {
+  const normalized = languageId.toLowerCase()
+  const language = languages.find((description) => {
+    const name = description.name.toLowerCase()
+    return name === normalized || description.alias.some((alias) => alias.toLowerCase() === normalized)
+  }) ?? LanguageDescription.matchFilename(languages, filePath)
+
+  if (!language) {
+    return []
+  }
+
+  try {
+    return await language.load()
+  } catch {
+    return []
+  }
 }

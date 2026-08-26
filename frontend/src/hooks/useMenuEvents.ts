@@ -3,14 +3,12 @@ import { listen, type Event, type UnlistenFn } from '@tauri-apps/api/event'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import {
   projectAdd,
-  terminalCreate,
   toProject,
-  toTerminalSession,
 } from '@/lib/backend'
 import { createAndOpenBrowserTab } from '@/lib/browserTabs'
+import { createAndFocusTerminalSession } from '@/lib/terminalSessions'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useProjectsStore } from '@/stores/projects'
-import { useTerminalStore } from '@/stores/terminal'
 import { useWorkspaceStore } from '@/stores/workspace'
 
 /**
@@ -55,12 +53,8 @@ async function dispatchMenuAction(id: string): Promise<void> {
     case 'file.new_terminal': {
       const projectId = requireActiveProject('the terminal')
       if (!projectId) return
-      workspace.setBottomDockOpen(true)
       try {
-        const session = await terminalCreate(projectId)
-        const mapped = toTerminalSession(session)
-        useTerminalStore.getState().upsertSession(mapped)
-        useTerminalStore.getState().setActiveSession(projectId, mapped.id)
+        await createAndFocusTerminalSession(projectId)
       } catch (error) {
         notifications.pushError('Terminal create failed', error, 'Failed to create terminal')
       }
@@ -97,6 +91,22 @@ async function dispatchMenuAction(id: string): Promise<void> {
     }
     case 'edit.find': {
       window.dispatchEvent(new CustomEvent('ice:menu:find'))
+      return
+    }
+    case 'edit.undo':
+    case 'edit.redo':
+    case 'edit.cut':
+    case 'edit.copy':
+    case 'edit.paste':
+    case 'edit.select_all': {
+      const command = id.replace('edit.', '').replace('_', '') as
+        | 'undo'
+        | 'redo'
+        | 'cut'
+        | 'copy'
+        | 'paste'
+        | 'selectAll'
+      window.dispatchEvent(new CustomEvent('ice:menu:edit-command', { detail: command }))
       return
     }
     case 'edit.find_in_project': {

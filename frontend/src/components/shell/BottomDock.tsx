@@ -5,7 +5,9 @@ import { useTerminalStore } from '@/stores/terminal'
 import { useProjectsStore } from '@/stores/projects'
 import { useNotificationsStore } from '@/stores/notifications'
 import { TerminalSurface } from '@/components/surfaces/TerminalSurface'
-import { terminalClose, terminalCreate, terminalDiagnosticsRead, terminalRename, terminalRespawn, terminalScrollbackClear, terminalScrollbackRead, toTerminalDiagnostics, toTerminalSession } from '@/lib/backend'
+import { terminalClose, terminalDiagnosticsRead, terminalRename, terminalRespawn, terminalScrollbackClear, toTerminalDiagnostics, toTerminalSession } from '@/lib/backend'
+import { createAndFocusTerminalSession, resolveTerminalProjectId } from '@/lib/terminalSessions'
+import { ensureTerminalScrollback } from '@/lib/terminalScrollback'
 import styles from './BottomDock.module.css'
 
 export const BottomDock = memo(function BottomDock() {
@@ -14,9 +16,11 @@ export const BottomDock = memo(function BottomDock() {
   const setOpen = useWorkspaceStore((s) => s.setBottomDockOpen)
   const setHeight = useWorkspaceStore((s) => s.setBottomDockHeight)
   const activeProjectId = useProjectsStore((s) => s.activeProjectId)
+  const setActiveProject = useProjectsStore((s) => s.setActiveProject)
   const allSessions = useTerminalStore((s) => s.sessions)
   const allScrollback = useTerminalStore((s) => s.scrollback)
-  const activeSessionId = useTerminalStore((s) => activeProjectId ? s.activeSessionId.get(activeProjectId) : null)
+  const resolvedProjectId = resolveTerminalProjectId(activeProjectId)
+  const activeSessionId = useTerminalStore((s) => resolvedProjectId ? s.activeSessionId.get(resolvedProjectId) : null)
   const setActiveSession = useTerminalStore((s) => s.setActiveSession)
   const closeSession = useTerminalStore((s) => s.closeSession)
   const upsertSession = useTerminalStore((s) => s.upsertSession)
@@ -36,10 +40,10 @@ export const BottomDock = memo(function BottomDock() {
   const projectSessions = useMemo(() => {
     const result = []
     for (const session of allSessions.values()) {
-      if (session.projectId === activeProjectId) result.push(session)
+      if (session.projectId === resolvedProjectId) result.push(session)
     }
     return result
-  }, [allSessions, activeProjectId])
+  }, [allSessions, resolvedProjectId])
 
   const onResizeStart = useCallback(
     (e: React.MouseEvent) => {
@@ -107,6 +111,28 @@ export const BottomDock = memo(function BottomDock() {
     }
   }, [activeSession, pushError, upsertDiagnostics])
 
+  useEffect(() => {
+    if (!activeSession) {
+      return
+    }
+    if (allScrollback.has(activeSession.id)) {
+      return
+    }
+
+    let disposed = false
+    void ensureTerminalScrollback(activeSession.id)
+      .catch((error: unknown) => {
+        if (!disposed) {
+          const message = error instanceof Error ? error.message : 'Failed to load terminal history'
+          setSurfaceError(message)
+          pushError('Terminal history load failed', error, message)
+        }
+      })
+    return () => {
+      disposed = true
+    }
+  }, [activeSession, allScrollback, pushError])
+
   const onRenameCommit = async () => {
     if (!activeSession || !renameDraft.trim()) {
       setIsRenaming(false)
@@ -165,12 +191,23 @@ export const BottomDock = memo(function BottomDock() {
   const onCopyHistory = async () => {
     try {
       if (!activeSession) return
-      const scrollback = await terminalScrollbackRead(activeSession.id)
-      await navigator.clipboard.writeText(scrollback.content)
+      const scrollback = await ensureTerminalScrollback(activeSession.id, { force: true })
+      await navigator.clipboard.writeText(scrollback)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to copy terminal history'
       setSurfaceError(message)
       pushError('Terminal history copy failed', error, message)
+    }
+  }
+
+  const onCreateSession = async () => {
+    setSurfaceError(null)
+    try {
+      await createAndFocusTerminalSession(resolvedProjectId)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to create terminal'
+      setSurfaceError(message)
+      pushError('Terminal create failed', error, message)
     }
   }
 
@@ -183,7 +220,10 @@ export const BottomDock = memo(function BottomDock() {
             <button
               key={session.id}
               className={`${styles.tab} ${session.id === activeSessionId ? styles.active : ''}`}
-              onClick={() => activeProjectId && setActiveSession(activeProjectId, session.id)}
+              onClick={() => {
+                setActiveProject(session.projectId)
+                setActiveSession(session.projectId, session.id)
+              }}
               onAuxClick={(e) => {
                 if (e.button === 1) {
                   closeSession(session.id)
@@ -197,13 +237,7 @@ export const BottomDock = memo(function BottomDock() {
           ))}
           <button
             className={styles.addBtn}
-            onClick={() => {
-              if (!activeProjectId) return
-              void terminalCreate(activeProjectId).then((session) => {
-                upsertSession(toTerminalSession(session))
-                setActiveSession(activeProjectId, session.sessionId)
-              })
-            }}
+            onClick={() => void onCreateSession()}
             aria-label="New Terminal"
           >
             <Plus size={13} />

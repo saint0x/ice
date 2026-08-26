@@ -2,6 +2,7 @@ import { memo, useRef, useEffect, useState } from 'react'
 import { Loader2, RotateCcw, TerminalSquare, Hand, CornerDownLeft, History, Gauge, ShieldAlert } from 'lucide-react'
 import type { TerminalSession } from '@/types'
 import { terminalDiagnosticsRead, terminalInterrupt, terminalResize, terminalRespawn, terminalSendEof, terminalWrite, toTerminalDiagnostics, toTerminalSession } from '@/lib/backend'
+import { ensureTerminalScrollback } from '@/lib/terminalScrollback'
 import { useThemeStore } from '@/stores/theme'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useTerminalStore } from '@/stores/terminal'
@@ -46,6 +47,7 @@ export const TerminalSurface = memo(function TerminalSurface({ session }: Props)
   const fitRef = useRef<import('@xterm/addon-fit').FitAddon | null>(null)
   const themeId = useThemeStore((s) => s.themeId)
   const scrollback = useTerminalStore((s) => s.scrollback.get(session.id) ?? '')
+  const hasScrollback = useTerminalStore((s) => s.scrollback.has(session.id))
   const upsertSession = useTerminalStore((s) => s.upsertSession)
   const diagnostics = useTerminalStore((s) => s.diagnostics.get(session.id))
   const upsertDiagnostics = useTerminalStore((s) => s.upsertDiagnostics)
@@ -108,6 +110,22 @@ export const TerminalSurface = memo(function TerminalSurface({ session }: Props)
       cleanup.then((fn) => fn?.())
     }
   }, [session.id])
+
+  useEffect(() => {
+    if (hasScrollback) return
+    let disposed = false
+    void ensureTerminalScrollback(session.id)
+      .catch((error: unknown) => {
+        if (!disposed) {
+          const message = error instanceof Error ? error.message : 'Failed to load terminal history'
+          setSurfaceError(message)
+          pushError('Terminal history load failed', error, message)
+        }
+      })
+    return () => {
+      disposed = true
+    }
+  }, [hasScrollback, pushError, session.id])
 
   useEffect(() => {
     if (!termRef.current) return

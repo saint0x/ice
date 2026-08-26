@@ -48,6 +48,31 @@ impl ProjectService {
         if !path.is_dir() {
             return Err(anyhow!("project path is not a directory"));
         }
+        let canonical_root = path.to_string_lossy().to_string();
+
+        let persistence = self.persistence.clone();
+        let canonical_root_for_lookup = canonical_root.clone();
+        if let Some(mut existing) = tokio::task::spawn_blocking(move || {
+            persistence.read_project_by_root_path_sync(&canonical_root_for_lookup)
+        })
+        .await??
+        {
+            existing.name = path
+                .file_name()
+                .and_then(|part| part.to_str())
+                .unwrap_or("project")
+                .to_string();
+            existing.color_token = color_from_name(&canonical_root);
+            existing.is_trusted = existing.is_trusted || trusted;
+            existing.last_opened_at = chrono::Utc::now().to_rfc3339();
+
+            let persistence = self.persistence.clone();
+            let existing_clone = existing.clone();
+            tokio::task::spawn_blocking(move || persistence.update_project_sync(&existing_clone))
+                .await??;
+            self.prepend_project_order(existing.id.clone()).await?;
+            return Ok(existing);
+        }
 
         let record = ProjectRecord {
             id: Uuid::new_v4().to_string(),
@@ -56,8 +81,8 @@ impl ProjectService {
                 .and_then(|part| part.to_str())
                 .unwrap_or("project")
                 .to_string(),
-            root_path: path.to_string_lossy().to_string(),
-            color_token: color_from_name(path.to_string_lossy().as_ref()),
+            root_path: canonical_root.clone(),
+            color_token: color_from_name(&canonical_root),
             icon_hint: None,
             is_trusted: trusted,
             created_at: chrono::Utc::now().to_rfc3339(),
@@ -69,7 +94,7 @@ impl ProjectService {
         let cloned = record.clone();
         let _ = db;
         tokio::task::spawn_blocking(move || persistence.insert_project_sync(&cloned)).await??;
-        self.append_project_order(record.id.clone()).await?;
+        self.prepend_project_order(record.id.clone()).await?;
 
         Ok(record)
     }
@@ -203,16 +228,15 @@ impl ProjectService {
         tokio::task::spawn_blocking(move || persistence.load_projects_sync()).await?
     }
 
-    async fn append_project_order(&self, project_id: String) -> Result<()> {
+    async fn prepend_project_order(&self, project_id: String) -> Result<()> {
         let mut order = self
             .persistence
             .config_get("projects.order")
             .await?
             .and_then(|value| serde_json::from_value::<Vec<String>>(value).ok())
             .unwrap_or_default();
-        if !order.iter().any(|candidate| candidate == &project_id) {
-            order.push(project_id);
-        }
+        order.retain(|candidate| candidate != &project_id);
+        order.insert(0, project_id);
         self.persistence
             .config_set("projects.order".to_string(), serde_json::json!(order))
             .await

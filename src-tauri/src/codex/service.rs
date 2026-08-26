@@ -1,4 +1,6 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
+use std::fs;
+use std::path::Path;
 use std::process::Command as StdCommand;
 use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -25,6 +27,8 @@ use crate::security::approvals::{
     SecurityService,
 };
 
+const CODEX_MODEL_ID: &str = "gpt-5.4";
+
 pub struct CodexService {
     app: AppHandle,
     persistence: Arc<PersistenceService>,
@@ -38,7 +42,9 @@ pub struct CodexService {
 struct CodexRuntimeState {
     process: Option<CodexProcess>,
     threads: HashMap<String, CodexThreadBinding>,
+    loaded_threads: HashMap<String, bool>,
     pending_server_requests: HashMap<u64, String>,
+    recent_stderr: VecDeque<String>,
 }
 
 struct CodexProcess {
@@ -133,12 +139,31 @@ impl CodexService {
         paths: IcePaths,
         security: Arc<SecurityService>,
     ) -> Self {
-        let persisted_threads = persistence
-            .load_codex_threads_sync()
-            .unwrap_or_default()
+        let persisted_threads = persistence.load_codex_threads_sync().unwrap_or_default();
+        let orphaned_thread_ids = persisted_threads
+            .iter()
+            .filter(|thread| !thread_has_backing_session(&paths, &thread.thread_id))
+            .map(|thread| thread.thread_id.clone())
+            .collect::<Vec<_>>();
+        for thread_id in orphaned_thread_ids {
+            let _ = persistence.delete_codex_thread_sync(&thread_id);
+        }
+        let superseded_disconnected_thread_ids =
+            find_superseded_disconnected_thread_ids(&persisted_threads);
+        for thread_id in &superseded_disconnected_thread_ids {
+            let _ = persistence.delete_codex_thread_sync(thread_id);
+        }
+        let _ = persistence.delete_scoped_prompt_assistant_messages_sync();
+        let _ = persistence.delete_empty_assistant_messages_sync();
+        let persisted_threads = persisted_threads
             .into_iter()
+            .filter(|thread| thread_has_backing_session(&paths, &thread.thread_id))
+            .filter(|thread| !superseded_disconnected_thread_ids.contains(&thread.thread_id))
             .map(normalize_thread_after_startup)
             .collect::<Vec<_>>();
+        for thread in &persisted_threads {
+            let _ = tauri::async_runtime::block_on(persistence.upsert_codex_thread(thread.clone()));
+        }
         let threads = persisted_threads
             .into_iter()
             .map(|thread| (thread.thread_id.clone(), thread))
@@ -151,7 +176,9 @@ impl CodexService {
             state: Arc::new(Mutex::new(CodexRuntimeState {
                 process: None,
                 threads,
+                loaded_threads: HashMap::new(),
                 pending_server_requests: HashMap::new(),
+                recent_stderr: VecDeque::new(),
             })),
             next_id: AtomicU64::new(1),
         }
@@ -178,6 +205,12 @@ impl CodexService {
             thread_count: state.threads.len(),
             runtime_info,
         }
+    }
+
+    pub async fn prewarm(&self) -> Result<()> {
+        let _ = self.runtime_info().await;
+        let _ = self.ensure_process().await?;
+        Ok(())
     }
 
     pub async fn runtime_info(&self) -> Result<CodexRuntimeInfo> {
@@ -218,23 +251,19 @@ impl CodexService {
         Ok(data
             .into_iter()
             .filter_map(|item| {
+                let id = item.get("id")?.as_str()?.to_string();
+                if id != CODEX_MODEL_ID {
+                    return None;
+                }
                 Some(CodexModel {
-                    id: item.get("id")?.as_str()?.to_string(),
+                    id,
                     display_name: item
                         .get("displayName")
                         .or_else(|| item.get("display_name"))
                         .and_then(|value| value.as_str())
-                        .unwrap_or_else(|| {
-                            item.get("id")
-                                .and_then(|value| value.as_str())
-                                .unwrap_or("model")
-                        })
+                        .unwrap_or("GPT-5.4")
                         .to_string(),
-                    is_default: item
-                        .get("isDefault")
-                        .or_else(|| item.get("is_default"))
-                        .and_then(|value| value.as_bool())
-                        .unwrap_or(false),
+                    is_default: true,
                 })
             })
             .collect())
@@ -263,20 +292,28 @@ impl CodexService {
         &self,
         project_id: String,
         title: Option<String>,
-        model: Option<String>,
+        _model: Option<String>,
     ) -> Result<CodexThreadBinding> {
         let project = self.require_project(&project_id).await?;
+        let model = Some(CODEX_MODEL_ID.to_string());
         let result = self
             .request(
                 "thread/start",
                 json!({
-                  "title": title
-                    .clone()
-                    .or_else(|| Some(default_thread_title(&project))),
-                  "model": model
+                  "cwd": project.root_path,
+                  "approvalPolicy": "never",
+                  "sandbox": "danger-full-access",
+                  "model": CODEX_MODEL_ID,
+                  "serviceName": "ice"
                 }),
             )
-            .await?;
+            .await
+            .with_context(|| {
+                format!(
+                    "unable to create Codex thread for project '{}'",
+                    project.name
+                )
+            })?;
         let thread_id = result
             .get("thread")
             .and_then(|thread| thread.get("id"))
@@ -293,7 +330,11 @@ impl CodexService {
             last_assistant_message: None,
             unread: false,
         };
-        self.state.lock().threads.insert(thread_id, binding.clone());
+        {
+            let mut state = self.state.lock();
+            state.loaded_threads.insert(thread_id.clone(), true);
+            state.threads.insert(thread_id, binding.clone());
+        }
         self.persistence
             .upsert_codex_thread(binding.clone())
             .await?;
@@ -309,24 +350,50 @@ impl CodexService {
         project_id: String,
         thread_id: String,
         prompt: String,
-        model: Option<String>,
+        _model: Option<String>,
     ) -> Result<Value> {
         let project = self.require_project(&project_id).await?;
         let existing_thread = self.require_thread_in_project(&project_id, &thread_id)?;
+        self.ensure_thread_loaded(&project, &existing_thread)
+            .await?;
         let scoped_prompt = build_scoped_turn_prompt(&project, &prompt);
         let result = self
             .request(
                 "turn/start",
                 json!({
                   "threadId": thread_id,
-                  "model": model,
-                  "input": {
-                    "type": "text",
-                    "text": scoped_prompt
-                  }
+                  "cwd": project.root_path,
+                  "approvalPolicy": "never",
+                  "sandboxPolicy": {
+                    "type": "dangerFullAccess"
+                  },
+                  "model": CODEX_MODEL_ID,
+                  "effort": "medium",
+                  "summary": "concise",
+                  "input": [
+                    {
+                      "type": "text",
+                      "text": scoped_prompt
+                    }
+                  ]
                 }),
             )
-            .await?;
+            .await
+            .with_context(|| {
+                format!(
+                    "unable to start Codex turn for project '{}' in thread '{}'",
+                    project.name, thread_id
+                )
+            });
+        let result = match result {
+            Ok(result) => result,
+            Err(error) => {
+                if is_missing_thread_error(&error) {
+                    self.drop_stale_thread(&thread_id).await;
+                }
+                return Err(error);
+            }
+        };
         let updated_binding = {
             let mut state = self.state.lock();
             if let Some(binding) = state.threads.get_mut(&thread_id) {
@@ -338,7 +405,9 @@ impl CodexService {
                     .and_then(|turn| turn.get("id"))
                     .and_then(|value| value.as_str())
                     .map(ToOwned::to_owned);
-                Some(binding.clone())
+                let cloned = binding.clone();
+                state.loaded_threads.insert(thread_id.clone(), true);
+                Some(cloned)
             } else {
                 None
             }
@@ -374,17 +443,34 @@ impl CodexService {
     }
 
     pub async fn list_threads(&self, project_id: Option<&str>) -> Vec<CodexThreadBinding> {
-        self.state
-            .lock()
-            .threads
-            .values()
-            .filter(|thread| {
-                project_id
-                    .map(|candidate| thread.project_id == candidate)
-                    .unwrap_or(true)
-            })
-            .cloned()
-            .collect()
+        let persisted = {
+            let persistence = self.persistence.clone();
+            tokio::task::spawn_blocking(move || persistence.load_codex_threads_sync())
+                .await
+                .ok()
+                .and_then(Result::ok)
+                .unwrap_or_default()
+        };
+        let runtime_threads = self.state.lock().threads.clone();
+        let mut ordered = persisted
+            .into_iter()
+            .filter_map(|thread| runtime_threads.get(&thread.thread_id).cloned())
+            .collect::<Vec<_>>();
+        for thread in runtime_threads.values() {
+            if ordered
+                .iter()
+                .any(|existing| existing.thread_id == thread.thread_id)
+            {
+                continue;
+            }
+            ordered.push(thread.clone());
+        }
+        ordered.retain(|thread| {
+            project_id
+                .map(|candidate| thread.project_id == candidate)
+                .unwrap_or(true)
+        });
+        ordered
     }
 
     pub async fn thread_messages_in_project(
@@ -406,11 +492,9 @@ impl CodexService {
 
     pub async fn sidebar_threads(&self, project_id: &str) -> Vec<ProjectCodexSidebarItem> {
         let mut items = self
-            .state
-            .lock()
-            .threads
-            .values()
-            .filter(|thread| thread.project_id == project_id)
+            .list_threads(Some(project_id))
+            .await
+            .into_iter()
             .map(|thread| ProjectCodexSidebarItem {
                 thread_id: thread.thread_id.clone(),
                 title: thread
@@ -422,12 +506,7 @@ impl CodexService {
                 last_assistant_message: thread.last_assistant_message.clone(),
             })
             .collect::<Vec<_>>();
-        items.sort_by(|left, right| {
-            right
-                .unread
-                .cmp(&left.unread)
-                .then_with(|| left.title.cmp(&right.title))
-        });
+        items.sort_by(|left, right| right.unread.cmp(&left.unread));
         items
     }
 
@@ -509,6 +588,7 @@ impl CodexService {
 
         let disconnected_threads = {
             let mut runtime = self.state.lock();
+            runtime.loaded_threads.clear();
             runtime.pending_server_requests.clear();
             runtime
                 .threads
@@ -552,10 +632,29 @@ impl CodexService {
             state
                 .threads
                 .retain(|_, thread| thread.project_id != project_id);
+            let live_thread_ids = state.threads.keys().cloned().collect::<Vec<_>>();
+            state
+                .loaded_threads
+                .retain(|thread_id, _| live_thread_ids.iter().any(|id| id == thread_id));
         }
         self.persistence
             .delete_codex_threads_for_project(project_id.to_string())
             .await
+    }
+
+    async fn drop_stale_thread(&self, thread_id: &str) {
+        let removed = {
+            let mut state = self.state.lock();
+            state.loaded_threads.remove(thread_id);
+            state.threads.remove(thread_id)
+        };
+        if removed.is_none() {
+            return;
+        }
+        let _ = self
+            .persistence
+            .delete_codex_thread(thread_id.to_string())
+            .await;
     }
 
     async fn ensure_process(&self) -> Result<CodexProcess> {
@@ -567,29 +666,8 @@ impl CodexService {
             if process_is_alive(&process).await {
                 return Ok(process);
             }
-            let disconnected_threads = {
-                let mut runtime = self.state.lock();
-                runtime.process = None;
-                runtime.pending_server_requests.clear();
-                runtime
-                    .threads
-                    .values_mut()
-                    .filter_map(|thread| {
-                        if matches!(thread.status.as_str(), "running" | "waitingApproval") {
-                            thread.status = "disconnected".to_string();
-                            Some(thread.clone())
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<Vec<_>>()
-            };
-            for thread in disconnected_threads {
-                self.persistence.upsert_codex_thread(thread).await?;
-            }
-            let _ = self
-                .app
-                .emit(CODEX_EVENT, json!({ "type": "serverDisconnected" }));
+            self.reset_process_state("The Codex app server process exited unexpectedly.")
+                .await?;
         }
 
         let mut child = Command::new("codex")
@@ -640,7 +718,12 @@ impl CodexService {
             }),
         )
         .await?;
-        let _ = rx.await.context("initialize response channel dropped")??;
+        let _ = rx.await.with_context(|| {
+            format!(
+                "Codex app-server closed the initialize response channel{}",
+                self.recent_stderr_suffix()
+            )
+        })??;
         self.write_to_process(
             process,
             json!({
@@ -652,6 +735,20 @@ impl CodexService {
     }
 
     async fn request(&self, method: &str, params: Value) -> Result<Value> {
+        match self.request_once(method, params.clone()).await {
+            Ok(result) => Ok(result),
+            Err(error) if is_transport_failure(&error) => {
+                self.reset_process_state("The Codex app server became unresponsive during a request.")
+                    .await?;
+                self.request_once(method, params)
+                    .await
+                    .with_context(|| format!("Codex request '{method}' failed after process restart"))
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    async fn request_once(&self, method: &str, params: Value) -> Result<Value> {
         let process = self.ensure_process().await?;
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let (tx, rx) = oneshot::channel();
@@ -664,7 +761,13 @@ impl CodexService {
         });
         self.write_to_process(&process, payload).await?;
 
-        rx.await.context("codex response channel dropped")?
+        rx.await.with_context(|| {
+            format!(
+                "Codex app-server closed the response channel for '{}'{}",
+                method,
+                self.recent_stderr_suffix()
+            )
+        })?
     }
 
     async fn write_to_process(&self, process: &CodexProcess, payload: Value) -> Result<()> {
@@ -673,6 +776,24 @@ impl CodexService {
         stdin.write_all(b"\n").await?;
         stdin.flush().await?;
         Ok(())
+    }
+
+    fn recent_stderr_suffix(&self) -> String {
+        let stderr = {
+            let state = self.state.lock();
+            state
+                .recent_stderr
+                .iter()
+                .rev()
+                .take(3)
+                .cloned()
+                .collect::<Vec<_>>()
+        };
+        if stderr.is_empty() {
+            String::new()
+        } else {
+            format!("; recent Codex stderr: {}", stderr.join(" | "))
+        }
     }
 
     fn spawn_reader(&self, stdout: ChildStdout, stderr: ChildStderr, process: CodexProcess) {
@@ -797,7 +918,35 @@ impl CodexService {
 
                         if let Some(sender) = process.pending_requests.lock().remove(&id) {
                             let result = if let Some(error) = value.get("error") {
-                                Err(anyhow!(error.to_string()))
+                                let code = error
+                                    .get("code")
+                                    .and_then(|value| value.as_i64())
+                                    .map(|code| format!(" (code {code})"))
+                                    .unwrap_or_default();
+                                let message = error
+                                    .get("message")
+                                    .and_then(|value| value.as_str())
+                                    .unwrap_or_else(|| {
+                                        error
+                                            .as_str()
+                                            .unwrap_or("Codex app-server returned an error")
+                                    });
+                                let stderr_suffix = {
+                                    let runtime = state.lock();
+                                    let stderr = runtime
+                                        .recent_stderr
+                                        .iter()
+                                        .rev()
+                                        .take(3)
+                                        .cloned()
+                                        .collect::<Vec<_>>();
+                                    if stderr.is_empty() {
+                                        String::new()
+                                    } else {
+                                        format!("; recent Codex stderr: {}", stderr.join(" | "))
+                                    }
+                                };
+                                Err(anyhow!("{message}{code}{stderr_suffix}"))
                             } else {
                                 Ok(value.get("result").cloned().unwrap_or(Value::Null))
                             };
@@ -816,6 +965,22 @@ impl CodexService {
                                 }
                             }
                             let thread = outcome.thread;
+                            if is_terminal_thread_status(&thread.status) {
+                                if let Ok(messages) = persistence
+                                    .finalize_streaming_codex_messages(
+                                        thread.thread_id.clone(),
+                                        thread.last_turn_id.clone(),
+                                    )
+                                    .await
+                                {
+                                    for message in messages {
+                                        let _ = app.emit(
+                                            CODEX_EVENT,
+                                            json!({ "type": "messageUpserted", "message": message }),
+                                        );
+                                    }
+                                }
+                            }
                             let _ = persistence.upsert_codex_thread(thread.clone()).await;
                             let _ = app.emit(
                                 CODEX_EVENT,
@@ -827,39 +992,100 @@ impl CodexService {
                             json!({ "type": "notification", "payload": value }),
                         );
                     }
+                } else {
+                    push_codex_runtime_line(&state, line.clone());
+                    let _ = app.emit(CODEX_EVENT, json!({ "type": "stderr", "line": line }));
                 }
             }
-            let disconnected_threads = {
-                let mut runtime = state.lock();
-                runtime.process = None;
-                runtime.pending_server_requests.clear();
-                runtime
-                    .threads
-                    .values_mut()
-                    .filter_map(|thread| {
-                        if matches!(thread.status.as_str(), "running" | "waitingApproval") {
-                            thread.status = "disconnected".to_string();
-                            Some(thread.clone())
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<Vec<_>>()
-            };
+            let disconnected_threads = reset_runtime_state(&state);
             for thread in disconnected_threads {
                 let _ = persistence.upsert_codex_thread(thread).await;
             }
-            let _ = app.emit(CODEX_EVENT, json!({ "type": "serverDisconnected" }));
+            let _ = app.emit(
+                CODEX_EVENT,
+                json!({
+                    "type": "serverDisconnected",
+                    "reason": "The Codex app server disconnected.",
+                    "recentLines": recent_runtime_lines(&state, 5),
+                }),
+            );
         });
 
         let app = self.app.clone();
+        let state_for_stderr = self.state.clone();
         tauri::async_runtime::spawn(async move {
             let mut lines = BufReader::new(stderr).lines();
             while let Ok(Some(line)) = lines.next_line().await {
+                push_codex_runtime_line(&state_for_stderr, line.clone());
                 let _ = app.emit(CODEX_EVENT, json!({ "type": "stderr", "line": line }));
             }
         });
     }
+
+    async fn reset_process_state(&self, message: &str) -> Result<()> {
+        let disconnected_threads = reset_runtime_state(&self.state);
+        for thread in disconnected_threads {
+            self.persistence.upsert_codex_thread(thread).await?;
+        }
+        let _ = self
+            .app
+            .emit(
+                CODEX_EVENT,
+                json!({
+                    "type": "serverDisconnected",
+                    "reason": message,
+                    "recentLines": recent_runtime_lines(&self.state, 5),
+                }),
+            );
+        Ok(())
+    }
+}
+
+fn thread_has_backing_session(paths: &IcePaths, thread_id: &str) -> bool {
+    codex_sessions_dir(paths)
+        .map(|root| find_thread_session_file(&root, thread_id))
+        .unwrap_or(false)
+}
+
+fn codex_sessions_dir(paths: &IcePaths) -> Option<std::path::PathBuf> {
+    let root = paths.concern_dir("codex").join("sessions");
+    root.is_dir().then_some(root)
+}
+
+fn find_thread_session_file(root: &Path, thread_id: &str) -> bool {
+    let entries = match fs::read_dir(root) {
+        Ok(entries) => entries,
+        Err(_) => return false,
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        match entry.file_type() {
+            Ok(file_type) if file_type.is_dir() => {
+                if find_thread_session_file(&path, thread_id) {
+                    return true;
+                }
+            }
+            Ok(file_type) if file_type.is_file() => {
+                if path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .map(|name| name.contains(thread_id))
+                    .unwrap_or(false)
+                {
+                    return true;
+                }
+            }
+            _ => {}
+        }
+    }
+    false
+}
+
+fn is_missing_thread_error(error: &anyhow::Error) -> bool {
+    error
+        .to_string()
+        .to_ascii_lowercase()
+        .contains("thread not found")
 }
 
 impl CodexService {
@@ -892,6 +1118,51 @@ impl CodexService {
         }
         Ok(binding)
     }
+
+    async fn ensure_thread_loaded(
+        &self,
+        project: &ProjectRecord,
+        thread: &CodexThreadBinding,
+    ) -> Result<()> {
+        if self
+            .state
+            .lock()
+            .loaded_threads
+            .get(&thread.thread_id)
+            .copied()
+            .unwrap_or(false)
+        {
+            return Ok(());
+        }
+        let resume_result = self.request(
+            "thread/resume",
+            json!({
+              "threadId": thread.thread_id,
+              "cwd": project.root_path,
+              "approvalPolicy": "never",
+              "sandbox": "danger-full-access",
+              "model": CODEX_MODEL_ID,
+              "serviceName": "ice",
+            }),
+        )
+        .await;
+        if let Err(error) = resume_result {
+            if is_missing_thread_error(&error) {
+                self.drop_stale_thread(&thread.thread_id).await;
+            }
+            return Err(error).with_context(|| {
+                format!(
+                    "unable to resume Codex thread '{}' for project '{}'",
+                    thread.thread_id, project.name
+                )
+            });
+        }
+        self.state
+            .lock()
+            .loaded_threads
+            .insert(thread.thread_id.clone(), true);
+        Ok(())
+    }
 }
 
 fn resolve_login_shell() -> String {
@@ -918,15 +1189,85 @@ async fn process_is_alive(process: &CodexProcess) -> bool {
     matches!(child.try_wait(), Ok(None))
 }
 
+fn push_codex_runtime_line(state: &Arc<Mutex<CodexRuntimeState>>, line: String) {
+    let mut runtime = state.lock();
+    runtime.recent_stderr.push_back(line);
+    while runtime.recent_stderr.len() > 20 {
+        runtime.recent_stderr.pop_front();
+    }
+}
+
+fn recent_runtime_lines(state: &Arc<Mutex<CodexRuntimeState>>, limit: usize) -> Vec<String> {
+    let runtime = state.lock();
+    runtime
+        .recent_stderr
+        .iter()
+        .rev()
+        .take(limit)
+        .cloned()
+        .collect::<Vec<_>>()
+}
+
+fn reset_runtime_state(state: &Arc<Mutex<CodexRuntimeState>>) -> Vec<CodexThreadBinding> {
+    let mut runtime = state.lock();
+    runtime.process = None;
+    runtime.loaded_threads.clear();
+    runtime.pending_server_requests.clear();
+    runtime
+        .threads
+        .values_mut()
+        .filter_map(|thread| {
+            if matches!(thread.status.as_str(), "running" | "waitingApproval") {
+                thread.status = "disconnected".to_string();
+                Some(thread.clone())
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>()
+}
+
+fn is_transport_failure(error: &anyhow::Error) -> bool {
+    let message = error.to_string().to_ascii_lowercase();
+    message.contains("closed the response channel")
+        || message.contains("closed the initialize response channel")
+        || message.contains("broken pipe")
+        || message.contains("connection reset")
+        || message.contains("failed to start codex app-server")
+        || message.contains("missing codex stdin")
+        || message.contains("missing codex stdout")
+        || message.contains("missing codex stderr")
+}
+
 fn normalize_thread_after_startup(mut thread: CodexThreadBinding) -> CodexThreadBinding {
+    thread.model = Some(CODEX_MODEL_ID.to_string());
     if matches!(thread.status.as_str(), "running" | "waitingApproval") {
         thread.status = "disconnected".to_string();
+    }
+    if thread
+        .last_assistant_message
+        .as_deref()
+        .map(|message| message.trim_start().starts_with("[ICE PROJECT SCOPE]"))
+        .unwrap_or(false)
+    {
+        thread.last_assistant_message = None;
     }
     thread
 }
 
-fn default_thread_title(project: &ProjectRecord) -> String {
-    format!("{} Thread", project.name)
+fn find_superseded_disconnected_thread_ids(threads: &[CodexThreadBinding]) -> Vec<String> {
+    threads
+        .iter()
+        .filter(|candidate| {
+            candidate.status == "disconnected"
+                && threads.iter().any(|thread| {
+                    thread.project_id == candidate.project_id
+                        && thread.thread_id != candidate.thread_id
+                        && thread.status != "disconnected"
+                })
+        })
+        .map(|thread| thread.thread_id.clone())
+        .collect()
 }
 
 fn build_scoped_turn_prompt(project: &ProjectRecord, prompt: &str) -> String {
@@ -1009,13 +1350,17 @@ fn apply_notification_to_threads(
         thread.title = Some(title);
     }
     if let Some(model) = extract_model(params) {
-        thread.model = Some(model);
+        thread.model = Some(normalize_model_id(model));
     }
     if let Some(turn_id) = extract_turn_id(params) {
         thread.last_turn_id = Some(turn_id);
     }
-    let assistant_message = extract_assistant_message(params);
-    if let Some(message) = assistant_message.clone() {
+    let assistant_message = if is_assistant_message_notification(method, params) {
+        extract_assistant_message_content(method, params)
+    } else {
+        None
+    };
+    if let Some(message) = assistant_message.as_deref() {
         let next_summary = if is_delta_notification(method, params) {
             summarize_text(&format!(
                 "{}{}",
@@ -1023,28 +1368,33 @@ fn apply_notification_to_threads(
                 message
             ))
         } else {
-            summarize_text(&message)
+            summarize_text(message)
         };
         thread.last_assistant_message = Some(next_summary);
         thread.unread = true;
     }
 
-    if method.contains("approval") {
+    let turn_failed = is_failed_turn_notification(method, params);
+
+    if method == "thread/status/changed" {
+        if let Some(status) = extract_thread_runtime_status(params) {
+            thread.status = status;
+        }
+    } else if method.contains("approval") {
         thread.status = "waitingApproval".to_string();
-    } else if method.contains("turn/start")
-        || method.contains("turn.started")
-        || method.contains("turn/update")
-        || method.contains("turn.delta")
-    {
+    } else if method == "turn/started" {
         thread.status = "running".to_string();
-    } else if method.contains("turn/completed")
-        || method.contains("turn.completed")
-        || method.contains("turn/finished")
-    {
-        thread.status = "idle".to_string();
-    } else if method.contains("turn/failed") || method.contains("turn.error") {
+    } else if turn_failed {
         thread.status = "error".to_string();
-    } else if method.contains("thread/updated") && thread.status == "disconnected" {
+    } else if method == "turn/completed" {
+        thread.status = "idle".to_string();
+    } else if method == "item/completed" {
+        if thread.status == "disconnected" {
+            thread.status = "idle".to_string();
+        }
+    } else if method == "error" {
+        thread.status = "error".to_string();
+    } else if method == "thread/name/updated" && thread.status == "disconnected" {
         thread.status = "idle".to_string();
     }
 
@@ -1055,7 +1405,7 @@ fn apply_notification_to_threads(
         turn_id: thread.last_turn_id.clone(),
         role: "assistant".to_string(),
         content,
-        state: if is_final_notification(method) {
+        state: if is_final_message_notification(method, params) {
             "complete".to_string()
         } else {
             "streaming".to_string()
@@ -1089,8 +1439,15 @@ fn extract_turn_id(payload: &Value) -> Option<String> {
 
 fn extract_title(payload: &Value) -> Option<String> {
     payload
-        .get("title")
+        .get("threadName")
+        .or_else(|| payload.get("thread_name"))
+        .or_else(|| payload.get("title"))
         .or_else(|| payload.get("thread").and_then(|thread| thread.get("title")))
+        .or_else(|| {
+            payload
+                .get("thread")
+                .and_then(|thread| thread.get("threadName"))
+        })
         .and_then(|value| value.as_str())
         .map(ToOwned::to_owned)
 }
@@ -1103,7 +1460,7 @@ fn extract_model(payload: &Value) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-fn extract_assistant_message(payload: &Value) -> Option<String> {
+fn extract_assistant_message_content(method: &str, payload: &Value) -> Option<String> {
     if let Some(text) = payload
         .get("message")
         .and_then(extract_text_from_value)
@@ -1111,28 +1468,100 @@ fn extract_assistant_message(payload: &Value) -> Option<String> {
         .or_else(|| payload.get("item").and_then(extract_text_from_value))
         .or_else(|| payload.get("content").and_then(extract_text_from_value))
     {
-        let summary = text.trim().replace('\n', " ");
-        if !summary.is_empty() {
-            return Some(summary.chars().take(160).collect());
+        if method == "item/agentMessage/delta" {
+            if !text.is_empty() {
+                return Some(text);
+            }
+            return None;
+        }
+        let normalized = text.trim_end().to_string();
+        if !normalized.trim().is_empty() {
+            return Some(normalized);
         }
     }
     None
 }
 
 fn is_delta_notification(method: &str, payload: &Value) -> bool {
-    (method.contains("turn.delta") || method.contains("turn/update"))
+    method == "item/agentMessage/delta"
         && payload.get("delta").is_some()
         && payload.get("message").is_none()
 }
 
-fn is_final_notification(method: &str) -> bool {
-    method.contains("turn/completed")
-        || method.contains("turn.completed")
-        || method.contains("turn/finished")
+fn is_assistant_message_notification(method: &str, payload: &Value) -> bool {
+    if method == "item/agentMessage/delta" {
+        return true;
+    }
+    if method == "item/completed" || method == "item/started" {
+        return payload
+            .get("item")
+            .and_then(|item| item.get("type"))
+            .and_then(|value| value.as_str())
+            .map(|kind| {
+                kind.eq_ignore_ascii_case("assistantMessage")
+                    || kind.eq_ignore_ascii_case("agentMessage")
+            })
+            .unwrap_or(false);
+    }
+    false
+}
+
+fn is_final_message_notification(method: &str, payload: &Value) -> bool {
+    method == "item/completed" && is_assistant_message_notification(method, payload)
+}
+
+fn is_failed_turn_notification(method: &str, payload: &Value) -> bool {
+    (method == "turn/completed" || method == "error")
+        && payload
+            .get("turn")
+            .and_then(|turn| turn.get("status"))
+            .and_then(|value| value.as_str())
+            .map(|status| status.eq_ignore_ascii_case("failed"))
+            .unwrap_or_else(|| payload.get("error").is_some())
 }
 
 fn summarize_text(text: &str) -> String {
     text.trim().replace('\n', " ").chars().take(160).collect()
+}
+
+fn normalize_model_id(_model: String) -> String {
+    CODEX_MODEL_ID.to_string()
+}
+
+fn is_terminal_thread_status(status: &str) -> bool {
+    matches!(status, "idle" | "error" | "disconnected")
+}
+
+fn extract_thread_runtime_status(payload: &Value) -> Option<String> {
+    let status = payload.get("status")?;
+    if let Some(kind) = status.get("type").and_then(|value| value.as_str()) {
+        return match kind {
+            "active" => {
+                let waiting = status
+                    .get("activeFlags")
+                    .and_then(|value| value.as_array())
+                    .map(|flags| {
+                        flags.iter().any(|flag| {
+                            flag.as_str()
+                                .map(|value| value.to_ascii_lowercase().contains("approval"))
+                                .unwrap_or(false)
+                        })
+                    })
+                    .unwrap_or(false);
+                Some(if waiting { "waitingApproval" } else { "running" }.to_string())
+            }
+            "idle" | "notLoaded" => Some("idle".to_string()),
+            "systemError" => Some("error".to_string()),
+            _ => None,
+        };
+    }
+    if status.get("systemError").is_some() {
+        return Some("error".to_string());
+    }
+    if status.get("idle").is_some() || status.get("notLoaded").is_some() {
+        return Some("idle".to_string());
+    }
+    None
 }
 
 fn assistant_message_id(thread_id: &str, turn_id: Option<&str>) -> String {
@@ -1319,12 +1748,15 @@ fn extract_default_listen(help_text: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        build_pending_approval, build_scoped_turn_prompt, extract_default_listen,
-        CodexThreadBinding,
+        apply_notification_to_threads, build_pending_approval, build_scoped_turn_prompt,
+        extract_default_listen, normalize_thread_after_startup, summarize_text, CodexRuntimeState,
+        CodexThreadBinding, CODEX_MODEL_ID,
     };
     use crate::projects::models::ProjectRecord;
+    use parking_lot::Mutex;
     use serde_json::json;
-    use std::collections::HashMap;
+    use std::collections::{HashMap, VecDeque};
+    use std::sync::Arc;
 
     #[test]
     fn extracts_default_listen_from_help_text() {
@@ -1341,7 +1773,7 @@ mod tests {
                 project_id: "project-a".to_string(),
                 thread_id: "thread-1".to_string(),
                 title: Some("Agent".to_string()),
-                model: Some("gpt-5-codex".to_string()),
+                model: Some(CODEX_MODEL_ID.to_string()),
                 status: "idle".to_string(),
                 last_turn_id: None,
                 last_assistant_message: None,
@@ -1380,5 +1812,392 @@ mod tests {
         assert!(prompt
             .contains("Do not read, edit, create, delete, or run commands outside that root."));
         assert!(prompt.contains("[USER PROMPT]\nRefactor the git surface"));
+    }
+
+    #[test]
+    fn v2_agent_message_deltas_persist_full_content_and_summary() {
+        let mut threads = HashMap::new();
+        threads.insert(
+            "thread-1".to_string(),
+            CodexThreadBinding {
+                project_id: "project-a".to_string(),
+                thread_id: "thread-1".to_string(),
+                title: Some("Agent".to_string()),
+                model: Some(CODEX_MODEL_ID.to_string()),
+                status: "idle".to_string(),
+                last_turn_id: None,
+                last_assistant_message: None,
+                unread: false,
+            },
+        );
+        let state = Arc::new(Mutex::new(CodexRuntimeState {
+            process: None,
+            threads,
+            loaded_threads: HashMap::new(),
+            pending_server_requests: HashMap::new(),
+            recent_stderr: VecDeque::new(),
+        }));
+
+        let started = apply_notification_to_threads(
+            &state,
+            &json!({
+                "method": "turn/started",
+                "params": {
+                    "threadId": "thread-1",
+                    "turn": { "id": "turn-1" }
+                }
+            }),
+        )
+        .expect("turn started outcome");
+        assert_eq!(started.thread.status, "running");
+        assert_eq!(started.thread.last_turn_id.as_deref(), Some("turn-1"));
+
+        let delta_text = "This is a full assistant response chunk that should be stored without trimming even when the sidebar preview stays compact.";
+        let delta = apply_notification_to_threads(
+            &state,
+            &json!({
+                "method": "item/agentMessage/delta",
+                "params": {
+                    "threadId": "thread-1",
+                    "turnId": "turn-1",
+                    "itemId": "item-1",
+                    "delta": delta_text
+                }
+            }),
+        )
+        .expect("delta outcome");
+        let message_update = delta.message_update.expect("message update");
+        assert_eq!(message_update.content, delta_text);
+        assert_eq!(message_update.state, "streaming");
+        assert!(message_update.append);
+        let expected_summary = summarize_text(delta_text);
+        assert_eq!(
+            delta.thread.last_assistant_message.as_deref(),
+            Some(expected_summary.as_str())
+        );
+        assert!(delta.thread.unread);
+
+        let completed = apply_notification_to_threads(
+            &state,
+            &json!({
+                "method": "turn/completed",
+                "params": {
+                    "threadId": "thread-1",
+                    "turn": { "id": "turn-1" }
+                }
+            }),
+        )
+        .expect("turn completed outcome");
+        assert_eq!(completed.thread.status, "idle");
+        assert!(completed.message_update.is_none());
+    }
+
+    #[test]
+    fn agent_message_deltas_preserve_spacing_until_final_message() {
+        let mut threads = HashMap::new();
+        threads.insert(
+            "thread-1".to_string(),
+            CodexThreadBinding {
+                project_id: "project-a".to_string(),
+                thread_id: "thread-1".to_string(),
+                title: Some("Agent".to_string()),
+                model: Some(CODEX_MODEL_ID.to_string()),
+                status: "idle".to_string(),
+                last_turn_id: None,
+                last_assistant_message: None,
+                unread: false,
+            },
+        );
+        let state = Arc::new(Mutex::new(CodexRuntimeState {
+            process: None,
+            threads,
+            loaded_threads: HashMap::new(),
+            pending_server_requests: HashMap::new(),
+            recent_stderr: VecDeque::new(),
+        }));
+
+        let _ = apply_notification_to_threads(
+            &state,
+            &json!({
+                "method": "turn/started",
+                "params": {
+                    "threadId": "thread-1",
+                    "turn": { "id": "turn-1" }
+                }
+            }),
+        )
+        .expect("turn started outcome");
+
+        let hello = apply_notification_to_threads(
+            &state,
+            &json!({
+                "method": "item/agentMessage/delta",
+                "params": {
+                    "threadId": "thread-1",
+                    "turnId": "turn-1",
+                    "delta": "Hello "
+                }
+            }),
+        )
+        .expect("hello delta");
+        assert_eq!(
+            hello.message_update.expect("hello message update").content,
+            "Hello "
+        );
+
+        let world = apply_notification_to_threads(
+            &state,
+            &json!({
+                "method": "item/agentMessage/delta",
+                "params": {
+                    "threadId": "thread-1",
+                    "turnId": "turn-1",
+                    "delta": "world"
+                }
+            }),
+        )
+        .expect("world delta");
+        assert_eq!(
+            world.message_update.expect("world message update").content,
+            "world"
+        );
+
+        let completed = apply_notification_to_threads(
+            &state,
+            &json!({
+                "method": "item/completed",
+                "params": {
+                    "threadId": "thread-1",
+                    "turnId": "turn-1",
+                    "item": {
+                        "type": "agentMessage",
+                        "text": "Hello world"
+                    }
+                }
+            }),
+        )
+        .expect("completed message");
+        let completed_update = completed.message_update.expect("completed update");
+        assert_eq!(completed_update.content, "Hello world");
+        assert_eq!(completed_update.state, "complete");
+    }
+
+    #[test]
+    fn user_message_notifications_do_not_overwrite_assistant_content() {
+        let mut threads = HashMap::new();
+        threads.insert(
+            "thread-1".to_string(),
+            CodexThreadBinding {
+                project_id: "project-a".to_string(),
+                thread_id: "thread-1".to_string(),
+                title: Some("Agent".to_string()),
+                model: Some(CODEX_MODEL_ID.to_string()),
+                status: "idle".to_string(),
+                last_turn_id: None,
+                last_assistant_message: None,
+                unread: false,
+            },
+        );
+        let state = Arc::new(Mutex::new(CodexRuntimeState {
+            process: None,
+            threads,
+            loaded_threads: HashMap::new(),
+            pending_server_requests: HashMap::new(),
+            recent_stderr: VecDeque::new(),
+        }));
+
+        let started = apply_notification_to_threads(
+            &state,
+            &json!({
+                "method": "turn/started",
+                "params": {
+                    "threadId": "thread-1",
+                    "turn": { "id": "turn-1" }
+                }
+            }),
+        )
+        .expect("turn started outcome");
+        assert_eq!(started.thread.status, "running");
+
+        let user_message = apply_notification_to_threads(
+            &state,
+            &json!({
+                "method": "item/completed",
+                "params": {
+                    "threadId": "thread-1",
+                    "turnId": "turn-1",
+                    "item": {
+                        "type": "userMessage",
+                        "content": [
+                            { "type": "text", "text": "[ICE PROJECT SCOPE]\n[USER PROMPT]\ntest" }
+                        ]
+                    }
+                }
+            }),
+        )
+        .expect("user message outcome");
+        assert!(user_message.message_update.is_none());
+        assert_eq!(user_message.thread.last_assistant_message, None);
+    }
+
+    #[test]
+    fn thread_name_updates_use_v2_thread_name_field() {
+        let mut threads = HashMap::new();
+        threads.insert(
+            "thread-1".to_string(),
+            CodexThreadBinding {
+                project_id: "project-a".to_string(),
+                thread_id: "thread-1".to_string(),
+                title: Some("Old".to_string()),
+                model: Some(CODEX_MODEL_ID.to_string()),
+                status: "idle".to_string(),
+                last_turn_id: None,
+                last_assistant_message: None,
+                unread: false,
+            },
+        );
+        let state = Arc::new(Mutex::new(CodexRuntimeState {
+            process: None,
+            threads,
+            loaded_threads: HashMap::new(),
+            pending_server_requests: HashMap::new(),
+            recent_stderr: VecDeque::new(),
+        }));
+
+        let outcome = apply_notification_to_threads(
+            &state,
+            &json!({
+                "method": "thread/name/updated",
+                "params": {
+                    "threadId": "thread-1",
+                    "threadName": "Renamed Thread"
+                }
+            }),
+        )
+        .expect("thread name update");
+
+        assert_eq!(outcome.thread.title.as_deref(), Some("Renamed Thread"));
+    }
+
+    #[test]
+    fn startup_normalization_forces_gpt54_and_clears_scoped_summary() {
+        let normalized = normalize_thread_after_startup(CodexThreadBinding {
+            project_id: "project-a".to_string(),
+            thread_id: "thread-1".to_string(),
+            title: Some("Agent".to_string()),
+            model: Some("gpt-5-codex".to_string()),
+            status: "running".to_string(),
+            last_turn_id: Some("turn-1".to_string()),
+            last_assistant_message: Some(
+                "[ICE PROJECT SCOPE]\nProject Root: /tmp/demo".to_string(),
+            ),
+            unread: false,
+        });
+
+        assert_eq!(normalized.model.as_deref(), Some(CODEX_MODEL_ID));
+        assert_eq!(normalized.status, "disconnected");
+        assert_eq!(normalized.last_assistant_message, None);
+    }
+
+    #[test]
+    fn stale_disconnected_threads_are_pruned_when_a_project_has_a_healthy_thread() {
+        let thread_ids = super::find_superseded_disconnected_thread_ids(&[
+            CodexThreadBinding {
+                project_id: "project-a".to_string(),
+                thread_id: "thread-disconnected".to_string(),
+                title: Some("Old".to_string()),
+                model: Some(CODEX_MODEL_ID.to_string()),
+                status: "disconnected".to_string(),
+                last_turn_id: None,
+                last_assistant_message: None,
+                unread: false,
+            },
+            CodexThreadBinding {
+                project_id: "project-a".to_string(),
+                thread_id: "thread-idle".to_string(),
+                title: Some("New".to_string()),
+                model: Some(CODEX_MODEL_ID.to_string()),
+                status: "idle".to_string(),
+                last_turn_id: None,
+                last_assistant_message: None,
+                unread: false,
+            },
+            CodexThreadBinding {
+                project_id: "project-b".to_string(),
+                thread_id: "thread-only".to_string(),
+                title: Some("Only".to_string()),
+                model: Some(CODEX_MODEL_ID.to_string()),
+                status: "disconnected".to_string(),
+                last_turn_id: None,
+                last_assistant_message: None,
+                unread: false,
+            },
+        ]);
+
+        assert_eq!(thread_ids, vec!["thread-disconnected".to_string()]);
+    }
+
+    #[test]
+    fn thread_status_changed_tracks_running_idle_and_error() {
+        let mut threads = HashMap::new();
+        threads.insert(
+            "thread-1".to_string(),
+            CodexThreadBinding {
+                project_id: "project-a".to_string(),
+                thread_id: "thread-1".to_string(),
+                title: Some("Agent".to_string()),
+                model: Some(CODEX_MODEL_ID.to_string()),
+                status: "idle".to_string(),
+                last_turn_id: None,
+                last_assistant_message: None,
+                unread: false,
+            },
+        );
+        let state = Arc::new(Mutex::new(CodexRuntimeState {
+            process: None,
+            threads,
+            loaded_threads: HashMap::new(),
+            pending_server_requests: HashMap::new(),
+            recent_stderr: VecDeque::new(),
+        }));
+
+        let running = apply_notification_to_threads(
+            &state,
+            &json!({
+                "method": "thread/status/changed",
+                "params": {
+                    "threadId": "thread-1",
+                    "status": { "type": "active", "activeFlags": [] }
+                }
+            }),
+        )
+        .expect("running status");
+        assert_eq!(running.thread.status, "running");
+
+        let idle = apply_notification_to_threads(
+            &state,
+            &json!({
+                "method": "thread/status/changed",
+                "params": {
+                    "threadId": "thread-1",
+                    "status": { "type": "idle" }
+                }
+            }),
+        )
+        .expect("idle status");
+        assert_eq!(idle.thread.status, "idle");
+
+        let errored = apply_notification_to_threads(
+            &state,
+            &json!({
+                "method": "thread/status/changed",
+                "params": {
+                    "threadId": "thread-1",
+                    "status": { "type": "systemError", "systemError": { "message": "boom" } }
+                }
+            }),
+        )
+        .expect("error status");
+        assert_eq!(errored.thread.status, "error");
     }
 }

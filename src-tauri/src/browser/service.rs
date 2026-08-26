@@ -16,6 +16,8 @@ use crate::app::state::AppState;
 use crate::persistence::db::PersistenceService;
 use crate::projects::models::ProjectBrowserSidebarItem;
 
+const MAX_BROWSER_HISTORY_ENTRIES: usize = 100;
+
 pub struct BrowserService {
     app: AppHandle,
     persistence: Arc<PersistenceService>,
@@ -159,6 +161,7 @@ impl BrowserService {
                     history: entries,
                     current_index,
                 };
+                trim_browser_history(&mut state);
                 refresh_record_navigation(&mut state);
                 (state.record.tab_id.clone(), state)
             })
@@ -238,6 +241,7 @@ impl BrowserService {
                 title: title.clone(),
             });
             tab.current_index = position;
+            trim_browser_history(tab);
             tab.record.url = url.clone();
             tab.record.title = title;
             tab.record.is_loading = true;
@@ -764,6 +768,7 @@ impl BrowserService {
                     title: title.clone(),
                 });
                 state.current_index = position;
+                trim_browser_history(state);
                 state.record.title = title;
             }
             state.record.url = url_string.clone();
@@ -957,6 +962,22 @@ fn browser_security_origin(url: &str) -> Option<String> {
 
 fn is_secure_url(url: &str) -> bool {
     url.starts_with("https://") || url.starts_with("about:") || url.starts_with("tauri://")
+}
+
+fn trim_browser_history(state: &mut BrowserTabState) {
+    if state.history.len() <= MAX_BROWSER_HISTORY_ENTRIES {
+        return;
+    }
+
+    let overflow = state.history.len() - MAX_BROWSER_HISTORY_ENTRIES;
+    state.history.drain(0..overflow);
+    state.current_index = state.current_index.saturating_sub(overflow);
+    if state.current_index >= state.history.len() {
+        state.current_index = state.history.len().saturating_sub(1);
+    }
+    for (position, entry) in state.history.iter_mut().enumerate() {
+        entry.position = position;
+    }
 }
 
 fn refresh_record_navigation(state: &mut BrowserTabState) {
@@ -1169,7 +1190,10 @@ fn browser_runtime_init_script(tab_id: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{browser_security_origin, is_secure_url};
+    use super::{
+        browser_security_origin, is_secure_url, trim_browser_history, BrowserHistoryEntry,
+        BrowserTabRecord, BrowserTabState, MAX_BROWSER_HISTORY_ENTRIES,
+    };
 
     #[test]
     fn infers_secure_origin_from_https_url() {
@@ -1179,5 +1203,43 @@ mod tests {
         );
         assert!(is_secure_url("https://example.com"));
         assert!(!is_secure_url("http://example.com"));
+    }
+
+    #[test]
+    fn trims_history_to_bounded_size() {
+        let mut state = BrowserTabState {
+            record: BrowserTabRecord {
+                tab_id: "tab-1".to_string(),
+                project_id: "project-1".to_string(),
+                url: "https://example.com/119".to_string(),
+                title: "latest".to_string(),
+                is_pinned: false,
+                can_go_back: true,
+                can_go_forward: false,
+                is_loading: false,
+                favicon_url: None,
+                security_origin: Some("https://example.com".to_string()),
+                is_secure: true,
+            },
+            history: (0..120)
+                .map(|position| BrowserHistoryEntry {
+                    tab_id: "tab-1".to_string(),
+                    position,
+                    url: format!("https://example.com/{position}"),
+                    title: format!("page-{position}"),
+                })
+                .collect(),
+            current_index: 119,
+        };
+
+        trim_browser_history(&mut state);
+
+        assert_eq!(state.history.len(), MAX_BROWSER_HISTORY_ENTRIES);
+        assert_eq!(state.current_index, MAX_BROWSER_HISTORY_ENTRIES - 1);
+        assert_eq!(state.history.first().map(|entry| entry.position), Some(0));
+        assert_eq!(
+            state.history.first().map(|entry| entry.url.as_str()),
+            Some("https://example.com/20")
+        );
     }
 }

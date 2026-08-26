@@ -77,6 +77,12 @@
   gap: var(--sp-3);
 }
 
+.streamingText {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .textBlock {
   display: flex;
   flex-direction: column;

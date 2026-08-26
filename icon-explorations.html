@@ -1,0 +1,669 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Ice · Icon Rituals</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#030610;
+    --ink-2:#080D1A;
+    --ink-3:#0D1628;
+    --glacial:#B8DEF5;
+    --steel:#5A89B0;
+    --frost:#E6F2FB;
+    --violet:#8FA4D8;
+    --line:rgba(184,222,245,0.08);
+    --line-strong:rgba(184,222,245,0.18);
+    --text:#D8E4F0;
+    --dim:#6B7F96;
+    --display:'Cormorant Garamond', serif;
+    --mono:'JetBrains Mono', ui-monospace, monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{background:var(--ink);color:var(--text);font-family:var(--mono);-webkit-font-smoothing:antialiased;min-height:100vh;overflow-x:hidden}
+  body{
+    background:
+      radial-gradient(1200px 900px at 18% -10%, rgba(90,137,176,0.18), transparent 60%),
+      radial-gradient(900px 800px at 92% 110%, rgba(143,164,216,0.10), transparent 55%),
+      radial-gradient(600px 600px at 50% 50%, rgba(13,22,40,0.6), transparent 70%),
+      var(--ink);
+  }
+  /* Starfield */
+  .stars{position:fixed;inset:0;pointer-events:none;z-index:0;opacity:0.55}
+  .stars i{position:absolute;width:1px;height:1px;background:#cfe0f0;border-radius:50%;box-shadow:0 0 6px rgba(207,224,240,0.6);animation:drift linear infinite}
+  @keyframes drift{
+    0%{transform:translate3d(0,0,0);opacity:0}
+    12%{opacity:1}
+    88%{opacity:1}
+    100%{transform:translate3d(0,-120vh,0);opacity:0}
+  }
+  @keyframes breathe{
+    0%,100%{transform:translateY(0) scale(1)}
+    50%{transform:translateY(-6px) scale(1.01)}
+  }
+  @keyframes shimmer{
+    0%,100%{opacity:0.85}
+    50%{opacity:1}
+  }
+  main{position:relative;z-index:1;max-width:1480px;margin:0 auto;padding:48px 56px 96px}
+
+  /* Header */
+  header{display:flex;align-items:flex-end;justify-content:space-between;gap:48px;margin-bottom:56px;border-bottom:1px solid var(--line);padding-bottom:28px}
+  .brand{display:flex;flex-direction:column;gap:6px}
+  .brand .mark{display:flex;align-items:center;gap:14px;font-family:var(--mono);font-size:10px;letter-spacing:0.28em;text-transform:uppercase;color:var(--dim)}
+  .brand .mark::before{content:"";width:24px;height:1px;background:var(--line-strong)}
+  h1{font-family:var(--display);font-weight:300;font-size:82px;line-height:0.95;letter-spacing:-0.01em;color:var(--frost)}
+  h1 em{font-style:italic;font-weight:400;color:var(--glacial)}
+  .meta{text-align:right;font-family:var(--mono);font-size:11px;letter-spacing:0.14em;color:var(--dim);line-height:1.9}
+  .meta b{color:var(--text);font-weight:500}
+  .meta .count{font-family:var(--display);font-size:56px;font-style:italic;color:var(--frost);display:block;line-height:1;margin-bottom:6px}
+
+  /* Stage layout */
+  .stage{display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:64px;align-items:start}
+
+  .featured{position:relative}
+  .featured .ritual-label{display:flex;align-items:center;gap:14px;font-size:10px;letter-spacing:0.32em;color:var(--dim);text-transform:uppercase;margin-bottom:22px}
+  .featured .ritual-label .dot{width:6px;height:6px;background:var(--glacial);border-radius:50%;box-shadow:0 0 14px var(--glacial);animation:shimmer 3s ease-in-out infinite}
+  .featured .ritual-label .num{font-family:var(--display);font-style:italic;font-size:28px;color:var(--frost);letter-spacing:0;margin-left:auto;line-height:1}
+
+  .canvas{position:relative;aspect-ratio:1/1;max-width:600px;margin:0 auto}
+  .canvas .halo{position:absolute;inset:-40px;border-radius:50%;background:radial-gradient(circle at 30% 30%, rgba(143,178,220,0.12), transparent 60%);filter:blur(20px);pointer-events:none}
+  .canvas svg{width:100%;height:100%;display:block;border-radius:24%;box-shadow:
+    0 2px 0 rgba(255,255,255,0.04) inset,
+    0 -2px 0 rgba(0,0,0,0.4) inset,
+    0 40px 80px -20px rgba(0,0,0,0.8),
+    0 20px 40px -10px rgba(6,14,28,0.9),
+    0 0 0 1px rgba(184,222,245,0.04);
+    animation:breathe 8s ease-in-out infinite}
+
+  .titling{margin-top:40px;display:grid;grid-template-columns:1fr auto;gap:32px;align-items:end;border-top:1px solid var(--line);padding-top:26px}
+  .titling h2{font-family:var(--display);font-weight:400;font-size:54px;line-height:1;color:var(--frost);letter-spacing:-0.005em}
+  .titling h2 em{font-style:italic;color:var(--glacial);font-weight:300}
+  .titling .tech{font-size:10px;letter-spacing:0.22em;text-transform:uppercase;color:var(--dim);text-align:right;line-height:1.9}
+  .titling .tech b{color:var(--text);font-weight:500}
+  .desc{margin-top:22px;font-family:var(--display);font-size:20px;line-height:1.55;color:#AEC0D4;max-width:640px;font-weight:400;font-style:italic}
+
+  /* Scale audit */
+  .audit{margin-top:48px;display:flex;align-items:flex-end;gap:28px;padding:28px 30px;border:1px solid var(--line);border-radius:4px;background:linear-gradient(180deg, rgba(13,22,40,0.6), rgba(8,13,26,0.4))}
+  .audit .label{font-size:9px;letter-spacing:0.3em;text-transform:uppercase;color:var(--dim);writing-mode:vertical-rl;transform:rotate(180deg);align-self:stretch;display:flex;align-items:center}
+  .audit .sizes{display:flex;align-items:flex-end;gap:28px;flex:1;justify-content:space-between}
+  .audit figure{display:flex;flex-direction:column;align-items:center;gap:10px}
+  .audit figure svg{border-radius:24%;box-shadow:0 4px 16px rgba(0,0,0,0.6), 0 0 0 1px rgba(184,222,245,0.05)}
+  .audit figcaption{font-size:9px;letter-spacing:0.22em;color:var(--dim);text-transform:uppercase}
+
+  /* Gallery rail */
+  .gallery{position:relative}
+  .gallery h3{font-family:var(--mono);font-size:10px;letter-spacing:0.3em;text-transform:uppercase;color:var(--dim);margin-bottom:18px;display:flex;align-items:center;gap:12px}
+  .gallery h3::after{content:"";flex:1;height:1px;background:var(--line)}
+  .rail{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+  .tile{position:relative;cursor:pointer;border:1px solid var(--line);border-radius:6px;padding:12px;background:linear-gradient(180deg, rgba(13,22,40,0.45), rgba(3,6,16,0.3));transition:all .5s cubic-bezier(.2,.8,.2,1)}
+  .tile:hover{border-color:var(--line-strong);transform:translateY(-2px);background:linear-gradient(180deg, rgba(20,32,56,0.6), rgba(8,13,26,0.4))}
+  .tile.active{border-color:rgba(184,222,245,0.35);background:linear-gradient(180deg, rgba(24,40,68,0.75), rgba(10,18,34,0.5));box-shadow:0 0 0 1px rgba(184,222,245,0.1), 0 20px 40px -20px rgba(0,0,0,0.8)}
+  .tile svg{width:100%;aspect-ratio:1/1;border-radius:22%;display:block;box-shadow:0 8px 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(184,222,245,0.04)}
+  .tile .caption{margin-top:10px;display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+  .tile .n{font-family:var(--display);font-style:italic;font-size:22px;color:var(--frost);line-height:1}
+  .tile .idx{font-family:var(--mono);font-size:9px;letter-spacing:0.24em;color:var(--dim);text-transform:uppercase}
+
+  /* Nav hint */
+  .hint{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);font-family:var(--mono);font-size:9px;letter-spacing:0.3em;text-transform:uppercase;color:var(--dim);display:flex;gap:20px;align-items:center;z-index:10;background:rgba(3,6,16,0.7);padding:12px 22px;border:1px solid var(--line);border-radius:2px;backdrop-filter:blur(12px)}
+  .hint kbd{font-family:var(--mono);font-size:10px;padding:3px 7px;border:1px solid var(--line-strong);border-radius:3px;color:var(--text);letter-spacing:0}
+  .hint .sep{width:1px;height:12px;background:var(--line-strong)}
+
+  /* Responsive-ish */
+  @media (max-width:1180px){
+    .stage{grid-template-columns:1fr;gap:48px}
+    h1{font-size:56px}
+    .canvas{max-width:480px}
+    .rail{grid-template-columns:repeat(4,1fr)}
+  }
+  @media (max-width:720px){
+    main{padding:28px 20px 120px}
+    h1{font-size:40px}
+    .titling h2{font-size:36px}
+    .rail{grid-template-columns:repeat(3,1fr)}
+    .audit{overflow-x:auto}
+  }
+</style>
+</head>
+<body>
+
+<div class="stars" id="stars"></div>
+
+<main>
+  <header>
+    <div class="brand">
+      <span class="mark">Desktop Icon · Explorations · Cold Series</span>
+      <h1>Ice<em>, </em>in<em> eight</em> rituals<em>.</em></h1>
+    </div>
+    <div class="meta">
+      <span class="count" id="counter">08</span>
+      Variations · 1024 sq<br/>
+      <b>Atelier</b> · saint · 2026<br/>
+      Press <b>← →</b> to traverse
+    </div>
+  </header>
+
+  <section class="stage">
+    <div class="featured">
+      <div class="ritual-label">
+        <span class="dot"></span>
+        <span>Ritual</span>
+        <span>·</span>
+        <span id="ritName">in session</span>
+        <span class="num" id="ritNum">I</span>
+      </div>
+      <div class="canvas">
+        <div class="halo"></div>
+        <div id="featured"></div>
+      </div>
+      <div class="titling">
+        <h2 id="ficTitle">The Monolith</h2>
+        <div class="tech">
+          <b id="tKind">Faceted Prism</b><br/>
+          <span id="tPalette">Graphite · Glacial</span><br/>
+          <span id="tLight">Light 315° · 38°</span>
+        </div>
+      </div>
+      <p class="desc" id="ficDesc">A six-faceted vertical monolith, with a specular spine that rises like an axis. The letterform is never announced — it emerges as geometry.</p>
+      <div class="audit">
+        <div class="label">Scale Audit</div>
+        <div class="sizes" id="auditRow"></div>
+      </div>
+    </div>
+
+    <aside class="gallery">
+      <h3>All Variations</h3>
+      <div class="rail" id="rail"></div>
+    </aside>
+  </section>
+</main>
+
+<div class="hint">
+  <span>Select a ritual</span>
+  <span class="sep"></span>
+  <kbd>←</kbd><kbd>→</kbd> navigate
+  <span class="sep"></span>
+  <kbd>1</kbd>–<kbd>8</kbd> jump
+</div>
+
+<script>
+/* ===================================================================== */
+/* 8 ICON RITUALS — each is a full 1024x1024 SVG, rendered at any size.  */
+/* ===================================================================== */
+
+const TILE_CLIP = `
+<clipPath id="__clip__">
+  <path d="M 512 0 C 180 0 0 180 0 512 C 0 844 180 1024 512 1024 C 844 1024 1024 844 1024 512 C 1024 180 844 0 512 0 Z"/>
+</clipPath>`;
+
+const TILE_BG = `
+<defs>
+  <linearGradient id="tb" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#142034"/>
+    <stop offset="0.55" stop-color="#0A1120"/>
+    <stop offset="1" stop-color="#03070F"/>
+  </linearGradient>
+  <radialGradient id="tg" cx="0.28" cy="0.22" r="0.85">
+    <stop offset="0" stop-color="#3E6A9C" stop-opacity="0.38"/>
+    <stop offset="0.45" stop-color="#1B3355" stop-opacity="0.12"/>
+    <stop offset="1" stop-color="#000" stop-opacity="0"/>
+  </radialGradient>
+  <radialGradient id="tv" cx="0.5" cy="0.9" r="0.95">
+    <stop offset="0.55" stop-color="#000" stop-opacity="0"/>
+    <stop offset="1" stop-color="#000" stop-opacity="0.55"/>
+  </radialGradient>
+</defs>`;
+
+const TILE_LAYERS = `
+<rect width="1024" height="1024" fill="url(#tb)"/>
+<rect width="1024" height="1024" fill="url(#tg)"/>
+<rect width="1024" height="1024" fill="url(#tv)"/>
+<g opacity="0.05" stroke="#7EB6E8" stroke-width="1">
+  <line x1="0" y1="256" x2="1024" y2="256"/>
+  <line x1="0" y1="512" x2="1024" y2="512"/>
+  <line x1="0" y1="768" x2="1024" y2="768"/>
+  <line x1="256" y1="0" x2="256" y2="1024"/>
+  <line x1="512" y1="0" x2="512" y2="1024"/>
+  <line x1="768" y1="0" x2="768" y2="1024"/>
+</g>`;
+
+const TILE_INNER_RIM = `
+<path d="M 512 1 C 180 1 1 180 1 512 C 1 843 180 1023 512 1023 C 843 1023 1023 843 1023 512 C 1023 180 843 1 512 1 Z" fill="none" stroke="#FFF" stroke-opacity="0.06" stroke-width="1.5"/>`;
+
+function wrap(id, inner, extraDefs='') {
+  return `<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+    ${TILE_CLIP.replace('__clip__', 'clip_'+id)}
+    ${TILE_BG.replace(/id="tb"/, `id="tb_${id}"`).replace(/id="tg"/, `id="tg_${id}"`).replace(/id="tv"/, `id="tv_${id}"`)}
+    ${extraDefs}
+    <g clip-path="url(#clip_${id})">
+      <rect width="1024" height="1024" fill="url(#tb_${id})"/>
+      <rect width="1024" height="1024" fill="url(#tg_${id})"/>
+      <rect width="1024" height="1024" fill="url(#tv_${id})"/>
+      <g opacity="0.04" stroke="#7EB6E8" stroke-width="1">
+        <line x1="0" y1="256" x2="1024" y2="256"/>
+        <line x1="0" y1="512" x2="1024" y2="512"/>
+        <line x1="0" y1="768" x2="1024" y2="768"/>
+        <line x1="256" y1="0" x2="256" y2="1024"/>
+        <line x1="512" y1="0" x2="512" y2="1024"/>
+        <line x1="768" y1="0" x2="768" y2="1024"/>
+      </g>
+      ${inner}
+      ${TILE_INNER_RIM}
+    </g>
+  </svg>`;
+}
+
+/* ================================= 1 ================================= */
+/* THE MONOLITH — vertical hex prism with spine */
+const monolith = wrap('01', `
+  <g filter="url(#shadow01)">
+    <path d="M 512 152 L 330 318 L 512 318 Z" fill="url(#m01a)"/>
+    <path d="M 512 152 L 694 318 L 512 318 Z" fill="url(#m01b)"/>
+    <path d="M 330 318 L 512 318 L 512 722 L 330 722 Z" fill="url(#m01c)"/>
+    <path d="M 512 318 L 694 318 L 694 722 L 512 722 Z" fill="url(#m01d)"/>
+    <path d="M 330 722 L 512 722 L 512 880 Z" fill="url(#m01e)"/>
+    <path d="M 512 722 L 694 722 L 512 880 Z" fill="url(#m01f)"/>
+    <path d="M 478 340 L 512 340 L 512 700 L 478 700 Z" fill="#0A1828" opacity="0.35"/>
+    <path d="M 512 340 L 546 340 L 546 700 L 512 700 Z" fill="#8FB8DC" opacity="0.18"/>
+    <rect x="510" y="152" width="4" height="728" fill="url(#m01s)"/>
+    <path d="M 512 152 L 694 318" stroke="#F0F8FF" stroke-width="2.2" stroke-opacity="0.85" fill="none"/>
+    <path d="M 694 318 L 694 722" stroke="#CFE5F7" stroke-width="2" stroke-opacity="0.55" fill="none"/>
+    <path d="M 694 722 L 512 880" stroke="#7FB0D8" stroke-width="1.5" stroke-opacity="0.35" fill="none"/>
+    <path d="M 512 152 L 330 318" stroke="#6E9BC4" stroke-width="1.2" stroke-opacity="0.35" fill="none"/>
+    <line x1="330" y1="318" x2="694" y2="318" stroke="#8CBBE0" stroke-width="1" stroke-opacity="0.22"/>
+    <line x1="330" y1="722" x2="694" y2="722" stroke="#1B2C42" stroke-width="1" stroke-opacity="0.5"/>
+    <circle cx="512" cy="158" r="28" fill="url(#m01g)"/>
+    <circle cx="512" cy="154" r="3.2" fill="#FFF" opacity="0.95"/>
+  </g>
+`, `
+<defs>
+  <linearGradient id="m01a" x1="0.2" y1="0" x2="0.9" y2="1"><stop offset="0" stop-color="#7EA9CC"/><stop offset="0.55" stop-color="#3E6283"/><stop offset="1" stop-color="#1E3550"/></linearGradient>
+  <linearGradient id="m01b" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#EAF5FD"/><stop offset="0.4" stop-color="#BBDCF3"/><stop offset="1" stop-color="#6094C2"/></linearGradient>
+  <linearGradient id="m01c" x1="0" y1="0.1" x2="1" y2="0.9"><stop offset="0" stop-color="#2C4666"/><stop offset="0.6" stop-color="#172A42"/><stop offset="1" stop-color="#0A1828"/></linearGradient>
+  <linearGradient id="m01d" x1="0" y1="0" x2="1" y2="0.2"><stop offset="0" stop-color="#84B0D4"/><stop offset="0.5" stop-color="#4A78A0"/><stop offset="1" stop-color="#22405E"/></linearGradient>
+  <linearGradient id="m01e" x1="0" y1="0" x2="0.7" y2="1"><stop offset="0" stop-color="#142338"/><stop offset="1" stop-color="#05101E"/></linearGradient>
+  <linearGradient id="m01f" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#355878"/><stop offset="1" stop-color="#0C1A2C"/></linearGradient>
+  <linearGradient id="m01s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFF" stop-opacity="0"/><stop offset="0.15" stop-color="#FFF" stop-opacity="0.9"/><stop offset="0.5" stop-color="#E6F4FF" stop-opacity="0.55"/><stop offset="0.88" stop-color="#FFF" stop-opacity="0.85"/><stop offset="1" stop-color="#FFF" stop-opacity="0"/></linearGradient>
+  <radialGradient id="m01g" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#FFF" stop-opacity="0.95"/><stop offset="0.35" stop-color="#D6EEFF" stop-opacity="0.5"/><stop offset="1" stop-color="#D6EEFF" stop-opacity="0"/></radialGradient>
+  <filter id="shadow01" x="-50%" y="-50%" width="200%" height="200%">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="18"/>
+    <feOffset dx="0" dy="22"/>
+    <feComponentTransfer><feFuncA type="linear" slope="0.55"/></feComponentTransfer>
+    <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+</defs>`);
+
+/* ================================= 2 ================================= */
+/* THE RIFT — solid ice slab cracked vertically revealing inner light */
+const rift = wrap('02', `
+  <rect x="250" y="168" width="524" height="688" rx="18" fill="url(#r02slab)"/>
+  <rect x="250" y="168" width="524" height="688" rx="18" fill="none" stroke="url(#r02edge)" stroke-width="2"/>
+  <path d="M 512 168 L 484 340 L 528 472 L 492 612 L 532 740 L 512 856"
+    stroke="url(#r02lightline)" stroke-width="28" stroke-linejoin="miter" stroke-linecap="butt" fill="none" filter="url(#r02glow)"/>
+  <path d="M 512 168 L 484 340 L 528 472 L 492 612 L 532 740 L 512 856"
+    stroke="#FFF" stroke-width="2.5" fill="none"/>
+  <path d="M 512 168 L 484 340 L 528 472 L 492 612 L 532 740 L 512 856"
+    stroke="#EAF5FD" stroke-width="0.8" fill="none" opacity="0.8"/>
+  <g opacity="0.35">
+    <path d="M 484 340 L 430 380" stroke="#8EC0E4" stroke-width="2"/>
+    <path d="M 528 472 L 598 450" stroke="#8EC0E4" stroke-width="2"/>
+    <path d="M 492 612 L 420 646" stroke="#8EC0E4" stroke-width="2"/>
+    <path d="M 532 740 L 608 720" stroke="#8EC0E4" stroke-width="2"/>
+  </g>
+  <rect x="250" y="168" width="524" height="688" rx="18" fill="url(#r02sheen)"/>
+`, `
+<defs>
+  <linearGradient id="r02slab" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#1E3350"/><stop offset="0.5" stop-color="#0E1B2E"/><stop offset="1" stop-color="#050A14"/>
+  </linearGradient>
+  <linearGradient id="r02edge" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#A8CDEB" stop-opacity="0.8"/><stop offset="0.5" stop-color="#3E6488" stop-opacity="0.3"/><stop offset="1" stop-color="#0A1628" stop-opacity="0.2"/>
+  </linearGradient>
+  <linearGradient id="r02lightline" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#E0F2FF"/><stop offset="0.5" stop-color="#9FD0F0"/><stop offset="1" stop-color="#4E86B0"/>
+  </linearGradient>
+  <linearGradient id="r02sheen" x1="0" y1="0" x2="1" y2="0.6">
+    <stop offset="0" stop-color="#FFF" stop-opacity="0.08"/><stop offset="0.3" stop-color="#FFF" stop-opacity="0"/><stop offset="1" stop-color="#FFF" stop-opacity="0"/>
+  </linearGradient>
+  <filter id="r02glow" x="-50%" y="-50%" width="200%" height="200%">
+    <feGaussianBlur stdDeviation="14"/>
+  </filter>
+</defs>`);
+
+/* ================================= 3 ================================= */
+/* THE OBELISK — tall razor-tetrahedral spire */
+const obelisk = wrap('03', `
+  <g filter="url(#ob03shadow)">
+    <path d="M 512 120 L 380 880 L 512 830 Z" fill="url(#ob03left)"/>
+    <path d="M 512 120 L 644 880 L 512 830 Z" fill="url(#ob03right)"/>
+    <path d="M 380 880 L 512 830 L 644 880 L 512 910 Z" fill="url(#ob03base)"/>
+    <path d="M 512 120 L 512 830" stroke="url(#ob03spine)" stroke-width="2.5"/>
+    <path d="M 512 120 L 644 880" stroke="#EAF5FD" stroke-width="1.8" stroke-opacity="0.6"/>
+    <path d="M 512 120 L 380 880" stroke="#6A94BC" stroke-width="1" stroke-opacity="0.35"/>
+    <circle cx="512" cy="124" r="32" fill="url(#ob03apex)"/>
+    <circle cx="512" cy="120" r="4" fill="#FFF"/>
+  </g>
+  <ellipse cx="512" cy="918" rx="180" ry="10" fill="#000" opacity="0.55" filter="url(#ob03blur)"/>
+`, `
+<defs>
+  <linearGradient id="ob03left" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#18293E"/><stop offset="1" stop-color="#3D5F80"/></linearGradient>
+  <linearGradient id="ob03right" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#9BC4E4"/><stop offset="0.5" stop-color="#5182AC"/><stop offset="1" stop-color="#253F5C"/></linearGradient>
+  <linearGradient id="ob03base" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2A4360"/><stop offset="1" stop-color="#08101E"/></linearGradient>
+  <linearGradient id="ob03spine" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFF" stop-opacity="0"/><stop offset="0.1" stop-color="#FFF" stop-opacity="0.95"/><stop offset="0.5" stop-color="#D8ECFB" stop-opacity="0.7"/><stop offset="0.95" stop-color="#FFF" stop-opacity="0.9"/><stop offset="1" stop-color="#FFF" stop-opacity="0"/></linearGradient>
+  <radialGradient id="ob03apex" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#FFF" stop-opacity="0.9"/><stop offset="1" stop-color="#FFF" stop-opacity="0"/></radialGradient>
+  <filter id="ob03shadow" x="-50%" y="-50%" width="200%" height="200%">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="14"/><feOffset dx="0" dy="18"/>
+    <feComponentTransfer><feFuncA type="linear" slope="0.5"/></feComponentTransfer>
+    <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <filter id="ob03blur"><feGaussianBlur stdDeviation="12"/></filter>
+</defs>`);
+
+/* ================================= 4 ================================= */
+/* STRATA — four receding crystalline planes (workspace depth) */
+const strata = wrap('04', `
+  <g filter="url(#st04shadow)">
+    <!-- Back plane -->
+    <path d="M 280 260 L 744 260 L 700 340 L 324 340 Z" fill="url(#st04a)" opacity="0.55"/>
+    <!-- Plane 3 -->
+    <path d="M 260 360 L 764 360 L 720 450 L 304 450 Z" fill="url(#st04b)" opacity="0.7"/>
+    <!-- Plane 2 -->
+    <path d="M 236 480 L 788 480 L 740 580 L 284 580 Z" fill="url(#st04c)" opacity="0.85"/>
+    <!-- Front plane -->
+    <path d="M 208 610 L 816 610 L 764 720 L 260 720 Z" fill="url(#st04d)"/>
+    <!-- Left edge highlights -->
+    <path d="M 208 610 L 260 720" stroke="#E0F2FF" stroke-width="2" stroke-opacity="0.6"/>
+    <path d="M 236 480 L 284 580" stroke="#C6DEF3" stroke-width="1.5" stroke-opacity="0.5"/>
+    <path d="M 260 360 L 304 450" stroke="#9BBDDC" stroke-width="1.2" stroke-opacity="0.4"/>
+    <path d="M 280 260 L 324 340" stroke="#6990B4" stroke-width="1" stroke-opacity="0.3"/>
+    <!-- Top edges -->
+    <line x1="208" y1="610" x2="816" y2="610" stroke="#DCEEFB" stroke-width="1.5" stroke-opacity="0.7"/>
+    <line x1="236" y1="480" x2="788" y2="480" stroke="#BCD9F0" stroke-width="1" stroke-opacity="0.5"/>
+    <line x1="260" y1="360" x2="764" y2="360" stroke="#87ADD0" stroke-width="1" stroke-opacity="0.35"/>
+    <line x1="280" y1="260" x2="744" y2="260" stroke="#5E83A8" stroke-width="1" stroke-opacity="0.25"/>
+  </g>
+  <!-- Vertical "I" beam cutting through all -->
+  <rect x="508" y="232" width="8" height="512" fill="url(#st04beam)"/>
+  <rect x="504" y="232" width="16" height="6" fill="#E6F2FB" opacity="0.85"/>
+  <rect x="504" y="738" width="16" height="6" fill="#5A89B0" opacity="0.8"/>
+`, `
+<defs>
+  <linearGradient id="st04a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2B4668"/><stop offset="1" stop-color="#0E1B2E"/></linearGradient>
+  <linearGradient id="st04b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#395A80"/><stop offset="1" stop-color="#13253E"/></linearGradient>
+  <linearGradient id="st04c" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4D7399"/><stop offset="1" stop-color="#17304F"/></linearGradient>
+  <linearGradient id="st04d" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7BA4C8"/><stop offset="0.5" stop-color="#3A5F83"/><stop offset="1" stop-color="#0E1E32"/></linearGradient>
+  <linearGradient id="st04beam" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F0F8FF" stop-opacity="0.95"/><stop offset="0.5" stop-color="#9FCEF0" stop-opacity="0.75"/><stop offset="1" stop-color="#3A6A92" stop-opacity="0.6"/></linearGradient>
+  <filter id="st04shadow" x="-50%" y="-50%" width="200%" height="200%">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="12"/><feOffset dx="0" dy="16"/>
+    <feComponentTransfer><feFuncA type="linear" slope="0.45"/></feComponentTransfer>
+    <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+</defs>`);
+
+/* ================================= 5 ================================= */
+/* NEXUS — four shards converging on luminous core */
+const nexus = wrap('05', `
+  <circle cx="512" cy="512" r="80" fill="url(#nx05core)" filter="url(#nx05glow)"/>
+  <g filter="url(#nx05shadow)">
+    <!-- Top shard -->
+    <path d="M 512 140 L 478 490 L 512 520 L 546 490 Z" fill="url(#nx05v)"/>
+    <!-- Bottom shard -->
+    <path d="M 512 884 L 478 534 L 512 504 L 546 534 Z" fill="url(#nx05v2)"/>
+    <!-- Left shard -->
+    <path d="M 140 512 L 490 478 L 520 512 L 490 546 Z" fill="url(#nx05h)"/>
+    <!-- Right shard -->
+    <path d="M 884 512 L 534 478 L 504 512 L 534 546 Z" fill="url(#nx05h2)"/>
+  </g>
+  <!-- Core on top -->
+  <circle cx="512" cy="512" r="44" fill="url(#nx05core2)"/>
+  <circle cx="512" cy="512" r="14" fill="#FFF" opacity="0.95"/>
+  <circle cx="505" cy="505" r="5" fill="#FFF"/>
+  <!-- Vertical I emphasis — top & bottom shards brighter on spine -->
+  <line x1="512" y1="140" x2="512" y2="490" stroke="#F0F8FF" stroke-width="1.5" stroke-opacity="0.6"/>
+  <line x1="512" y1="534" x2="512" y2="884" stroke="#DCEEFB" stroke-width="1.5" stroke-opacity="0.5"/>
+`, `
+<defs>
+  <radialGradient id="nx05core" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#D6EEFF" stop-opacity="0.9"/><stop offset="0.5" stop-color="#5A8EB8" stop-opacity="0.4"/><stop offset="1" stop-color="#0A1828" stop-opacity="0"/></radialGradient>
+  <radialGradient id="nx05core2" cx="0.4" cy="0.35" r="0.7"><stop offset="0" stop-color="#FFF"/><stop offset="0.5" stop-color="#9FCEF0"/><stop offset="1" stop-color="#2F5680"/></radialGradient>
+  <linearGradient id="nx05v" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D2E8F8"/><stop offset="0.6" stop-color="#70A0C8"/><stop offset="1" stop-color="#2A4868"/></linearGradient>
+  <linearGradient id="nx05v2" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#1A2C46"/><stop offset="0.5" stop-color="#4A76A0"/><stop offset="1" stop-color="#9FC4E2"/></linearGradient>
+  <linearGradient id="nx05h" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#1E334F"/><stop offset="0.7" stop-color="#5A87AC"/><stop offset="1" stop-color="#2A4868"/></linearGradient>
+  <linearGradient id="nx05h2" x1="1" y1="0" x2="0" y2="0"><stop offset="0" stop-color="#C8E0F4"/><stop offset="0.5" stop-color="#6A97C0"/><stop offset="1" stop-color="#2A4868"/></linearGradient>
+  <filter id="nx05shadow" x="-50%" y="-50%" width="200%" height="200%">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="10"/><feOffset dx="0" dy="12"/>
+    <feComponentTransfer><feFuncA type="linear" slope="0.5"/></feComponentTransfer>
+    <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <filter id="nx05glow" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="30"/></filter>
+</defs>`);
+
+/* ================================= 6 ================================= */
+/* LATTICE — hex tessellation with focal crystal */
+const lattice = wrap('06', `
+  <g opacity="0.25" stroke="#5A8EB8" stroke-width="1.5" fill="none">
+    <!-- Hex lattice background, centered -->
+    ${(()=>{
+      let s='';const size=70;const w=size*Math.sqrt(3);const h=size*1.5;
+      for(let r=-5;r<=5;r++){for(let c=-5;c<=5;c++){
+        const x=512+c*w+(r%2?w/2:0);const y=512+r*h;
+        if(Math.abs(x-512)>420||Math.abs(y-512)>420)continue;
+        const pts=[];for(let i=0;i<6;i++){const a=Math.PI/3*i-Math.PI/2;pts.push(`${x+size*Math.cos(a)},${y+size*Math.sin(a)}`)}
+        s+=`<polygon points="${pts.join(' ')}"/>`;
+      }}return s;
+    })()}
+  </g>
+  <!-- Focal hex crystal -->
+  <g filter="url(#lt06shadow)">
+    ${(()=>{
+      const pts=[];const x=512,y=512,size=180;
+      for(let i=0;i<6;i++){const a=Math.PI/3*i-Math.PI/2;pts.push(`${x+size*Math.cos(a)},${y+size*Math.sin(a)}`)}
+      return `<polygon points="${pts.join(' ')}" fill="url(#lt06face)"/>`
+    })()}
+    <!-- Inner facets radiating from center -->
+    ${(()=>{
+      let s='';const x=512,y=512,size=180;
+      const gradients=['lt06g1','lt06g2','lt06g3','lt06g4','lt06g5','lt06g6'];
+      for(let i=0;i<6;i++){
+        const a1=Math.PI/3*i-Math.PI/2;const a2=Math.PI/3*(i+1)-Math.PI/2;
+        s+=`<path d="M ${x} ${y} L ${x+size*Math.cos(a1)} ${y+size*Math.sin(a1)} L ${x+size*Math.cos(a2)} ${y+size*Math.sin(a2)} Z" fill="url(#${gradients[i]})"/>`
+      }
+      return s;
+    })()}
+    <!-- Inner ring -->
+    <circle cx="512" cy="512" r="46" fill="url(#lt06core)"/>
+    <circle cx="512" cy="512" r="6" fill="#FFF"/>
+    <!-- Outer crystal edges -->
+    ${(()=>{
+      const x=512,y=512,size=180;let s='';
+      for(let i=0;i<6;i++){
+        const a1=Math.PI/3*i-Math.PI/2;const a2=Math.PI/3*(i+1)-Math.PI/2;
+        const op=i<3?0.9:0.4;
+        s+=`<line x1="${x+size*Math.cos(a1)}" y1="${y+size*Math.sin(a1)}" x2="${x+size*Math.cos(a2)}" y2="${y+size*Math.sin(a2)}" stroke="#E0F2FF" stroke-width="1.5" stroke-opacity="${op}"/>`
+      }
+      return s;
+    })()}
+  </g>
+`, `
+<defs>
+  <radialGradient id="lt06face" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#3A6690"/><stop offset="1" stop-color="#0E1E34"/></radialGradient>
+  <linearGradient id="lt06g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#BED8EE"/><stop offset="1" stop-color="#3D6184"/></linearGradient>
+  <linearGradient id="lt06g2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#EAF5FD"/><stop offset="1" stop-color="#5282AC"/></linearGradient>
+  <linearGradient id="lt06g3" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#6390B8"/><stop offset="1" stop-color="#1E3350"/></linearGradient>
+  <linearGradient id="lt06g4" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#0A1828"/><stop offset="1" stop-color="#2E4C6C"/></linearGradient>
+  <linearGradient id="lt06g5" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#122338"/><stop offset="1" stop-color="#3A5E82"/></linearGradient>
+  <linearGradient id="lt06g6" x1="1" y1="0.5" x2="0" y2="0.5"><stop offset="0" stop-color="#0E1D30"/><stop offset="1" stop-color="#41678E"/></linearGradient>
+  <radialGradient id="lt06core" cx="0.4" cy="0.35" r="0.6"><stop offset="0" stop-color="#FFF"/><stop offset="0.5" stop-color="#A8CDEB"/><stop offset="1" stop-color="#2F5680"/></radialGradient>
+  <filter id="lt06shadow" x="-50%" y="-50%" width="200%" height="200%">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="14"/><feOffset dx="0" dy="18"/>
+    <feComponentTransfer><feFuncA type="linear" slope="0.5"/></feComponentTransfer>
+    <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+</defs>`);
+
+/* ================================= 7 ================================= */
+/* VAULT — architectural chamber w/ central column */
+const vault = wrap('07', `
+  <!-- Chamber floor -->
+  <path d="M 220 780 L 804 780 L 730 860 L 294 860 Z" fill="url(#vl07floor)"/>
+  <!-- Left wall -->
+  <path d="M 220 780 L 220 240 L 300 180 L 300 740 Z" fill="url(#vl07lwall)"/>
+  <!-- Right wall -->
+  <path d="M 804 780 L 804 240 L 724 180 L 724 740 Z" fill="url(#vl07rwall)"/>
+  <!-- Back wall -->
+  <path d="M 300 180 L 724 180 L 724 740 L 300 740 Z" fill="url(#vl07back)"/>
+  <!-- Arch opening (chamber mouth) -->
+  <path d="M 350 740 L 350 280 Q 512 200 674 280 L 674 740" fill="url(#vl07arch)" stroke="url(#vl07archEdge)" stroke-width="2"/>
+  <!-- Central luminous column -->
+  <rect x="488" y="300" width="48" height="430" fill="url(#vl07col)" filter="url(#vl07glow)"/>
+  <rect x="496" y="300" width="32" height="430" fill="url(#vl07colCore)"/>
+  <!-- Column caps -->
+  <rect x="476" y="296" width="72" height="10" fill="#E0F2FF" opacity="0.85"/>
+  <rect x="476" y="724" width="72" height="10" fill="#5282AC" opacity="0.75"/>
+  <!-- Floor reflection -->
+  <rect x="488" y="734" width="48" height="30" fill="url(#vl07refl)" opacity="0.5"/>
+  <!-- Edge highlight along arch -->
+  <path d="M 350 280 Q 512 200 674 280" fill="none" stroke="#D6EEFF" stroke-width="1.5" stroke-opacity="0.5"/>
+`, `
+<defs>
+  <linearGradient id="vl07floor" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1A2C44"/><stop offset="1" stop-color="#040A14"/></linearGradient>
+  <linearGradient id="vl07lwall" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#1E3450"/><stop offset="1" stop-color="#0A1628"/></linearGradient>
+  <linearGradient id="vl07rwall" x1="1" y1="0" x2="0" y2="0"><stop offset="0" stop-color="#223A58"/><stop offset="1" stop-color="#0C1A2E"/></linearGradient>
+  <linearGradient id="vl07back" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0A1828"/><stop offset="1" stop-color="#020812"/></linearGradient>
+  <radialGradient id="vl07arch" cx="0.5" cy="1" r="0.9"><stop offset="0" stop-color="#2C4C70" stop-opacity="0.7"/><stop offset="1" stop-color="#030810" stop-opacity="0"/></radialGradient>
+  <linearGradient id="vl07archEdge" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#5A89B0" stop-opacity="0.4"/><stop offset="0.5" stop-color="#B8DEF5" stop-opacity="0.6"/><stop offset="1" stop-color="#5A89B0" stop-opacity="0.4"/></linearGradient>
+  <linearGradient id="vl07col" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F0F8FF" stop-opacity="0.9"/><stop offset="0.5" stop-color="#9FCEF0" stop-opacity="0.75"/><stop offset="1" stop-color="#3A6A92" stop-opacity="0.7"/></linearGradient>
+  <linearGradient id="vl07colCore" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFF"/><stop offset="0.5" stop-color="#D2E8F8"/><stop offset="1" stop-color="#6094C2"/></linearGradient>
+  <linearGradient id="vl07refl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9FCEF0" stop-opacity="0.7"/><stop offset="1" stop-color="#9FCEF0" stop-opacity="0"/></linearGradient>
+  <filter id="vl07glow" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="16"/></filter>
+</defs>`);
+
+/* ================================= 8 ================================= */
+/* AURORA — vertical slab with trapped refracted spectrum bands */
+const aurora = wrap('08', `
+  <!-- Slab -->
+  <rect x="336" y="140" width="352" height="744" rx="14" fill="url(#au08slab)"/>
+  <!-- Aurora bands inside -->
+  <g clip-path="url(#au08clip)">
+    <rect x="336" y="140" width="352" height="744" fill="url(#au08band1)" opacity="0.85"/>
+    <path d="M 336 320 Q 512 250 688 340 L 688 460 Q 512 390 336 460 Z" fill="url(#au08band2)" opacity="0.6" filter="url(#au08blur)"/>
+    <path d="M 336 520 Q 512 460 688 540 L 688 660 Q 512 580 336 660 Z" fill="url(#au08band3)" opacity="0.55" filter="url(#au08blur)"/>
+    <path d="M 336 700 Q 512 640 688 720 L 688 800 Q 512 740 336 800 Z" fill="url(#au08band4)" opacity="0.5" filter="url(#au08blur)"/>
+    <!-- Vertical light streak (I) -->
+    <rect x="506" y="140" width="12" height="744" fill="url(#au08beam)"/>
+  </g>
+  <!-- Slab edges -->
+  <rect x="336" y="140" width="352" height="744" rx="14" fill="none" stroke="url(#au08edge)" stroke-width="2"/>
+  <!-- Top cap highlight -->
+  <rect x="336" y="140" width="352" height="24" rx="14" fill="url(#au08cap)"/>
+  <!-- Specular sheen -->
+  <rect x="336" y="140" width="352" height="744" rx="14" fill="url(#au08sheen)"/>
+  <!-- I marks top/bottom -->
+  <rect x="488" y="148" width="48" height="4" fill="#F0F8FF" opacity="0.9"/>
+  <rect x="488" y="872" width="48" height="4" fill="#4A78A0" opacity="0.85"/>
+`, `
+<defs>
+  <clipPath id="au08clip"><rect x="336" y="140" width="352" height="744" rx="14"/></clipPath>
+  <linearGradient id="au08slab" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#15263C"/><stop offset="1" stop-color="#030812"/></linearGradient>
+  <linearGradient id="au08band1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2A4868" stop-opacity="0.6"/><stop offset="0.5" stop-color="#0E1E34" stop-opacity="0.4"/><stop offset="1" stop-color="#030812" stop-opacity="0"/></linearGradient>
+  <linearGradient id="au08band2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9FCEF0"/><stop offset="1" stop-color="#3A6A92"/></linearGradient>
+  <linearGradient id="au08band3" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#A8B8E0"/><stop offset="1" stop-color="#5A6A9A"/></linearGradient>
+  <linearGradient id="au08band4" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6AA8D8"/><stop offset="1" stop-color="#1E3350"/></linearGradient>
+  <linearGradient id="au08beam" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFF" stop-opacity="0.95"/><stop offset="0.5" stop-color="#D6EEFF" stop-opacity="0.5"/><stop offset="1" stop-color="#5282AC" stop-opacity="0.7"/></linearGradient>
+  <linearGradient id="au08edge" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#C6DEF3" stop-opacity="0.7"/><stop offset="0.5" stop-color="#3E6488" stop-opacity="0.3"/><stop offset="1" stop-color="#0A1828" stop-opacity="0.3"/></linearGradient>
+  <linearGradient id="au08cap" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#E0F2FF" stop-opacity="0.35"/><stop offset="1" stop-color="#E0F2FF" stop-opacity="0"/></linearGradient>
+  <linearGradient id="au08sheen" x1="0" y1="0" x2="1" y2="0.3"><stop offset="0" stop-color="#FFF" stop-opacity="0.08"/><stop offset="0.3" stop-color="#FFF" stop-opacity="0"/></linearGradient>
+  <filter id="au08blur"><feGaussianBlur stdDeviation="22"/></filter>
+</defs>`);
+
+/* ===================================================================== */
+
+const rituals = [
+  { key:'monolith', title:'The Monolith', name:'Monolith', svg:monolith,
+    kind:'Faceted Prism', palette:'Graphite · Glacial', light:'315° · 38°',
+    desc:'A six-faceted vertical monolith, with a specular spine that rises like an axis. The letterform is never announced — it emerges as geometry.' },
+  { key:'rift', title:'The Rift', name:'Rift', svg:rift,
+    kind:'Fractured Slab', palette:'Ink · Cold Silver', light:'Inner emission',
+    desc:'An ice slab split down its center. Light bleeds through the seam, tracing a path that refuses to run straight — a working artifact, cracked with use.' },
+  { key:'obelisk', title:'The Obelisk', name:'Obelisk', svg:obelisk,
+    kind:'Tetrahedral Spire', palette:'Midnight · Steel', light:'Single apex',
+    desc:'A single razor spire, thinner than the tile that holds it. Austere, unadorned. This is the icon for the user who keeps exactly one thing open at a time.' },
+  { key:'strata', title:'The Strata', name:'Strata', svg:strata,
+    kind:'Layered Planes', palette:'Deep Ink · Steel Blue', light:'Overhead · diffuse',
+    desc:'Four glass planes receding in space, pierced by a vertical beam. A workspace seen in section — panes, editors, terminals, each its own cold stratum.' },
+  { key:'nexus', title:'The Nexus', name:'Nexus', svg:nexus,
+    kind:'Converging Shards', palette:'Glacial · White Core', light:'Radial emission',
+    desc:'Four shards meet at a lit nucleus. The vertical pair carries the glyph; the horizontal pair anchors it. A mark for work that converges.' },
+  { key:'lattice', title:'The Lattice', name:'Lattice', svg:lattice,
+    kind:'Hex Tessellation', palette:'Graphite · Ice Spectrum', light:'Center-outward',
+    desc:'A crystalline hexagon of six radiating facets, floating on a barely-visible lattice field. Precision, repeated — and then focused.' },
+  { key:'vault', title:'The Vault', name:'Vault', svg:vault,
+    kind:'Architectural Chamber', palette:'Stone Ink · Luminous Core', light:'Interior shaft',
+    desc:'A chamber viewed head-on, with a luminous column at its heart. The icon as architecture — a place the work lives in, not just a surface.' },
+  { key:'aurora', title:'The Aurora', name:'Aurora', svg:aurora,
+    kind:'Spectral Slab', palette:'Ink · Aurora Cyan', light:'Internal refraction',
+    desc:'A sealed slab with aurora trapped inside. Light folds, layers, and resolves into a single vertical stroke. The coldest kind of color.' }
+];
+
+/* Render */
+const featuredHost = document.getElementById('featured');
+const rail = document.getElementById('rail');
+const roman = ['I','II','III','IV','V','VI','VII','VIII'];
+
+rituals.forEach((r,i)=>{
+  const t = document.createElement('div');
+  t.className='tile';
+  t.dataset.i=i;
+  t.innerHTML = `${r.svg}<div class="caption"><span class="n">${r.name}</span><span class="idx">${String(i+1).padStart(2,'0')} · ${roman[i]}</span></div>`;
+  t.addEventListener('click',()=>select(i));
+  rail.appendChild(t);
+});
+
+const auditSizes=[16,32,64,128,256];
+function select(i){
+  const r = rituals[i];
+  featuredHost.innerHTML = r.svg;
+  document.getElementById('ficTitle').textContent = r.title;
+  document.getElementById('ficDesc').textContent = r.desc;
+  document.getElementById('tKind').textContent = r.kind;
+  document.getElementById('tPalette').textContent = r.palette;
+  document.getElementById('tLight').textContent = 'Light · ' + r.light;
+  document.getElementById('ritName').textContent = r.name.toLowerCase();
+  document.getElementById('ritNum').textContent = roman[i];
+  document.querySelectorAll('.tile').forEach((t,j)=>t.classList.toggle('active', j===i));
+  // scale audit
+  const row = document.getElementById('auditRow');
+  row.innerHTML = auditSizes.map(s=>{
+    // Inject size attr into svg
+    const svgSized = r.svg.replace(/<svg /, `<svg width="${s}" height="${s}" `);
+    return `<figure>${svgSized}<figcaption>${s}px</figcaption></figure>`;
+  }).join('');
+  current = i;
+}
+
+let current = 0;
+select(0);
+
+document.addEventListener('keydown', e=>{
+  if(e.key==='ArrowRight'){select((current+1)%rituals.length)}
+  else if(e.key==='ArrowLeft'){select((current-1+rituals.length)%rituals.length)}
+  else if(e.key>='1' && e.key<='8'){const n=parseInt(e.key)-1;if(n<rituals.length)select(n)}
+});
+
+/* Starfield */
+const stars = document.getElementById('stars');
+for(let i=0;i<80;i++){
+  const s = document.createElement('i');
+  s.style.left = Math.random()*100+'%';
+  s.style.top = (100+Math.random()*20)+'%';
+  s.style.animationDuration = (18+Math.random()*28)+'s';
+  s.style.animationDelay = (-Math.random()*30)+'s';
+  s.style.opacity = (0.3+Math.random()*0.7);
+  stars.appendChild(s);
+}
+</script>
+</body>
+</html>

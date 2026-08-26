@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type Event, type UnlistenFn } from '@tauri-apps/api/event'
+import { describeError } from '@/lib/errors'
 import type {
   BrowserRuntimeNotice,
   BrowserTab,
@@ -103,6 +104,26 @@ interface FileReadResultDto {
   hasBom: boolean
   modifiedAtMs?: number | null
   versionToken?: string | null
+}
+
+interface SyntaxProfileDto {
+  languageId: string
+  displayName: string
+  lineComment?: string | null
+  blockCommentStart?: string | null
+  blockCommentEnd?: string | null
+}
+
+interface SyntaxTokenDto {
+  line: number
+  start: number
+  length: number
+  tokenType: string
+}
+
+interface SyntaxTokensResponseDto {
+  profile: SyntaxProfileDto
+  tokens: SyntaxTokenDto[]
 }
 
 interface GitStatusSummaryDto {
@@ -236,6 +257,18 @@ interface TerminalEventPayload {
   data?: string
 }
 
+async function invokeCodex<T>(
+  command: string,
+  args: Record<string, unknown> | undefined,
+  fallbackMessage: string,
+) {
+  try {
+    return await invoke<T>(command, args)
+  } catch (error) {
+    throw new Error(describeError(error, fallbackMessage))
+  }
+}
+
 interface ApprovalAuditDto {
   auditId: number
   requestId: number
@@ -279,6 +312,13 @@ interface CodexEventPayload {
   thread?: CodexThreadDto
   approval?: CodexApprovalDto
   message?: CodexMessageDto
+  reason?: string
+  payload?: {
+    method?: string
+    params?: Record<string, unknown>
+  }
+  line?: string
+  recentLines?: string[]
 }
 
 interface CodexMessageDto {
@@ -502,6 +542,22 @@ export async function fileRead(projectId: string, path: string) {
   })
 }
 
+export async function fileSyntaxProfile(projectId: string, path: string) {
+  return invoke<SyntaxProfileDto>('file_syntax_profile', {
+    input: { projectId, path },
+  })
+}
+
+export async function fileSyntaxTokens(input: {
+  projectId: string
+  path: string
+  content?: string
+}) {
+  return invoke<SyntaxTokensResponseDto>('file_syntax_tokens', {
+    input,
+  })
+}
+
 export async function fileSearchPaths(projectId: string, query: string, limit = 50) {
   return invoke<{ query: string; paths: string[] }>('file_search_paths', {
     input: { projectId, query, limit },
@@ -531,6 +587,32 @@ export async function fileWriteText(input: {
   hasBom?: boolean
 }) {
   return invoke<void>('file_write_text', { input })
+}
+
+export async function dirCreate(projectId: string, path: string) {
+  return invoke<void>('dir_create', {
+    input: { projectId, path },
+  })
+}
+
+export async function entryDelete(projectId: string, path: string, recursive = false) {
+  return invoke<void>('entry_delete', {
+    input: { projectId, path, recursive },
+  })
+}
+
+export async function entryRename(projectId: string, from: string, to: string) {
+  return invoke<void>('entry_rename', {
+    input: { projectId, from, to },
+  })
+}
+
+export async function fileImportExternal(input: {
+  projectId: string
+  sourcePaths: string[]
+  destinationDir?: string
+}) {
+  return invoke<string[]>('file_import_external', { input })
 }
 
 export async function projectWatchStart(projectId: string) {
@@ -618,19 +700,19 @@ export async function terminalScrollbackClear(sessionId: string) {
 }
 
 export async function codexThreadsList(projectId?: string) {
-  return invoke<CodexThreadDto[]>('codex_threads_list', { projectId })
+  return invokeCodex<CodexThreadDto[]>('codex_threads_list', { projectId }, 'Failed to list Codex threads')
 }
 
 export async function codexStatus() {
-  return invoke<Record<string, unknown>>('codex_status')
+  return invokeCodex<Record<string, unknown>>('codex_status', undefined, 'Failed to read Codex status')
 }
 
 export async function codexRuntimeInfo() {
-  return invoke<Record<string, unknown>>('codex_runtime_info')
+  return invokeCodex<Record<string, unknown>>('codex_runtime_info', undefined, 'Failed to read Codex runtime info')
 }
 
 export async function codexApprovalsList(projectId?: string) {
-  return invoke<CodexApprovalDto[]>('codex_approvals_list', { projectId })
+  return invokeCodex<CodexApprovalDto[]>('codex_approvals_list', { projectId }, 'Failed to list Codex approvals')
 }
 
 export async function approvalAuditList(projectId?: string) {
@@ -638,33 +720,33 @@ export async function approvalAuditList(projectId?: string) {
 }
 
 export async function codexThreadCreate(projectId: string, title?: string) {
-  return invoke<CodexThreadDto>('codex_thread_create', {
+  return invokeCodex<CodexThreadDto>('codex_thread_create', {
     input: { projectId, title },
-  })
+  }, 'Failed to create Codex thread')
 }
 
 export async function codexTurnStart(projectId: string, threadId: string, prompt: string) {
-  return invoke<unknown>('codex_turn_start', {
+  return invokeCodex<unknown>('codex_turn_start', {
     input: { projectId, threadId, prompt },
-  })
+  }, 'Failed to send Codex prompt')
 }
 
 export async function codexThreadMessagesList(projectId: string, threadId: string) {
-  return invoke<CodexMessageDto[]>('codex_thread_messages_list', {
+  return invokeCodex<CodexMessageDto[]>('codex_thread_messages_list', {
     input: { projectId, threadId },
-  })
+  }, 'Failed to load Codex thread history')
 }
 
 export async function codexServerRequestRespond(requestId: number, result: unknown = { approved: true }) {
-  return invoke<void>('codex_server_request_respond', {
+  return invokeCodex<void>('codex_server_request_respond', {
     input: { requestId, result },
-  })
+  }, 'Failed to approve Codex request')
 }
 
 export async function codexServerRequestDeny(requestId: number, message?: string) {
-  return invoke<void>('codex_server_request_deny', {
+  return invokeCodex<void>('codex_server_request_deny', {
     input: { requestId, message },
-  })
+  }, 'Failed to deny Codex request')
 }
 
 export async function browserTabsList(projectId?: string) {
@@ -819,8 +901,8 @@ export function toProject(dto: ProjectSummaryDto): Project {
     path: dto.rootPath,
     color: dto.colorToken,
     branch: dto.gitBranch ?? 'detached',
-    collapsed: false,
-    expandedSections: new Set(['files']),
+    collapsed: true,
+    expandedSections: new Set(),
   }
 }
 

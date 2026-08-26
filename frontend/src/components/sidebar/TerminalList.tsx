@@ -1,7 +1,8 @@
 import { memo, useMemo } from 'react'
 import { Terminal, Plus, X } from 'lucide-react'
 import type { ProjectId } from '@/types'
-import { terminalClose, terminalCreate, toTerminalSession } from '@/lib/backend'
+import { terminalClose } from '@/lib/backend'
+import { createAndFocusTerminalSession } from '@/lib/terminalSessions'
 import { useTerminalStore } from '@/stores/terminal'
 import { useWorkspaceStore } from '@/stores/workspace'
 import styles from './TerminalList.module.css'
@@ -11,7 +12,6 @@ export const TerminalList = memo(function TerminalList({ projectId }: { projectI
   const activeSessionId = useTerminalStore((s) => s.activeSessionId.get(projectId))
   const setActiveSession = useTerminalStore((s) => s.setActiveSession)
   const closeSession = useTerminalStore((s) => s.closeSession)
-  const upsertSession = useTerminalStore((s) => s.upsertSession)
   const setBottomDockOpen = useWorkspaceStore((s) => s.setBottomDockOpen)
 
   const sessions = useMemo(() => {
@@ -52,10 +52,7 @@ export const TerminalList = memo(function TerminalList({ projectId }: { projectI
         className={styles.addBtn}
         onClick={() => {
           setBottomDockOpen(true)
-          void terminalCreate(projectId).then((session) => {
-            upsertSession(toTerminalSession(session))
-            setActiveSession(projectId, session.sessionId)
-          })
+          void createAndFocusTerminalSession(projectId)
         }}
       >
         <Plus size={12} />

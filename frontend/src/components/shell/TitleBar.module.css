@@ -19,35 +19,6 @@
   -webkit-app-region: no-drag;
 }
 
-.trafficLights {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.trafficBtn {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  -webkit-app-region: no-drag;
-  transition: opacity var(--transition-fast);
-}
-
-.trafficBtn svg {
-  opacity: 0;
-}
-
-.trafficLights:hover .trafficBtn svg {
-  opacity: 1;
-}
-
-.close { background: #ff5f57; color: #4a0002; }
-.minimize { background: #febc2e; color: #5a3e00; }
-.maximize { background: #28c840; color: #0a4a00; }
-
 .center {
   flex: 1;
   display: flex;

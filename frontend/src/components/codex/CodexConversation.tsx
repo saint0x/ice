@@ -1,14 +1,17 @@
-import { memo, useEffect, useMemo, useRef } from 'react'
+import { memo, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { Bot, Check, Ban, Loader2, ShieldAlert } from 'lucide-react'
-import type { CodexApproval, CodexMessage, CodexThread } from '@/types'
+import type { CodexApproval, CodexMessage, CodexThread, ProjectId } from '@/types'
+import { useWorkspaceStore } from '@/stores/workspace'
 import styles from './CodexConversation.module.css'
 
 interface Props {
   approvals: CodexApproval[]
   approvalBusyId: string | null
-  fallbackMessage: string
+  fallbackMessage?: string
   messages: CodexMessage[]
   onApproval: (approvalId: string, mode: 'approve' | 'deny') => void
+  projectId?: ProjectId
+  projectPath?: string
   surfaceError?: string | null
   threadStatus?: CodexThread['status']
 }
@@ -25,14 +28,22 @@ export const CodexConversation = memo(function CodexConversation({
   fallbackMessage,
   messages,
   onApproval,
+  projectId,
+  projectPath,
   surfaceError,
   threadStatus,
 }: Props) {
+  const openTab = useWorkspaceStore((s) => s.openTab)
+  const activePaneId = useWorkspaceStore((s) => s.activePaneId)
   const endRef = useRef<HTMLDivElement | null>(null)
   const messageSignature = useMemo(() => {
     const last = messages[messages.length - 1]
     return last ? `${last.id}:${last.updatedAt}:${last.state}:${last.content.length}` : 'empty'
   }, [messages])
+  const hasStreamingAssistantMessage = useMemo(
+    () => messages.some((message) => message.role === 'assistant' && message.state === 'streaming'),
+    [messages],
+  )
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' })
@@ -51,7 +62,7 @@ export const CodexConversation = memo(function CodexConversation({
         message.role === 'user' ? (
           <div key={message.id} className={styles.userRow}>
             <div className={styles.userBubble}>
-              <MessageBody content={message.content} />
+              <MessageBody content={message.content} projectId={projectId} projectPath={projectPath} openFile={openTab} activePaneId={activePaneId} />
               <div className={styles.messageMeta}>{formatTimestamp(message.updatedAt)}</div>
             </div>
           </div>
@@ -62,7 +73,14 @@ export const CodexConversation = memo(function CodexConversation({
             </div>
             <div className={styles.agentContent}>
               <div className={styles.agentBubble}>
-                <MessageBody content={message.content} />
+                <MessageBody
+                  content={message.content}
+                  streaming={message.state === 'streaming'}
+                  projectId={projectId}
+                  projectPath={projectPath}
+                  openFile={openTab}
+                  activePaneId={activePaneId}
+                />
               </div>
               <div className={styles.messageMetaRow}>
                 <span className={styles.messageMeta}>{formatTimestamp(message.updatedAt)}</span>
@@ -71,18 +89,20 @@ export const CodexConversation = memo(function CodexConversation({
             </div>
           </div>
         )
-      )) : (
+      )) : null}
+
+      {messages.length === 0 && fallbackMessage ? (
         <div className={styles.agentRow}>
           <div className={styles.agentAvatar}>
             <Bot size={14} />
           </div>
           <div className={styles.agentContent}>
             <div className={styles.agentBubble}>
-              <MessageBody content={fallbackMessage} />
+              <MessageBody content={fallbackMessage} projectId={projectId} projectPath={projectPath} openFile={openTab} activePaneId={activePaneId} />
             </div>
           </div>
         </div>
-      )}
+      ) : null}
 
       {approvals.map((approval) => (
         <div key={approval.id} className={styles.agentRow}>
@@ -96,7 +116,7 @@ export const CodexConversation = memo(function CodexConversation({
                 <span className={styles.approvalAction}>{approval.actionType}</span>
               </div>
               <div className={styles.agentBubble}>
-                <MessageBody content={approval.description} />
+                <MessageBody content={approval.description} projectId={projectId} projectPath={projectPath} openFile={openTab} activePaneId={activePaneId} />
               </div>
               <div className={styles.approvalMeta}>
                 {approval.category ? <span className={styles.metaPill}>{approval.category}</span> : null}
@@ -135,7 +155,7 @@ export const CodexConversation = memo(function CodexConversation({
         </div>
       ))}
 
-      {threadStatus === 'running' ? (
+      {threadStatus === 'running' && !hasStreamingAssistantMessage ? (
         <div className={styles.agentRow}>
           <div className={styles.agentAvatar}>
             <Loader2 size={14} className={styles.spinner} />
@@ -149,9 +169,45 @@ export const CodexConversation = memo(function CodexConversation({
   )
 })
 
-const MessageBody = memo(function MessageBody({ content }: { content: string }) {
-  const blocks = useMemo(() => parseMessageBlocks(content), [content])
-  const artifacts = useMemo(() => extractArtifacts(content), [content])
+const MessageBody = memo(function MessageBody({
+  content,
+  streaming = false,
+  projectId,
+  projectPath,
+  openFile,
+  activePaneId,
+}: {
+  content: string
+  streaming?: boolean
+  projectId?: ProjectId
+  projectPath?: string
+  openFile: ReturnType<typeof useWorkspaceStore.getState>['openTab']
+  activePaneId: string
+}) {
+  const blocks = useMemo(
+    () => (streaming ? [] : parseMessageBlocks(content)),
+    [content, streaming],
+  )
+  const openReferencedFile = (rawPath: string) => {
+    if (!projectId) return
+    const reference = normalizeFileReference(rawPath, projectPath)
+    if (!reference.openPath) return
+    openFile(
+      activePaneId,
+      'editor',
+      reference.label.split('/').pop() ?? reference.label,
+      projectId,
+      { path: reference.openPath },
+    )
+  }
+
+  if (streaming) {
+    return (
+      <div className={styles.messageBody}>
+        <div className={styles.streamingText}>{content}</div>
+      </div>
+    )
+  }
 
   return (
     <div className={styles.messageBody}>
@@ -180,27 +236,12 @@ const MessageBody = memo(function MessageBody({ content }: { content: string }) 
           <div key={`text-${index}`} className={styles.textBlock}>
             {block.content.split(/\n{2,}/).map((paragraph, paragraphIndex) => (
               <p key={`paragraph-${paragraphIndex}`} className={styles.paragraph}>
-                {paragraph}
+                {renderParagraphWithFileRefs(paragraph, projectPath, openReferencedFile)}
               </p>
             ))}
           </div>
         )
       })}
-      {artifacts.length > 0 ? (
-        <div className={styles.artifactList}>
-          {artifacts.map((artifact) => (
-            <button
-              key={artifact}
-              type="button"
-              className={styles.artifactChip}
-              onClick={() => void navigator.clipboard.writeText(artifact)}
-            >
-              <span>{artifact}</span>
-              <span className={styles.artifactAction}>Copy</span>
-            </button>
-          ))}
-        </div>
-      ) : null}
     </div>
   )
 })
@@ -270,7 +311,126 @@ function formatContext(context: unknown): string {
   }
 }
 
-function extractArtifacts(content: string) {
-  const matches = content.match(/(?:\/[\w./-]+|[\w./-]+\.(?:rs|ts|tsx|js|jsx|json|md|css|toml|yml|yaml|sh))/g) ?? []
-  return [...new Set(matches)].slice(0, 8)
+const MARKDOWN_FILE_LINK_PATTERN = /\[`([^`\n]+)`\]\((file:\/\/\/[^)\s]+)\)/g
+const FILE_URL_PATTERN = /file:\/\/\/[^\s)]+/g
+const FILE_REFERENCE_PATTERN = /(?:\/[A-Za-z0-9._~\- /]+?\.[A-Za-z0-9]+|(?:[A-Za-z0-9._-]+\/)+[A-Za-z0-9._-]+\.[A-Za-z0-9]+|[A-Za-z0-9._-]+\.[A-Za-z0-9]+)(?::\d+)?/g
+
+interface FileReferenceMatch {
+  start: number
+  end: number
+  rawPath: string
+  displayLabel?: string
+}
+
+function renderParagraphWithFileRefs(
+  paragraph: string,
+  projectPath: string | undefined,
+  onOpenFile: (rawPath: string) => void,
+) {
+  const matches = collectFileReferenceMatches(paragraph)
+  if (matches.length === 0) return paragraph
+
+  const nodes: ReactNode[] = []
+  let cursor = 0
+  for (const match of matches) {
+    const { rawPath, start, end, displayLabel } = match
+    if (start > cursor) {
+      nodes.push(paragraph.slice(cursor, start))
+    }
+    const reference = normalizeFileReference(rawPath, projectPath, displayLabel)
+    nodes.push(
+      <button
+        key={`${rawPath}:${start}`}
+        type="button"
+        className={styles.artifactChip}
+        onClick={() => onOpenFile(rawPath)}
+        disabled={!reference.openPath}
+      >
+        <span>{reference.label}</span>
+        <span className={styles.artifactAction}>{reference.openPath ? 'Open' : 'Ref'}</span>
+      </button>,
+    )
+    cursor = end
+  }
+  if (cursor < paragraph.length) {
+    nodes.push(paragraph.slice(cursor))
+  }
+  return nodes
+}
+
+function collectFileReferenceMatches(paragraph: string): FileReferenceMatch[] {
+  const matches: FileReferenceMatch[] = []
+
+  for (const match of paragraph.matchAll(MARKDOWN_FILE_LINK_PATTERN)) {
+    const [fullMatch = '', label = '', fileUrl = ''] = match
+    const start = match.index ?? 0
+    matches.push({
+      start,
+      end: start + fullMatch.length,
+      rawPath: decodeFileUrl(fileUrl),
+      displayLabel: label.trim(),
+    })
+  }
+
+  for (const match of paragraph.matchAll(FILE_URL_PATTERN)) {
+    const [fileUrl] = match
+    const start = match.index ?? 0
+    const end = start + fileUrl.length
+    if (matches.some((existing) => rangesOverlap(existing.start, existing.end, start, end))) {
+      continue
+    }
+    matches.push({
+      start,
+      end,
+      rawPath: decodeFileUrl(fileUrl),
+    })
+  }
+
+  for (const match of paragraph.matchAll(FILE_REFERENCE_PATTERN)) {
+    const [rawPath] = match
+    const start = match.index ?? 0
+    const end = start + rawPath.length
+    if (matches.some((existing) => rangesOverlap(existing.start, existing.end, start, end))) {
+      continue
+    }
+    matches.push({ start, end, rawPath })
+  }
+
+  return matches.sort((left, right) => left.start - right.start)
+}
+
+function decodeFileUrl(fileUrl: string): string {
+  const withoutScheme = fileUrl.replace(/^file:\/\//, '')
+  try {
+    return decodeURIComponent(withoutScheme)
+  } catch {
+    return withoutScheme
+  }
+}
+
+function rangesOverlap(startA: number, endA: number, startB: number, endB: number): boolean {
+  return startA < endB && startB < endA
+}
+
+function normalizeFileReference(rawPath: string, projectPath?: string, displayLabel?: string) {
+  const [pathPart = rawPath] = rawPath.split(':')
+  const trimmedPath = pathPart.trim()
+  const normalizedProjectPath = projectPath?.replace(/\/+$/, '')
+  if (normalizedProjectPath && trimmedPath.startsWith(`${normalizedProjectPath}/`)) {
+    const relativePath = trimmedPath.slice(normalizedProjectPath.length + 1)
+    return {
+      label: displayLabel || relativePath,
+      openPath: relativePath,
+    }
+  }
+  if (!trimmedPath.startsWith('/')) {
+    return {
+      label: displayLabel || trimmedPath,
+      openPath: trimmedPath,
+    }
+  }
+  return {
+    label: displayLabel || (trimmedPath.split('/').pop() ?? trimmedPath),
+    openPath: null,
+  }
 }

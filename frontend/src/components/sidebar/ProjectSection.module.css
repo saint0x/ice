@@ -11,6 +11,10 @@
   gap: var(--sidebar-card-gap);
 }
 
+.dragging {
+  opacity: 0.66;
+}
+
 .card.active {
   border-color: var(--border-color);
 }
@@ -26,10 +30,16 @@
   border-radius: var(--radius-tab);
   text-align: left;
   transition: background var(--transition-fast);
+  cursor: grab;
+  touch-action: none;
 }
 
 .projectRow:hover {
   background: var(--sidebar-row-hover);
+}
+
+.dragging .projectRow {
+  cursor: grabbing;
 }
 
 .inlineError {

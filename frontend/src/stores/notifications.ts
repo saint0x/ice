@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { describeError } from '@/lib/errors'
 
 export type NotificationLevel = 'error' | 'info'
 
@@ -36,7 +37,7 @@ export const useNotificationsStore = create<NotificationsState>((set) => ({
   },
 
   pushError: (title, error, fallbackMessage = 'Unexpected backend error') => {
-    const message = error instanceof Error ? error.message : fallbackMessage
+    const message = describeError(error, fallbackMessage)
     const id = `notice-${++notificationCounter}`
     const notification: AppNotification = {
       id,

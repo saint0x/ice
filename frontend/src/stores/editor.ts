@@ -1,14 +1,19 @@
 import { create } from 'zustand'
+import { useWorkspaceStore } from '@/stores/workspace'
 
 export interface EditorDocument {
   projectId: string
   path: string
   content: string
   isBinary: boolean
+  sizeBytes: number
   encoding?: string
   hasBom: boolean
   modifiedAtMs?: number
   versionToken?: string
+  loadedAt: number
+  lastTouchedAt: number
+  syntaxMode: 'full' | 'reduced' | 'none'
   isDirty: boolean
   isLoading: boolean
   isSaving: boolean
@@ -28,6 +33,8 @@ interface EditorState {
   setLoading: (projectId: string, path: string) => void
   hydrateDocument: (document: EditorDocument) => void
   updateContent: (projectId: string, path: string, content: string) => void
+  touchDocument: (projectId: string, path: string) => void
+  pruneCachedDocuments: (limits?: { maxDocuments?: number; maxBytes?: number }) => void
   markSaved: (projectId: string, path: string, payload: Omit<EditorDocument, 'isDirty' | 'isLoading' | 'isSaving'>) => void
   setSaving: (projectId: string, path: string, isSaving: boolean) => void
   setError: (projectId: string, path: string, error?: string) => void
@@ -49,6 +56,9 @@ function documentKey(projectId: string, path: string) {
   return `${projectId}:${path}`
 }
 
+const DEFAULT_CACHE_DOCUMENTS = 96
+const DEFAULT_CACHE_BYTES = 64 * 1024 * 1024
+
 export const useEditorStore = create<EditorState>((set) => ({
   documents: new Map(),
 
@@ -62,10 +72,14 @@ export const useEditorStore = create<EditorState>((set) => ({
         path,
         content: current?.content ?? '',
         isBinary: current?.isBinary ?? false,
+        sizeBytes: current?.sizeBytes ?? 0,
         encoding: current?.encoding,
         hasBom: current?.hasBom ?? false,
         modifiedAtMs: current?.modifiedAtMs,
         versionToken: current?.versionToken,
+        loadedAt: current?.loadedAt ?? Date.now(),
+        lastTouchedAt: Date.now(),
+        syntaxMode: current?.syntaxMode ?? 'full',
         isDirty: current?.isDirty ?? false,
         isLoading: true,
         isSaving: current?.isSaving ?? false,
@@ -91,10 +105,62 @@ export const useEditorStore = create<EditorState>((set) => ({
       documents.set(key, {
         ...current,
         content,
+        sizeBytes: current.isBinary ? current.sizeBytes : new TextEncoder().encode(content).length,
+        lastTouchedAt: Date.now(),
         isDirty: content !== current.content ? true : current.isDirty,
         error: undefined,
         conflict: undefined,
       })
+      return { documents }
+    }),
+
+  touchDocument: (projectId, path) =>
+    set((state) => {
+      const key = documentKey(projectId, path)
+      const current = state.documents.get(key)
+      if (!current) return state
+      const documents = new Map(state.documents)
+      documents.set(key, {
+        ...current,
+        lastTouchedAt: Date.now(),
+      })
+      return { documents }
+    }),
+
+  pruneCachedDocuments: (limits) =>
+    set((state) => {
+      const maxDocuments = limits?.maxDocuments ?? DEFAULT_CACHE_DOCUMENTS
+      const maxBytes = limits?.maxBytes ?? DEFAULT_CACHE_BYTES
+      const candidates = Array.from(state.documents.values())
+      let totalBytes = candidates.reduce((sum, document) => sum + document.sizeBytes, 0)
+      if (candidates.length <= maxDocuments && totalBytes <= maxBytes) {
+        return state
+      }
+
+      const protectedKeys = new Set(
+        Array.from(useWorkspaceStore.getState().tabs.values())
+          .filter((tab) => tab.type === 'editor' && typeof tab.meta?.path === 'string')
+          .map((tab) => documentKey(tab.projectId, tab.meta?.path as string)),
+      )
+
+      const evictable = candidates
+        .filter((document) => (
+          !document.isDirty
+          && !document.isSaving
+          && !document.isLoading
+          && !protectedKeys.has(documentKey(document.projectId, document.path))
+        ))
+        .sort((left, right) => left.lastTouchedAt - right.lastTouchedAt)
+      if (evictable.length === 0) return state
+
+      const documents = new Map(state.documents)
+      let count = candidates.length
+      for (const document of evictable) {
+        if (count <= maxDocuments && totalBytes <= maxBytes) break
+        documents.delete(documentKey(document.projectId, document.path))
+        count -= 1
+        totalBytes -= document.sizeBytes
+      }
       return { documents }
     }),
 
@@ -108,6 +174,8 @@ export const useEditorStore = create<EditorState>((set) => ({
         isDirty: false,
         isLoading: false,
         isSaving: false,
+        loadedAt: payload.loadedAt ?? Date.now(),
+        lastTouchedAt: Date.now(),
         error: undefined,
         conflict: undefined,
       })
@@ -128,9 +196,26 @@ export const useEditorStore = create<EditorState>((set) => ({
     set((state) => {
       const key = documentKey(projectId, path)
       const current = state.documents.get(key)
-      if (!current) return state
       const documents = new Map(state.documents)
-      documents.set(key, { ...current, isLoading: false, isSaving: false, error })
+      documents.set(key, {
+        projectId,
+        path,
+        content: current?.content ?? '',
+        isBinary: current?.isBinary ?? false,
+        sizeBytes: current?.sizeBytes ?? 0,
+        encoding: current?.encoding,
+        hasBom: current?.hasBom ?? false,
+        modifiedAtMs: current?.modifiedAtMs,
+        versionToken: current?.versionToken,
+        loadedAt: current?.loadedAt ?? Date.now(),
+        lastTouchedAt: Date.now(),
+        syntaxMode: current?.syntaxMode ?? 'full',
+        isDirty: current?.isDirty ?? false,
+        isLoading: false,
+        isSaving: false,
+        error,
+        conflict: current?.conflict,
+      })
       return { documents }
     }),
 
@@ -176,6 +261,8 @@ export const useEditorStore = create<EditorState>((set) => ({
         isDirty: false,
         isLoading: false,
         isSaving: false,
+        loadedAt: payload.loadedAt ?? Date.now(),
+        lastTouchedAt: Date.now(),
         error: undefined,
         conflict: undefined,
       })

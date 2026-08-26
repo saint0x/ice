@@ -192,7 +192,12 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       pendingFocusPaneId: paneId,
     })),
 
-  setActivePane: (paneId) => set({ activePaneId: paneId, pendingFocusPaneId: paneId }),
+  setActivePane: (paneId) =>
+    set((state) => (
+      state.activePaneId === paneId
+        ? state
+        : { activePaneId: paneId }
+    )),
 
   clearPendingFocusPane: (paneId) =>
     set((s) => (

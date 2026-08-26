@@ -14,8 +14,10 @@ import { useBrowserStore } from '@/stores/browser'
 import { useWorkspaceStore } from '@/stores/workspace'
 import styles from './BrowserList.module.css'
 
+const EMPTY_SIDEBAR_ITEMS = [] as const
+
 export const BrowserList = memo(function BrowserList({ projectId }: { projectId: ProjectId }) {
-  const sidebarItems = useBrowserStore((s) => s.sidebarItems.get(projectId) ?? [])
+  const storedSidebarItems = useBrowserStore((s) => s.sidebarItems.get(projectId))
   const activeTabId = useBrowserStore((s) => s.activeTabId.get(projectId))
   const setActiveTab = useBrowserStore((s) => s.setActiveTab)
   const upsertTab = useBrowserStore((s) => s.upsertTab)
@@ -23,6 +25,7 @@ export const BrowserList = memo(function BrowserList({ projectId }: { projectId:
   const openTab = useWorkspaceStore((s) => s.openTab)
   const activePaneId = useWorkspaceStore((s) => s.activePaneId)
   const [restorePolicy, setRestorePolicy] = useState<BrowserRestorePolicy | null>(null)
+  const sidebarItems = storedSidebarItems ?? EMPTY_SIDEBAR_ITEMS
 
   useEffect(() => {
     let disposed = false

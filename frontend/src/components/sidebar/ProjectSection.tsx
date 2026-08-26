@@ -1,10 +1,12 @@
-import { memo, useCallback, useMemo, useState } from 'react'
+import { memo, useCallback, useMemo, useState, type PointerEventHandler } from 'react'
 import {
   FolderOpen, GitBranch, FolderTree, Globe, Terminal, MessageSquare,
   Search, Play, Bug, CheckCircle, ChevronRight, ChevronDown, Trash2
 } from 'lucide-react'
 import type { Project, SidebarSection } from '@/types'
-import { codexThreadCreate, projectRemove, terminalCreate, toCodexThread, toTerminalSession } from '@/lib/backend'
+import { codexThreadCreate, projectRemove, toCodexThread } from '@/lib/backend'
+import { describeCodexError } from '@/lib/errors'
+import { createAndFocusTerminalSession } from '@/lib/terminalSessions'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useProjectsStore } from '@/stores/projects'
 import { useGitStore } from '@/stores/git'
@@ -19,6 +21,9 @@ import styles from './ProjectSection.module.css'
 
 interface Props {
   project: Project
+  dragging?: boolean
+  suppressProjectClick?: boolean
+  onProjectPointerDown?: PointerEventHandler<HTMLButtonElement>
 }
 
 const SECTION_ROWS: { key: SidebarSection; icon: typeof FolderTree; label: string }[] = [
@@ -28,7 +33,12 @@ const SECTION_ROWS: { key: SidebarSection; icon: typeof FolderTree; label: strin
   { key: 'terminal', icon: Terminal, label: 'Terminal Tabs' },
 ]
 
-export const ProjectSection = memo(function ProjectSection({ project }: Props) {
+export const ProjectSection = memo(function ProjectSection({
+  project,
+  dragging = false,
+  suppressProjectClick = false,
+  onProjectPointerDown,
+}: Props) {
   const activeProjectId = useProjectsStore((s) => s.activeProjectId)
   const setActiveProject = useProjectsStore((s) => s.setActiveProject)
   const removeProject = useProjectsStore((s) => s.removeProject)
@@ -39,8 +49,6 @@ export const ProjectSection = memo(function ProjectSection({ project }: Props) {
   const allThreads = useCodexStore((s) => s.threads)
   const addThread = useCodexStore((s) => s.addThread)
   const setActiveThread = useCodexStore((s) => s.setActiveThread)
-  const upsertSession = useTerminalStore((s) => s.upsertSession)
-  const setActiveSession = useTerminalStore((s) => s.setActiveSession)
   const openTab = useWorkspaceStore((s) => s.openTab)
   const activePaneId = useWorkspaceStore((s) => s.activePaneId)
   const setBottomDockOpen = useWorkspaceStore((s) => s.setBottomDockOpen)
@@ -66,12 +74,15 @@ export const ProjectSection = memo(function ProjectSection({ project }: Props) {
   }, [allThreads, project.id])
 
   const onProjectClick = useCallback(() => {
+    if (suppressProjectClick) {
+      return
+    }
     if (isActive) {
       toggleProjectCollapsed(project.id)
     } else {
       setActiveProject(project.id)
     }
-  }, [project.id, isActive, setActiveProject, toggleProjectCollapsed])
+  }, [project.id, isActive, setActiveProject, suppressProjectClick, toggleProjectCollapsed])
 
   const onSectionClick = useCallback(
     (section: SidebarSection) => {
@@ -94,7 +105,9 @@ export const ProjectSection = memo(function ProjectSection({ project }: Props) {
             openTab(activePaneId, 'codex', mapped.title, project.id, { threadId: mapped.id })
           })
           .catch((error: unknown) => {
-            const message = error instanceof Error ? error.message : 'Failed to create Codex thread'
+            const message = describeCodexError('Failed to create Codex thread', error, {
+              projectName: project.name,
+            })
             setSurfaceError(message)
             pushError('Codex thread failed', error, message)
           })
@@ -107,10 +120,7 @@ export const ProjectSection = memo(function ProjectSection({ project }: Props) {
       } else if (type === 'terminal') {
         setBottomDockOpen(true)
         try {
-          const session = await terminalCreate(project.id)
-          const mapped = toTerminalSession(session)
-          upsertSession(mapped)
-          setActiveSession(project.id, mapped.id)
+          await createAndFocusTerminalSession(project.id)
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Failed to create terminal'
           setSurfaceError(message)
@@ -118,7 +128,7 @@ export const ProjectSection = memo(function ProjectSection({ project }: Props) {
         }
       }
     },
-    [activePaneId, addThread, openTab, project.id, project.name, pushError, setActiveProject, setActiveSession, setActiveThread, setBottomDockOpen, setChatPanelOpen, upsertSession]
+    [activePaneId, addThread, openTab, project.id, project.name, pushError, setActiveProject, setActiveThread, setBottomDockOpen, setChatPanelOpen]
   )
 
   const onRemoveProject = useCallback(async () => {
@@ -149,9 +159,11 @@ export const ProjectSection = memo(function ProjectSection({ project }: Props) {
   })
 
   return (
-    <div className={`${styles.card} ${isActive ? styles.active : ''}`}>
+    <div
+      className={`${styles.card} ${isActive ? styles.active : ''} ${dragging ? styles.dragging : ''}`}
+    >
       {/* Project picker row */}
-      <button className={styles.projectRow} onClick={onProjectClick}>
+      <button className={styles.projectRow} onClick={onProjectClick} onPointerDown={onProjectPointerDown}>
         <FolderOpen size={14} className={styles.projectIcon} />
         <span className={styles.projectName}>{project.name}</span>
         <span className={styles.branchPill}>
@@ -180,6 +192,7 @@ export const ProjectSection = memo(function ProjectSection({ project }: Props) {
                 key={key}
                 className={`${styles.sectionRow} ${selected ? styles.selected : ''}`}
                 onClick={() => onSectionClick(key)}
+                draggable={false}
               >
                 <Icon size={14} />
                 <span className={styles.sectionLabel}>{label}</span>
@@ -194,27 +207,29 @@ export const ProjectSection = memo(function ProjectSection({ project }: Props) {
               className={styles.actionBtn}
               onClick={() => onQuickAction('codex')}
               title="Codex"
+              draggable={false}
             >
               <MessageSquare size={14} />
               {unreadThreadCount > 0 && <span className={styles.actionDot} />}
             </button>
-            <button className={styles.actionBtn} onClick={() => void onQuickAction('search')} title="Search">
+            <button className={styles.actionBtn} onClick={() => void onQuickAction('search')} title="Search" draggable={false}>
               <Search size={14} />
             </button>
             <button
               className={styles.actionBtn}
               onClick={() => onQuickAction('terminal')}
               title="Run"
+              draggable={false}
             >
               <Play size={14} />
             </button>
-            <button className={styles.actionBtn} onClick={() => void onQuickAction('diagnostics')} title="Diagnostics">
+            <button className={styles.actionBtn} onClick={() => void onQuickAction('diagnostics')} title="Diagnostics" draggable={false}>
               <CheckCircle size={14} />
             </button>
-            <button className={styles.actionBtn} onClick={() => void onQuickAction('debug')} title="Debug">
+            <button className={styles.actionBtn} onClick={() => void onQuickAction('debug')} title="Debug" draggable={false}>
               <Bug size={14} />
             </button>
-            <button className={styles.actionBtn} onClick={() => void onRemoveProject()} title="Remove Project">
+            <button className={styles.actionBtn} onClick={() => void onRemoveProject()} title="Remove Project" draggable={false}>
               <Trash2 size={14} />
             </button>
           </div>

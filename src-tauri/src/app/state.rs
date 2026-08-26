@@ -8,6 +8,7 @@ use crate::git::service::GitService;
 use crate::persistence::db::PersistenceService;
 use crate::projects::service::ProjectService;
 use crate::security::approvals::SecurityService;
+use crate::syntax::service::SyntaxService;
 use crate::terminal::service::TerminalService;
 use crate::workspace::service::WorkspaceService;
 
@@ -23,4 +24,5 @@ pub struct AppState {
     pub terminal: Arc<TerminalService>,
     pub codex: Arc<CodexService>,
     pub security: Arc<SecurityService>,
+    pub syntax: Arc<SyntaxService>,
 }

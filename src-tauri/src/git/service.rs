@@ -1,11 +1,13 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::process::Command as StdCommand;
+use std::thread;
 
 use anyhow::{anyhow, Result};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 use tokio::fs;
-use tokio::process::Command;
+use tokio::process::Command as TokioCommand;
 
 use crate::app::events::GIT_EVENT;
 use crate::projects::models::ProjectRecord;
@@ -531,8 +533,8 @@ impl GitService {
     }
 
     pub fn schedule_status_refresh(app: AppHandle, project_id: String, root_path: String) {
-        tokio::spawn(async move {
-            if let Ok(summary) = read_status_for_root(&root_path).await {
+        thread::spawn(move || {
+            if let Ok(summary) = read_status_for_root_blocking(&root_path) {
                 let _ = app.emit(
                     GIT_EVENT,
                     serde_json::json!({
@@ -652,8 +654,8 @@ fn parse_status(raw: &str) -> GitStatusSummary {
     summary
 }
 
-async fn read_status_for_root(root_path: &str) -> Result<GitStatusSummary> {
-    let output = run_git(
+fn read_status_for_root_blocking(root_path: &str) -> Result<GitStatusSummary> {
+    let output = run_git_blocking(
         root_path,
         &[
             "status",
@@ -661,18 +663,38 @@ async fn read_status_for_root(root_path: &str) -> Result<GitStatusSummary> {
             "--branch",
             "--untracked-files=all",
         ],
-    )
-    .await?;
+    )?;
     Ok(parse_status(&output))
 }
 
 async fn run_git(root_path: &str, args: &[&str]) -> Result<String> {
-    let output = Command::new("git")
+    let output = TokioCommand::new("git")
         .arg("-C")
         .arg(root_path)
         .args(args)
         .output()
         .await?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let message = if !stderr.is_empty() {
+            stderr
+        } else if !stdout.is_empty() {
+            stdout
+        } else {
+            format!("git {} failed", args.join(" "))
+        };
+        return Err(anyhow!(message));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+fn run_git_blocking(root_path: &str, args: &[&str]) -> Result<String> {
+    let output = StdCommand::new("git")
+        .arg("-C")
+        .arg(root_path)
+        .args(args)
+        .output()?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -702,7 +724,7 @@ async fn read_diff_text(root_path: &str, path: Option<&str>, staged: bool) -> Re
 }
 
 async fn git_config_get(root_path: &str, key: &str) -> Result<Option<String>> {
-    let output = Command::new("git")
+    let output = TokioCommand::new("git")
         .arg("-C")
         .arg(root_path)
         .args(["config", "--get", key])
@@ -719,7 +741,7 @@ async fn git_config_get(root_path: &str, key: &str) -> Result<Option<String>> {
 }
 
 async fn git_path(root_path: &str, key: &str) -> Result<Option<String>> {
-    let output = Command::new("git")
+    let output = TokioCommand::new("git")
         .arg("-C")
         .arg(root_path)
         .args(["rev-parse", "--git-path", key])

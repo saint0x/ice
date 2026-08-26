@@ -40,6 +40,15 @@ pub struct AppConfigSetInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct FrontendDiagnosticsLogInput {
+    pub level: String,
+    pub scope: String,
+    pub message: String,
+    pub context: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AddProjectInput {
     pub root_path: String,
     pub trusted: Option<bool>,
@@ -85,6 +94,14 @@ pub struct ReadFileInput {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SyntaxTokensInput {
+    pub project_id: String,
+    pub path: String,
+    pub content: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SearchInput {
     pub project_id: String,
     pub query: String,
@@ -123,6 +140,14 @@ pub struct RenameEntryInput {
     pub project_id: String,
     pub from: String,
     pub to: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportExternalEntriesInput {
+    pub project_id: String,
+    pub source_paths: Vec<String>,
+    pub destination_dir: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

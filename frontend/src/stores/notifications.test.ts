@@ -14,4 +14,9 @@ describe('notifications store', () => {
     useNotificationsStore.getState().dismissNotification(id)
     expect(useNotificationsStore.getState().notifications).toHaveLength(0)
   })
+
+  it('preserves string error payloads', () => {
+    useNotificationsStore.getState().pushError('Codex request failed', 'response channel dropped')
+    expect(useNotificationsStore.getState().notifications[0]?.message).toBe('response channel dropped')
+  })
 })

@@ -2,6 +2,8 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-width: 0;
+  min-height: 0;
   background: var(--bg-surface);
 }
 
@@ -14,6 +16,9 @@
   border-bottom: 1px solid var(--border-variant);
   flex-shrink: 0;
   gap: var(--sp-4);
+  min-width: 0;
+  overflow: hidden;
+  flex-wrap: wrap;
 }
 
 .breadcrumb {
@@ -21,6 +26,7 @@
   align-items: center;
   font-size: var(--text-xs);
   flex: 1;
+  min-width: 0;
   overflow: hidden;
 }
 
@@ -42,6 +48,8 @@
   display: flex;
   align-items: center;
   gap: var(--sp-2);
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .findBtn {
@@ -101,6 +109,7 @@
   border-bottom: 1px solid var(--border-variant);
   background: color-mix(in srgb, var(--bg-panel) 82%, var(--bg-surface));
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .findGroup {
@@ -159,11 +168,13 @@
   border-bottom: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent);
   background: color-mix(in srgb, var(--color-warning) 10%, var(--bg-surface));
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .conflictPanel {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent);
   background: color-mix(in srgb, var(--color-warning) 8%, var(--bg-surface));
 }
@@ -222,6 +233,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-width: 0;
 }
 
 .conflictColumnTitle {
@@ -294,9 +306,8 @@
 }
 
 .editorShell {
-  display: grid;
-  grid-template-columns: 56px minmax(0, 1fr);
   flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
   font-family: var(--font-mono);
@@ -304,35 +315,87 @@
   line-height: 20px;
 }
 
-.lineNumbers {
-  overflow: auto;
-  padding: 12px 0;
-  text-align: right;
-  border-right: 1px solid var(--border-variant);
-  background: color-mix(in srgb, var(--bg-panel) 72%, var(--bg-surface));
-}
-
-.lineNum {
-  height: 20px;
-  padding-right: 12px;
-  color: var(--text-disabled);
-  font-size: var(--text-xs);
-}
-
-.editorInput {
-  width: 100%;
+.editorRoot {
   height: 100%;
-  padding: 12px 16px;
-  resize: none;
-  border: 0;
-  outline: 0;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.editorRoot :global(.cm-editor) {
+  height: 100%;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.editorRoot :global(.cm-scroller) {
   overflow: auto;
-  background: transparent;
+  min-width: 0;
+}
+
+.editorRoot :global(.cm-content),
+.editorRoot :global(.cm-gutterElement) {
+  font-family: var(--font-mono);
+}
+
+.editorRoot :global(.cm-lineWrapping) {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.editorRoot :global(.cm-line) {
+  padding: 0;
+}
+
+.editorRoot :global(.cm-cursor) {
+  border-left-color: var(--text-primary);
+}
+
+.editorRoot :global(.cm-tooltip) {
+  border: 1px solid var(--border-variant);
+  background: var(--bg-panel);
   color: var(--text-primary);
-  font: inherit;
-  line-height: inherit;
-  white-space: pre;
-  tab-size: 2;
+}
+
+.editorRoot :global(.cm-tooltip-autocomplete ul li[aria-selected]) {
+  background: color-mix(in srgb, var(--bg-element-selected) 28%, transparent);
+}
+
+.editorRoot :global(.tok-keyword) {
+  color: #d97706;
+}
+
+.editorRoot :global(.tok-function) {
+  color: #2563eb;
+}
+
+.editorRoot :global(.tok-type),
+.editorRoot :global(.tok-className) {
+  color: #0f766e;
+}
+
+.editorRoot :global(.tok-string) {
+  color: #047857;
+}
+
+.editorRoot :global(.tok-number) {
+  color: #9333ea;
+}
+
+.editorRoot :global(.tok-comment) {
+  color: var(--text-muted);
+}
+
+.editorRoot :global(.tok-operator) {
+  color: var(--text-primary);
+}
+
+.editorRoot :global(.tok-variableName) {
+  color: var(--text-primary);
 }
 
 .spinner {

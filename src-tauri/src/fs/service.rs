@@ -6,6 +6,8 @@ use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use parking_lot::Mutex;
 use serde::Serialize;
 use std::collections::HashMap;
+use std::fs as stdfs;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -173,34 +175,38 @@ impl FsService {
     ) -> Result<FileReadResult> {
         let root = projects.resolve_project_path(project_id).await?;
         let full_path = resolve_under_root(&root, path)?;
-        let metadata = tokio::fs::metadata(&full_path).await?;
-        let version = file_version(&metadata);
-        let bytes = tokio::fs::read(&full_path).await?;
-        let size_bytes = bytes.len() as u64;
-        if is_binary_bytes(&bytes) {
-            return Ok(FileReadResult {
-                path: path.to_string(),
-                content: None,
-                is_binary: true,
+        let path_string = path.to_string();
+        tokio::task::spawn_blocking(move || {
+            let metadata = stdfs::metadata(&full_path)?;
+            let version = file_version(&metadata);
+            let bytes = stdfs::read(&full_path)?;
+            let size_bytes = bytes.len() as u64;
+            if is_binary_bytes(&bytes) {
+                return Ok(FileReadResult {
+                    path: path_string,
+                    content: None,
+                    is_binary: true,
+                    size_bytes,
+                    encoding: None,
+                    has_bom: false,
+                    modified_at_ms: version.as_ref().and_then(|version| version.modified_at_ms),
+                    version_token: version.as_ref().map(|version| version.token.clone()),
+                });
+            }
+
+            let decoded = decode_text_bytes(&bytes)?;
+            Ok(FileReadResult {
+                path: path_string,
+                content: Some(decoded.content),
+                is_binary: false,
                 size_bytes,
-                encoding: None,
-                has_bom: false,
+                encoding: Some(decoded.encoding.name().to_ascii_lowercase()),
+                has_bom: decoded.has_bom,
                 modified_at_ms: version.as_ref().and_then(|version| version.modified_at_ms),
                 version_token: version.as_ref().map(|version| version.token.clone()),
-            });
-        }
-
-        let decoded = decode_text_bytes(&bytes)?;
-        Ok(FileReadResult {
-            path: path.to_string(),
-            content: Some(decoded.content),
-            is_binary: false,
-            size_bytes,
-            encoding: Some(decoded.encoding.name().to_ascii_lowercase()),
-            has_bom: decoded.has_bom,
-            modified_at_ms: version.as_ref().and_then(|version| version.modified_at_ms),
-            version_token: version.as_ref().map(|version| version.token.clone()),
+            })
         })
+        .await?
     }
 
     pub async fn read_text_file(
@@ -372,6 +378,41 @@ impl FsService {
         Ok(())
     }
 
+    pub async fn import_external_entries(
+        &self,
+        project_id: &str,
+        source_paths: &[String],
+        destination_dir: Option<&str>,
+        projects: &ProjectService,
+    ) -> Result<Vec<String>> {
+        if source_paths.is_empty() {
+            return Err(anyhow!("at least one source path is required"));
+        }
+
+        let root = projects.resolve_project_path(project_id).await?;
+        let destination_root = match destination_dir {
+            Some(path) if !path.is_empty() => resolve_under_root(&root, path)?,
+            _ => root.clone(),
+        };
+        tokio::fs::create_dir_all(&destination_root).await?;
+        let source_paths = source_paths.to_vec();
+
+        let imported = tokio::task::spawn_blocking(move || {
+            import_external_entries_blocking(&root, &destination_root, &source_paths)
+        })
+        .await??;
+
+        self.app.emit(
+            FS_EVENT,
+            serde_json::json!({
+                "type": "externalImported",
+                "projectId": project_id,
+                "paths": imported
+            }),
+        )?;
+        Ok(imported)
+    }
+
     pub async fn start_watch(&self, project_id: &str, projects: &ProjectService) -> Result<()> {
         let root = projects.resolve_project_path(project_id).await?;
         let project_id = project_id.to_string();
@@ -383,49 +424,54 @@ impl FsService {
         let last_git_refresh = self.last_git_refresh.clone();
         let mut watcher =
             notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
-                if let Ok(event) = event {
-                    let paths = event
-                        .paths
-                        .iter()
-                        .filter_map(|path| path.strip_prefix(&watch_root).ok())
-                        .map(|path| path.to_string_lossy().to_string())
-                        .collect::<Vec<_>>();
-                    let kind = describe_event_kind(&event.kind);
-                    let refresh_git = should_refresh_git(&event.kind, &paths);
-                    let _ = app.emit(
-                        FS_EVENT,
-                        serde_json::json!({
-                            "type": "watchEvent",
-                            "projectId": emit_project_id,
-                            "kind": kind,
-                            "paths": paths
-                        }),
-                    );
-                    if refresh_git {
-                        let should_emit = {
-                            let mut refreshes = last_git_refresh.lock();
-                            let now = Instant::now();
-                            match refreshes.get(&emit_project_id) {
-                                Some(last_seen)
-                                    if now.duration_since(*last_seen)
-                                        < Duration::from_millis(250) =>
-                                {
-                                    false
+                let result = catch_unwind(AssertUnwindSafe(|| {
+                    if let Ok(event) = event {
+                        let paths = event
+                            .paths
+                            .iter()
+                            .filter_map(|path| path.strip_prefix(&watch_root).ok())
+                            .map(|path| path.to_string_lossy().to_string())
+                            .collect::<Vec<_>>();
+                        let kind = describe_event_kind(&event.kind);
+                        let refresh_git = should_refresh_git(&event.kind, &paths);
+                        let _ = app.emit(
+                            FS_EVENT,
+                            serde_json::json!({
+                                "type": "watchEvent",
+                                "projectId": emit_project_id,
+                                "kind": kind,
+                                "paths": paths
+                            }),
+                        );
+                        if refresh_git {
+                            let should_emit = {
+                                let mut refreshes = last_git_refresh.lock();
+                                let now = Instant::now();
+                                match refreshes.get(&emit_project_id) {
+                                    Some(last_seen)
+                                        if now.duration_since(*last_seen)
+                                            < Duration::from_millis(250) =>
+                                    {
+                                        false
+                                    }
+                                    _ => {
+                                        refreshes.insert(emit_project_id.clone(), now);
+                                        true
+                                    }
                                 }
-                                _ => {
-                                    refreshes.insert(emit_project_id.clone(), now);
-                                    true
-                                }
+                            };
+                            if should_emit {
+                                GitService::schedule_status_refresh(
+                                    git_app.clone(),
+                                    emit_project_id.clone(),
+                                    git_root.to_string_lossy().to_string(),
+                                );
                             }
-                        };
-                        if should_emit {
-                            GitService::schedule_status_refresh(
-                                git_app.clone(),
-                                emit_project_id.clone(),
-                                git_root.to_string_lossy().to_string(),
-                            );
                         }
                     }
+                }));
+                if result.is_err() {
+                    tracing::error!("filesystem watch callback panicked; event dropped");
                 }
             })?;
         watcher.configure(Config::default())?;
@@ -805,10 +851,84 @@ fn is_binary_bytes(bytes: &[u8]) -> bool {
     sample.iter().any(|byte| *byte == 0)
 }
 
+fn import_external_entries_blocking(
+    project_root: &Path,
+    destination_root: &Path,
+    source_paths: &[String],
+) -> Result<Vec<String>> {
+    let mut imported = Vec::with_capacity(source_paths.len());
+
+    for source_path in source_paths {
+        let source = PathBuf::from(source_path);
+        if !source.exists() {
+            return Err(anyhow!("source path does not exist: {}", source.display()));
+        }
+
+        let source_name = source
+            .file_name()
+            .ok_or_else(|| anyhow!("source path has no final component: {}", source.display()))?;
+        let destination = destination_root.join(source_name);
+
+        copy_external_entry(&source, &destination)?;
+
+        let relative = destination
+            .strip_prefix(project_root)
+            .map(|path| path.to_string_lossy().to_string())
+            .map_err(|_| anyhow!("import destination escaped project root"))?;
+        imported.push(relative);
+    }
+
+    Ok(imported)
+}
+
+fn copy_external_entry(source: &Path, destination: &Path) -> Result<()> {
+    let metadata = stdfs::metadata(source)
+        .with_context(|| format!("failed to read metadata for {}", source.display()))?;
+
+    if metadata.is_dir() {
+        stdfs::create_dir_all(destination).with_context(|| {
+            format!(
+                "failed to create import destination directory {}",
+                destination.display()
+            )
+        })?;
+
+        for entry in stdfs::read_dir(source)
+            .with_context(|| format!("failed to read source directory {}", source.display()))?
+        {
+            let entry =
+                entry.with_context(|| format!("failed to enumerate {}", source.display()))?;
+            let child_source = entry.path();
+            let child_destination = destination.join(entry.file_name());
+            copy_external_entry(&child_source, &child_destination)?;
+        }
+        return Ok(());
+    }
+
+    if let Some(parent) = destination.parent() {
+        stdfs::create_dir_all(parent).with_context(|| {
+            format!(
+                "failed to prepare parent directory for {}",
+                destination.display()
+            )
+        })?;
+    }
+
+    stdfs::copy(source, destination).with_context(|| {
+        format!(
+            "failed to copy {} to {}",
+            source.display(),
+            destination.display()
+        )
+    })?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        decode_text_bytes, encode_text_content, file_version, is_binary_bytes, nest_tree_entries,
+        copy_external_entry, decode_text_bytes, encode_text_content, file_version,
+        import_external_entries_blocking, is_binary_bytes, nest_tree_entries,
         parse_rg_match_record, search_paths_under_root, walk_tree, FsEntry, TreeReadOptions,
     };
     use std::collections::HashMap;
@@ -930,5 +1050,46 @@ mod tests {
         assert_eq!(tree[0].children.len(), 1);
         assert_eq!(tree[0].children[0].path, "src/lib.rs");
         assert_eq!(tree[1].path, "README.md");
+    }
+
+    #[test]
+    fn copies_external_file_into_project_root() {
+        let source_root = tempdir().expect("source temp dir");
+        let project_root = tempdir().expect("project temp dir");
+        let source_file = source_root.path().join("notes.txt");
+        fs::write(&source_file, "hello import").expect("write source file");
+
+        let imported = import_external_entries_blocking(
+            project_root.path(),
+            project_root.path(),
+            &[source_file.to_string_lossy().to_string()],
+        )
+        .expect("import external entry");
+
+        assert_eq!(imported, vec!["notes.txt".to_string()]);
+        let destination = project_root.path().join("notes.txt");
+        assert_eq!(
+            fs::read_to_string(destination).expect("read imported"),
+            "hello import"
+        );
+    }
+
+    #[test]
+    fn copies_external_directory_recursively() {
+        let source_root = tempdir().expect("source temp dir");
+        let project_root = tempdir().expect("project temp dir");
+        let nested_dir = source_root.path().join("fixtures");
+        fs::create_dir_all(nested_dir.join("nested")).expect("create nested");
+        fs::write(nested_dir.join("nested").join("data.json"), "{\"ok\":true}")
+            .expect("write nested file");
+
+        let destination = project_root.path().join("imports").join("fixtures");
+        copy_external_entry(&nested_dir, &destination).expect("copy directory");
+
+        let imported_file = destination.join("nested").join("data.json");
+        assert_eq!(
+            fs::read_to_string(imported_file).expect("read imported file"),
+            "{\"ok\":true}"
+        );
     }
 }

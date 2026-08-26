@@ -9,6 +9,7 @@ mod menu;
 mod persistence;
 mod projects;
 mod security;
+mod syntax;
 mod terminal;
 mod workspace;
 
@@ -18,12 +19,11 @@ use ipc::commands;
 use tauri::{Emitter, Manager, RunEvent};
 
 pub fn run() {
-    diagnostics::init_tracing();
-
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let state = build_state(app.handle().clone())?;
+            diagnostics::init_tracing(&state.paths.concern_dir("diagnostics"));
             app.manage(state);
             let menu = menu::build_app_menu(app.handle())?;
             app.set_menu(menu)?;
@@ -37,6 +37,7 @@ pub fn run() {
             commands::app_bootstrap,
             commands::app_config_get,
             commands::app_config_set,
+            commands::diagnostics_frontend_log,
             commands::project_add,
             commands::project_remove,
             commands::project_list,
@@ -51,6 +52,8 @@ pub fn run() {
             commands::project_watch_start,
             commands::project_watch_stop,
             commands::file_read,
+            commands::file_syntax_profile,
+            commands::file_syntax_tokens,
             commands::file_read_text,
             commands::file_search_paths,
             commands::file_search_text,
@@ -58,6 +61,7 @@ pub fn run() {
             commands::dir_create,
             commands::entry_delete,
             commands::entry_rename,
+            commands::file_import_external,
             commands::workspace_layout_get,
             commands::workspace_layout_set,
             commands::workspace_chrome_get,

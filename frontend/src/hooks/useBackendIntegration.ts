@@ -5,7 +5,6 @@ import {
   codexApprovalsList,
   projectBrowserSidebar,
   projectCodexSidebar,
-  codexThreadMessagesList,
   codexThreadsList,
   gitStatusRead,
   listenBrowserEvents,
@@ -17,7 +16,6 @@ import {
   projectWatchStart,
   projectWatchStop,
   terminalList,
-  terminalScrollbackRead,
   toBrowserTab,
   toBrowserRuntimeNotice,
   toCodexApproval,
@@ -36,8 +34,11 @@ import {
   workspaceChromeSet,
   workspaceSessionSet,
 } from '@/lib/backend'
+import { prefetchProjectDocuments as prefetchEditorProjectDocuments } from '@/lib/editorDocuments'
+import { logFrontendEvent } from '@/lib/diagnostics'
 import { useFilesStore } from '@/stores/files'
 import { useGitStore } from '@/stores/git'
+import { useNotificationsStore } from '@/stores/notifications'
 import { useProjectsStore } from '@/stores/projects'
 import { useCodexStore } from '@/stores/codex'
 import { useTerminalStore } from '@/stores/terminal'
@@ -50,11 +51,13 @@ const TREE_REFRESH_EVENT_TYPES = new Set([
   'dirCreated',
   'entryDeleted',
   'entryRenamed',
+  'externalImported',
   'watchStarted',
 ])
 
 export function useBackendIntegration() {
   const hydrateProjects = useProjectsStore((state) => state.hydrateProjects)
+  const activeProjectId = useProjectsStore((state) => state.activeProjectId)
   const updateProject = useProjectsStore((state) => state.updateProject)
   const hydrateTree = useFilesStore((state) => state.hydrateTree)
   const hydrateGitState = useGitStore((state) => state.hydrateGitState)
@@ -66,13 +69,11 @@ export function useBackendIntegration() {
   const pushBrowserRuntimeNotice = useBrowserStore((state) => state.pushRuntimeNotice)
   const hydrateSessions = useTerminalStore((state) => state.hydrateSessions)
   const upsertSession = useTerminalStore((state) => state.upsertSession)
-  const setScrollback = useTerminalStore((state) => state.setScrollback)
   const appendScrollback = useTerminalStore((state) => state.appendScrollback)
   const clearScrollback = useTerminalStore((state) => state.clearScrollback)
   const closeSession = useTerminalStore((state) => state.closeSession)
   const hydrateThreads = useCodexStore((state) => state.hydrateThreads)
   const hydrateApprovals = useCodexStore((state) => state.hydrateApprovals)
-  const hydrateMessages = useCodexStore((state) => state.hydrateMessages)
   const hydrateCodexSidebarItems = useCodexStore((state) => state.hydrateSidebarItems)
   const addThread = useCodexStore((state) => state.addThread)
   const updateThread = useCodexStore((state) => state.updateThread)
@@ -80,6 +81,7 @@ export function useBackendIntegration() {
   const addApproval = useCodexStore((state) => state.addApproval)
   const resolveApproval = useCodexStore((state) => state.resolveApproval)
   const hydrateWorkspace = useWorkspaceStore((state) => state.hydrateWorkspace)
+  const pushError = useNotificationsStore((state) => state.pushError)
 
   const sidebarOpen = useWorkspaceStore((state) => state.sidebarOpen)
   const sidebarWidth = useWorkspaceStore((state) => state.sidebarWidth)
@@ -92,6 +94,12 @@ export function useBackendIntegration() {
   const activePaneId = useWorkspaceStore((state) => state.activePaneId)
 
   const hydratedRef = useRef(false)
+  const watchedProjectRef = useRef<string | null>(null)
+  const codexMessageFrameRef = useRef<number | null>(null)
+  const pendingCodexMessagesRef = useRef(new Map<string, ReturnType<typeof toCodexMessage>>())
+  const pendingCodexSidebarRefreshRef = useRef(new Set<string>())
+  const codexSidebarRefreshTimerRef = useRef<number | null>(null)
+  const lastCodexDisconnectRef = useRef<{ message: string; at: number } | null>(null)
   useEffect(() => {
     let disposed = false
     let fsUnlisten: (() => void) | undefined
@@ -99,12 +107,23 @@ export function useBackendIntegration() {
     let browserUnlisten: (() => void) | undefined
     let terminalUnlisten: (() => void) | undefined
     let codexUnlisten: (() => void) | undefined
-    const watchedProjects = new Set<string>()
-
     const refreshTree = async (projectId: string) => {
-      const nodes = await projectTreeReadNested(projectId)
-      if (!disposed) {
-        hydrateTree(projectId, toFileTree(nodes))
+      try {
+        const nodes = await projectTreeReadNested(projectId)
+        if (!disposed) {
+          const tree = toFileTree(nodes)
+          hydrateTree(projectId, tree)
+          prefetchEditorProjectDocuments({
+            projectId,
+            tree,
+            selectedPath: useFilesStore.getState().selectedPath.get(projectId),
+            openTabs: Array.from(useWorkspaceStore.getState().tabs.values()),
+          })
+        }
+      } catch (error) {
+        if (!disposed) {
+          pushError('Project tree refresh failed', error)
+        }
       }
     }
 
@@ -122,13 +141,61 @@ export function useBackendIntegration() {
       }
     }
 
+    const flushCodexMessages = () => {
+      codexMessageFrameRef.current = null
+      if (disposed) return
+      const bufferedMessages = Array.from(pendingCodexMessagesRef.current.values())
+      pendingCodexMessagesRef.current.clear()
+      for (const message of bufferedMessages) {
+        upsertMessage(message)
+      }
+      if (
+        pendingCodexSidebarRefreshRef.current.size > 0
+        && codexSidebarRefreshTimerRef.current == null
+      ) {
+        codexSidebarRefreshTimerRef.current = window.setTimeout(() => {
+          codexSidebarRefreshTimerRef.current = null
+          const projectIds = Array.from(pendingCodexSidebarRefreshRef.current.values())
+          pendingCodexSidebarRefreshRef.current.clear()
+          for (const projectId of projectIds) {
+            void refreshCodexSidebar(projectId)
+          }
+        }, 120)
+      }
+    }
+
+    const scheduleCodexMessage = (message: ReturnType<typeof toCodexMessage>) => {
+      pendingCodexMessagesRef.current.set(message.id, message)
+      if (message.state === 'complete') {
+        pendingCodexSidebarRefreshRef.current.add(message.projectId)
+      }
+      if (codexMessageFrameRef.current == null) {
+        codexMessageFrameRef.current = window.requestAnimationFrame(flushCodexMessages)
+      }
+    }
+
     const bootstrap = async () => {
+      await logFrontendEvent('info', 'backend.bootstrap', 'appBootstrap begin')
       const data = await appBootstrap()
       if (disposed) return
+      await logFrontendEvent('info', 'backend.bootstrap', 'appBootstrap resolved', {
+        projectCount: data.projects.length,
+      })
 
       const projects = data.projects.map(toProject)
       hydrateProjects(projects)
       hydrateWorkspace(toWorkspaceInput(data.workspaceChrome, data.workspaceSession))
+
+      const restoredTabs = Array.from(useWorkspaceStore.getState().tabs.values())
+        .filter((tab) => tab.type === 'editor' && typeof tab.meta?.path === 'string')
+      for (const tab of restoredTabs) {
+        prefetchEditorProjectDocuments({
+          projectId: tab.projectId,
+          tree: [],
+          openTabs: [tab],
+          eager: true,
+        })
+      }
 
       const [browserTabs, terminalSessions, codexThreads, pendingApprovals] = await Promise.all([
         browserTabsList(),
@@ -141,46 +208,22 @@ export function useBackendIntegration() {
       hydrateSessions(terminalSessions.map(toTerminalSession))
       hydrateThreads(codexThreads.map(toCodexThread))
       hydrateApprovals(pendingApprovals.map(toCodexApproval))
-      await Promise.all(
-        codexThreads.map(async (thread) => {
-          const history = await codexThreadMessagesList(thread.projectId, thread.threadId)
-          if (!disposed) {
-            hydrateMessages(thread.threadId, history.map(toCodexMessage))
-          }
-        }),
-      )
-      await Promise.all(
-        terminalSessions.map(async (session) => {
-          const scrollback = await terminalScrollbackRead(session.sessionId)
-          if (!disposed) {
-            setScrollback(session.sessionId, scrollback.content)
-          }
-        }),
-      )
-
-      await Promise.all(
-        data.projects.map(async (project) => {
-          const [tree, git, browserSidebarItems, codexSidebarItems] = await Promise.all([
-            projectTreeReadNested(project.id),
-            gitStatusRead(project.id),
-            projectBrowserSidebar(project.id),
-            projectCodexSidebar(project.id),
-            projectWatchStart(project.id),
-          ])
-          if (disposed) return
-          watchedProjects.add(project.id)
-          hydrateTree(project.id, toFileTree(tree))
-          hydrateGitState(project.id, toGitState(git))
-          hydrateBrowserSidebarItems(project.id, browserSidebarItems.map(toProjectBrowserSidebarItem))
-          hydrateCodexSidebarItems(project.id, codexSidebarItems.map(toProjectCodexSidebarItem))
-          updateProject(project.id, { branch: git.branch ?? 'detached' })
-        }),
-      )
-
       hydratedRef.current = true
+      await logFrontendEvent('info', 'backend.bootstrap', 'workspace hydration complete', {
+        projectCount: data.projects.length,
+      })
     }
 
-    void bootstrap()
+    void bootstrap().catch((error: unknown) => {
+      void logFrontendEvent('fatal', 'backend.bootstrap', 'bootstrap failed', {
+        error: error instanceof Error ? { message: error.message, stack: error.stack } : String(error),
+      })
+      pushError(
+        'Backend bootstrap failed',
+        error,
+        error instanceof Error ? error.message : 'The app backend did not finish bootstrapping.',
+      )
+    })
 
     void listenFsEvents((payload) => {
       if (!TREE_REFRESH_EVENT_TYPES.has(payload.type)) return
@@ -268,15 +311,18 @@ export function useBackendIntegration() {
         const thread = toCodexThread(payload.thread)
         if (payload.type === 'threadCreated') {
           addThread(thread)
+          void refreshCodexSidebar(thread.projectId)
         } else {
           updateThread(thread.id, thread)
         }
-        void refreshCodexSidebar(thread.projectId)
         return
       }
       if (payload.type === 'messageUpserted' && payload.message) {
-        upsertMessage(toCodexMessage(payload.message))
-        void refreshCodexSidebar(payload.message.projectId)
+        const message = toCodexMessage(payload.message)
+        scheduleCodexMessage(message)
+        if (message.role === 'assistant' && message.state === 'complete') {
+          updateThread(message.threadId, { status: 'idle' })
+        }
         return
       }
       if (payload.type === 'approvalPending' && payload.approval) {
@@ -287,6 +333,48 @@ export function useBackendIntegration() {
       if (payload.type === 'approvalBlocked' && payload.approval) {
         resolveApproval(String(payload.approval.requestId))
         void refreshCodexSidebar(payload.approval.projectId)
+        return
+      }
+      if (payload.type === 'serverDisconnected') {
+        const reason = typeof payload.reason === 'string' && payload.reason.trim()
+          ? payload.reason.trim()
+          : 'The Codex app server disconnected.'
+        const recentLines = Array.isArray(payload.recentLines)
+          ? payload.recentLines.filter((line): line is string => typeof line === 'string' && line.trim().length > 0)
+          : []
+        const detail = recentLines.length > 0
+          ? `${reason} Recent runtime output: ${recentLines.join(' | ')}`
+          : `${reason} Retry the request to reconnect, or open Settings to inspect Codex runtime health.`
+        const lastDisconnect = lastCodexDisconnectRef.current
+        const now = Date.now()
+        if (!lastDisconnect || lastDisconnect.message !== detail || now - lastDisconnect.at > 4000) {
+          lastCodexDisconnectRef.current = { message: detail, at: now }
+          pushError('Codex disconnected', detail)
+        }
+        return
+      }
+      if (payload.type === 'notification' && payload.payload?.method === 'error') {
+        const error = payload.payload.params?.error as { message?: string } | undefined
+        const threadId = payload.payload.params?.threadId as string | undefined
+        if (threadId) {
+          updateThread(threadId, { status: 'error' })
+        }
+        pushError(
+          'Codex turn failed',
+          error,
+          typeof error?.message === 'string'
+            ? error.message
+            : 'The Codex turn failed before producing a response.',
+        )
+        return
+      }
+      if (payload.type === 'notification' && payload.payload?.method) {
+        const threadId = extractCodexThreadId(payload.payload.params)
+        if (!threadId) return
+        const status = inferCodexStatusFromNotification(payload.payload.method, payload.payload.params)
+        if (status) {
+          updateThread(threadId, { status })
+        }
       }
     }).then((unlisten) => {
       codexUnlisten = unlisten
@@ -299,11 +387,64 @@ export function useBackendIntegration() {
       browserUnlisten?.()
       terminalUnlisten?.()
       codexUnlisten?.()
-      for (const projectId of watchedProjects) {
-        void projectWatchStop(projectId)
+      if (codexMessageFrameRef.current != null) {
+        window.cancelAnimationFrame(codexMessageFrameRef.current)
+      }
+      if (codexSidebarRefreshTimerRef.current != null) {
+        window.clearTimeout(codexSidebarRefreshTimerRef.current)
+      }
+      if (watchedProjectRef.current) {
+        void projectWatchStop(watchedProjectRef.current)
       }
     }
-  }, [addApproval, addThread, appendScrollback, clearScrollback, closeBrowserTab, closeSession, hydrateApprovals, hydrateBrowserSidebarItems, hydrateBrowserTabs, hydrateCodexSidebarItems, hydrateGitState, hydrateMessages, hydrateProjects, hydrateSessions, hydrateThreads, hydrateTree, hydrateWorkspace, pushBrowserRuntimeNotice, recordGitMutation, resolveApproval, setScrollback, updateProject, updateThread, upsertBrowserTab, upsertMessage, upsertSession])
+  }, [addApproval, addThread, appendScrollback, clearScrollback, closeBrowserTab, closeSession, hydrateApprovals, hydrateBrowserSidebarItems, hydrateBrowserTabs, hydrateCodexSidebarItems, hydrateGitState, hydrateProjects, hydrateSessions, hydrateThreads, hydrateTree, hydrateWorkspace, pushBrowserRuntimeNotice, pushError, recordGitMutation, resolveApproval, updateProject, updateThread, upsertBrowserTab, upsertMessage, upsertSession])
+
+  useEffect(() => {
+    if (!hydratedRef.current || !activeProjectId) return
+    let cancelled = false
+
+    const activateProject = async () => {
+      try {
+        if (watchedProjectRef.current && watchedProjectRef.current !== activeProjectId) {
+          await projectWatchStop(watchedProjectRef.current)
+          watchedProjectRef.current = null
+        }
+        const [tree, git, browserSidebarItems, codexSidebarItems] = await Promise.all([
+          projectTreeReadNested(activeProjectId),
+          gitStatusRead(activeProjectId),
+          projectBrowserSidebar(activeProjectId),
+          projectCodexSidebar(activeProjectId),
+        ])
+        if (cancelled) return
+        const mappedTree = toFileTree(tree)
+        hydrateTree(activeProjectId, mappedTree)
+        hydrateGitState(activeProjectId, toGitState(git))
+        hydrateBrowserSidebarItems(activeProjectId, browserSidebarItems.map(toProjectBrowserSidebarItem))
+        hydrateCodexSidebarItems(activeProjectId, codexSidebarItems.map(toProjectCodexSidebarItem))
+        updateProject(activeProjectId, { branch: git.branch ?? 'detached' })
+        prefetchEditorProjectDocuments({
+          projectId: activeProjectId,
+          tree: mappedTree,
+          selectedPath: useFilesStore.getState().selectedPath.get(activeProjectId),
+          openTabs: Array.from(useWorkspaceStore.getState().tabs.values()),
+          eager: true,
+        })
+        if (watchedProjectRef.current !== activeProjectId) {
+          await projectWatchStart(activeProjectId)
+          watchedProjectRef.current = activeProjectId
+        }
+      } catch (error) {
+        if (!cancelled) {
+          pushError('Active project load failed', error)
+        }
+      }
+    }
+
+    void activateProject()
+    return () => {
+      cancelled = true
+    }
+  }, [activeProjectId, hydrateBrowserSidebarItems, hydrateCodexSidebarItems, hydrateGitState, hydrateTree, pushError, updateProject])
 
   useEffect(() => {
     if (!hydratedRef.current) return
@@ -336,4 +477,57 @@ export function useBackendIntegration() {
       }),
     )
   }, [activePaneId, layout, tabs])
+}
+
+function extractCodexThreadId(params?: Record<string, unknown>) {
+  if (!params) return null
+  if (typeof params.threadId === 'string' && params.threadId.length > 0) {
+    return params.threadId
+  }
+  const thread = params.thread
+  if (thread && typeof thread === 'object' && typeof (thread as { id?: unknown }).id === 'string') {
+    return (thread as { id: string }).id
+  }
+  return null
+}
+
+function inferCodexStatusFromNotification(
+  method: string,
+  params?: Record<string, unknown>,
+): 'idle' | 'running' | 'waitingApproval' | 'error' | null {
+  if (method === 'turn/completed') {
+    return 'idle'
+  }
+  if (method === 'turn/started') {
+    return 'running'
+  }
+  if (method === 'error') {
+    return 'error'
+  }
+  if (method.includes('approval')) {
+    return 'waitingApproval'
+  }
+  if (method !== 'thread/status/changed' || !params) {
+    return null
+  }
+
+  const status = params.status
+  if (!status || typeof status !== 'object') {
+    return null
+  }
+  const type = (status as { type?: unknown }).type
+  if (type === 'active') {
+    const flags = (status as { activeFlags?: unknown }).activeFlags
+    if (Array.isArray(flags) && flags.some((flag) => typeof flag === 'string' && flag.toLowerCase().includes('approval'))) {
+      return 'waitingApproval'
+    }
+    return 'running'
+  }
+  if (type === 'idle' || type === 'notLoaded') {
+    return 'idle'
+  }
+  if (type === 'systemError') {
+    return 'error'
+  }
+  return null
 }

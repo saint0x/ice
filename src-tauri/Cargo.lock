@@ -1529,6 +1529,7 @@ dependencies = [
  "encoding_rs",
  "ignore",
  "notify",
+ "once_cell",
  "parking_lot",
  "portable-pty",
  "rusqlite",

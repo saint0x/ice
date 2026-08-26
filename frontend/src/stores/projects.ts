@@ -9,7 +9,7 @@ interface ProjectsState {
   hydrateProjects: (projects: Project[]) => void
   addProject: (project: Project) => void
   removeProject: (id: ProjectId) => void
-  setActiveProject: (id: ProjectId) => void
+  setActiveProject: (id: ProjectId | null) => void
   reorderProjects: (order: ProjectId[]) => void
   toggleSection: (projectId: ProjectId, section: SidebarSection) => void
   toggleProjectCollapsed: (id: ProjectId) => void
@@ -33,10 +33,9 @@ export const useProjectsStore = create<ProjectsState>((set) => ({
         })
       }
       const projectOrder = projects.map((project) => project.id)
-      const activeProjectId =
-        (s.activeProjectId && nextProjects.has(s.activeProjectId) ? s.activeProjectId : null)
-        ?? projectOrder[0]
-        ?? null
+      const activeProjectId = s.activeProjectId && nextProjects.has(s.activeProjectId)
+        ? s.activeProjectId
+        : null
       return { projects: nextProjects, projectOrder, activeProjectId }
     }),
 
@@ -44,7 +43,10 @@ export const useProjectsStore = create<ProjectsState>((set) => ({
     set((s) => {
       const projects = new Map(s.projects)
       projects.set(project.id, project)
-      return { projects, projectOrder: [...s.projectOrder, project.id] }
+      return {
+        projects,
+        projectOrder: [project.id, ...s.projectOrder.filter((existingId) => existingId !== project.id)],
+      }
     }),
 
   removeProject: (id) =>
@@ -52,11 +54,22 @@ export const useProjectsStore = create<ProjectsState>((set) => ({
       const projects = new Map(s.projects)
       projects.delete(id)
       const projectOrder = s.projectOrder.filter((pid) => pid !== id)
-      const activeProjectId = s.activeProjectId === id ? projectOrder[0] ?? null : s.activeProjectId
+      const activeProjectId = s.activeProjectId === id ? null : s.activeProjectId
       return { projects, projectOrder, activeProjectId }
     }),
 
-  setActiveProject: (id) => set({ activeProjectId: id }),
+  setActiveProject: (id) =>
+    set((s) => {
+      if (!id) {
+        return { activeProjectId: null }
+      }
+      const projects = new Map(s.projects)
+      const project = projects.get(id)
+      if (project?.collapsed) {
+        projects.set(id, { ...project, collapsed: false })
+      }
+      return { activeProjectId: id, projects }
+    }),
 
   reorderProjects: (order) => set({ projectOrder: order }),
 

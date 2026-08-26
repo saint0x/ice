@@ -1,6 +1,15 @@
 import { create } from 'zustand'
 import type { TerminalSession, TerminalDiagnostics, TerminalId, ProjectId } from '@/types'
 
+const MAX_SCROLLBACK_CHARS = 128 * 1024
+
+function trimScrollback(content: string) {
+  if (content.length <= MAX_SCROLLBACK_CHARS) {
+    return content
+  }
+  return content.slice(content.length - MAX_SCROLLBACK_CHARS)
+}
+
 interface TerminalState {
   sessions: Map<TerminalId, TerminalSession>
   activeSessionId: Map<ProjectId, TerminalId | null>
@@ -63,14 +72,14 @@ export const useTerminalStore = create<TerminalState>((set) => ({
   setScrollback: (id, content) =>
     set((s) => {
       const scrollback = new Map(s.scrollback)
-      scrollback.set(id, content)
+      scrollback.set(id, trimScrollback(content))
       return { scrollback }
     }),
 
   appendScrollback: (id, chunk) =>
     set((s) => {
       const scrollback = new Map(s.scrollback)
-      scrollback.set(id, `${scrollback.get(id) ?? ''}${chunk}`)
+      scrollback.set(id, trimScrollback(`${scrollback.get(id) ?? ''}${chunk}`))
       return { scrollback }
     }),
 

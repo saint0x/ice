@@ -90,11 +90,11 @@ const PaneRenderer = memo(function PaneRenderer({ layout }: PaneRendererProps) {
       className={styles.split}
       style={{ flexDirection: isHorizontal ? 'row' : 'column' }}
     >
-      <div style={{ flex: `${ratio} 1 0%`, minWidth: 80, minHeight: 100, overflow: 'hidden' }}>
+      <div style={{ flex: `${ratio} 1 0%`, minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
         <PaneRenderer layout={first} />
       </div>
       <SplitHandle splitId={id} direction={direction} />
-      <div style={{ flex: `${1 - ratio} 1 0%`, minWidth: 80, minHeight: 100, overflow: 'hidden' }}>
+      <div style={{ flex: `${1 - ratio} 1 0%`, minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
         <PaneRenderer layout={second} />
       </div>
     </div>

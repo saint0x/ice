@@ -69,6 +69,30 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
         .build()?;
 
     // Edit menu.
+    let undo = MenuItemBuilder::new("Undo")
+        .id("edit.undo")
+        .accelerator("CmdOrCtrl+Z")
+        .build(app)?;
+    let redo = MenuItemBuilder::new("Redo")
+        .id("edit.redo")
+        .accelerator("CmdOrCtrl+Shift+Z")
+        .build(app)?;
+    let cut = MenuItemBuilder::new("Cut")
+        .id("edit.cut")
+        .accelerator("CmdOrCtrl+X")
+        .build(app)?;
+    let copy = MenuItemBuilder::new("Copy")
+        .id("edit.copy")
+        .accelerator("CmdOrCtrl+C")
+        .build(app)?;
+    let paste = MenuItemBuilder::new("Paste")
+        .id("edit.paste")
+        .accelerator("CmdOrCtrl+V")
+        .build(app)?;
+    let select_all = MenuItemBuilder::new("Select All")
+        .id("edit.select_all")
+        .accelerator("CmdOrCtrl+A")
+        .build(app)?;
     let find = MenuItemBuilder::new("Find…")
         .id("edit.find")
         .accelerator("CmdOrCtrl+F")
@@ -78,13 +102,13 @@ pub fn build_app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> 
         .accelerator("CmdOrCtrl+Shift+F")
         .build(app)?;
     let edit_submenu = SubmenuBuilder::new(app, "Edit")
-        .undo()
-        .redo()
+        .item(&undo)
+        .item(&redo)
         .separator()
-        .cut()
-        .copy()
-        .paste()
-        .select_all()
+        .item(&cut)
+        .item(&copy)
+        .item(&paste)
+        .item(&select_all)
         .separator()
         .item(&find)
         .item(&find_in_project)

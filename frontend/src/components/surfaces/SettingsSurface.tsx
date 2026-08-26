@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, Bug, CheckCircle, FileSearch, FolderTree, Loader2, PlaySquare } from 'lucide-react'
 import type { Tab } from '@/types'
+import { createAndFocusTerminalSession } from '@/lib/terminalSessions'
 import {
   approvalAuditList,
   appHealth,
@@ -9,12 +10,10 @@ import {
   fileSearchPaths,
   fileSearchText,
   projectSnapshot,
-  terminalCreate,
-  toTerminalSession,
 } from '@/lib/backend'
+import { ensureEditorDocument } from '@/lib/editorDocuments'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useNotificationsStore } from '@/stores/notifications'
-import { useTerminalStore } from '@/stores/terminal'
 import { useFilesStore } from '@/stores/files'
 import { FileTree } from '@/components/sidebar/FileTree'
 import styles from './SettingsSurface.module.css'
@@ -24,15 +23,15 @@ interface Props {
 }
 
 type UtilityTool = 'files' | 'search' | 'diagnostics' | 'debug'
+const EMPTY_TREE = [] as const
 
 export const SettingsSurface = memo(function SettingsSurface({ tab }: Props) {
   const tool = ((tab.meta?.tool as UtilityTool | undefined) ?? 'diagnostics')
   const openTab = useWorkspaceStore((state) => state.openTab)
   const activePaneId = useWorkspaceStore((state) => state.activePaneId)
-  const upsertSession = useTerminalStore((state) => state.upsertSession)
-  const setActiveSession = useTerminalStore((state) => state.setActiveSession)
-  const tree = useFilesStore((state) => state.trees.get(tab.projectId) ?? [])
+  const storedTree = useFilesStore((state) => state.trees.get(tab.projectId))
   const pushError = useNotificationsStore((state) => state.pushError)
+  const tree = storedTree ?? EMPTY_TREE
 
   const [query, setQuery] = useState('')
   const [pathResults, setPathResults] = useState<string[]>([])
@@ -134,6 +133,7 @@ export const SettingsSurface = memo(function SettingsSurface({ tab }: Props) {
   }
 
   const openEditor = (path: string) => {
+    void ensureEditorDocument(tab.projectId, path)
     const name = path.split('/').pop() ?? path
     openTab(activePaneId, 'editor', name, tab.projectId, { path })
   }
@@ -142,10 +142,7 @@ export const SettingsSurface = memo(function SettingsSurface({ tab }: Props) {
     setIsLoading(true)
     setSurfaceError(null)
     try {
-      const session = await terminalCreate(tab.projectId)
-      const mapped = toTerminalSession(session)
-      upsertSession(mapped)
-      setActiveSession(tab.projectId, mapped.id)
+      await createAndFocusTerminalSession(tab.projectId)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to create terminal'
       setSurfaceError(message)

@@ -113,15 +113,15 @@
   --sidebar-row-hover: rgba(230, 224, 216, 0.09);
   --sidebar-row-selected: rgba(230, 224, 216, 0.14);
 
-  /* Syntax (Tokyo Night warm) */
-  --syn-keyword: #b39ddb;
-  --syn-function: #7c9bf7;
-  --syn-string: #8c9b74;
-  --syn-type: #8ea9a5;
-  --syn-constant: #af956a;
-  --syn-tag: #b86a5b;
-  --syn-attribute: #af956a;
-  --syn-comment: #67615b;
+  /* Syntax (VS Code Dark+) */
+  --syn-keyword: #569cd6;
+  --syn-function: #dcdcaa;
+  --syn-string: #ce9178;
+  --syn-type: #4ec9b0;
+  --syn-constant: #b5cea8;
+  --syn-tag: #c586c0;
+  --syn-attribute: #9cdcfe;
+  --syn-comment: #6a9955;
 
   /* Git */
   --git-modified: #af956a;
@@ -181,14 +181,14 @@
   --sidebar-row-hover: rgba(41, 40, 38, 0.06);
   --sidebar-row-selected: rgba(41, 40, 38, 0.10);
 
-  --syn-keyword: #7e57c2;
-  --syn-function: #4a6ed4;
-  --syn-string: #5e7242;
-  --syn-type: #4a7a76;
-  --syn-constant: #8a7244;
-  --syn-tag: #9e4a3a;
-  --syn-attribute: #8a7244;
-  --syn-comment: #a9a39c;
+  --syn-keyword: #0000ff;
+  --syn-function: #795e26;
+  --syn-string: #a31515;
+  --syn-type: #267f99;
+  --syn-constant: #098658;
+  --syn-tag: #af00db;
+  --syn-attribute: #001080;
+  --syn-comment: #008000;
 
   --git-modified: #8a7244;
   --git-added: #5e7242;
@@ -247,14 +247,14 @@
   --sidebar-row-hover: rgba(232, 226, 218, 0.09);
   --sidebar-row-selected: rgba(232, 226, 218, 0.14);
 
-  --syn-keyword: #b39ddb;
-  --syn-function: #7c9bf7;
-  --syn-string: #8c9b74;
-  --syn-type: #8ea9a5;
-  --syn-constant: #af956a;
-  --syn-tag: #b86a5b;
-  --syn-attribute: #af956a;
-  --syn-comment: #67615b;
+  --syn-keyword: #569cd6;
+  --syn-function: #dcdcaa;
+  --syn-string: #ce9178;
+  --syn-type: #4ec9b0;
+  --syn-constant: #b5cea8;
+  --syn-tag: #c586c0;
+  --syn-attribute: #9cdcfe;
+  --syn-comment: #6a9955;
 
   --git-modified: #af956a;
   --git-added: #8c9b74;

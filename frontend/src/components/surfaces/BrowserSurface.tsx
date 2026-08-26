@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, ArrowRight, RotateCw, Lock, Globe, ExternalLink, Search, X, AlertTriangle, Pin, Download, Info } from 'lucide-react'
-import type { Tab } from '@/types'
+import type { BrowserRuntimeNotice, Tab } from '@/types'
 import {
   browserRendererAttach,
   browserRendererBoundsSet,
@@ -22,21 +22,28 @@ interface Props {
   tab: Tab
 }
 
+const EMPTY_NOTICES: readonly BrowserRuntimeNotice[] = []
+
 export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
   const browserTabId = tab.meta?.tabId as string | undefined
   const browserTab = useBrowserStore((s) => browserTabId ? s.tabs.get(browserTabId) : undefined)
   const upsertBrowserTab = useBrowserStore((s) => s.upsertTab)
-  const runtimeNotices = useBrowserStore((s) => browserTabId ? s.runtimeNotices.get(browserTabId) ?? [] : [])
+  const storedRuntimeNotices = useBrowserStore((s) => browserTabId ? s.runtimeNotices.get(browserTabId) : undefined)
   const dismissRuntimeNotice = useBrowserStore((s) => s.dismissRuntimeNotice)
   const pushError = useNotificationsStore((s) => s.pushError)
   const [draftUrl, setDraftUrl] = useState<string | null>(null)
   const [findQuery, setFindQuery] = useState('')
   const [surfaceError, setSurfaceError] = useState<string | null>(null)
   const viewportRef = useRef<HTMLDivElement>(null)
+  const findInputRef = useRef<HTMLInputElement | null>(null)
 
   const rendererId = useMemo(() => (
     browserTabId ? `renderer-${browserTabId}-${tab.id}` : undefined
   ), [browserTabId, tab.id])
+  const runtimeNotices = useMemo(
+    () => storedRuntimeNotices ?? EMPTY_NOTICES,
+    [storedRuntimeNotices],
+  )
   const latestFindResult = useMemo(
     () => runtimeNotices.find((notice) => notice.kind === 'findResult'),
     [runtimeNotices],
@@ -74,6 +81,7 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
     if (!browserTabId || !viewportRef.current) return
     const element = viewportRef.current
     let disposed = false
+    let frameId = 0
 
     const syncBounds = () => {
       if (disposed) return
@@ -87,17 +95,35 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
             pushError('Browser renderer bounds failed', error, message)
           }
         })
+        .then(() => {
+          if (!disposed) {
+            setSurfaceError((current) => (
+              current === 'Failed to position native browser renderer' ? null : current
+            ))
+          }
+        })
+    }
+
+    const scheduleSync = () => {
+      window.cancelAnimationFrame(frameId)
+      frameId = window.requestAnimationFrame(syncBounds)
     }
 
     const animationFrame = window.requestAnimationFrame(syncBounds)
-    const observer = new ResizeObserver(syncBounds)
+    const observer = new ResizeObserver(scheduleSync)
     observer.observe(element)
-    window.addEventListener('resize', syncBounds)
+    if (element.parentElement) {
+      observer.observe(element.parentElement)
+    }
+    window.addEventListener('resize', scheduleSync)
+    window.addEventListener('scroll', scheduleSync, true)
     return () => {
       disposed = true
+      window.cancelAnimationFrame(frameId)
       window.cancelAnimationFrame(animationFrame)
       observer.disconnect()
-      window.removeEventListener('resize', syncBounds)
+      window.removeEventListener('resize', scheduleSync)
+      window.removeEventListener('scroll', scheduleSync, true)
     }
   }, [browserTabId, browserTab?.url, pushError])
 
@@ -115,6 +141,20 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
       findNext: mode === 'next',
     })
   }
+
+  useEffect(() => {
+    const onSurfaceFind = (event: Event) => {
+      const detail = (event as CustomEvent<{ tabId?: string; type?: string }>).detail
+      if (!detail || detail.tabId !== tab.id || detail.type !== 'browser') return
+      findInputRef.current?.focus()
+      findInputRef.current?.select()
+    }
+
+    window.addEventListener('ice:surface:find', onSurfaceFind as EventListener)
+    return () => {
+      window.removeEventListener('ice:surface:find', onSurfaceFind as EventListener)
+    }
+  }, [tab.id])
 
   return (
     <div className={styles.surface}>
@@ -214,6 +254,7 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
         <div className={styles.findBar}>
           <Search size={11} className={styles.findIcon} />
           <input
+            ref={findInputRef}
             className={styles.findInput}
             value={findQuery}
             onChange={(event) => setFindQuery(event.target.value)}

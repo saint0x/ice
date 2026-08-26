@@ -1,6 +1,7 @@
 use tauri::{AppHandle, State};
 
 use crate::app::state::AppState;
+use crate::diagnostics;
 use crate::fs::service::TreeReadOptions;
 use crate::ipc::dto::*;
 use crate::ipc::errors::AppError;
@@ -16,6 +17,10 @@ pub async fn app_health(app: AppHandle, state: State<'_, AppState>) -> Result<He
 
 #[tauri::command]
 pub async fn app_bootstrap(state: State<'_, AppState>) -> Result<AppBootstrapDto, AppError> {
+    let codex = state.codex.clone();
+    tauri::async_runtime::spawn(async move {
+        let _ = codex.prewarm().await;
+    });
     Ok(AppBootstrapDto {
         storage_root: state.paths.root().to_string_lossy().to_string(),
         db_path: state.paths.db_path().to_string_lossy().to_string(),
@@ -40,6 +45,12 @@ pub async fn app_config_set(
     state: State<'_, AppState>,
 ) -> Result<(), AppError> {
     state.persistence.config_set(input.key, input.value).await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn diagnostics_frontend_log(input: FrontendDiagnosticsLogInput) -> Result<(), AppError> {
+    diagnostics::append_frontend_log(&input.level, &input.scope, &input.message, input.context)?;
     Ok(())
 }
 
@@ -222,6 +233,42 @@ pub async fn file_read(
 }
 
 #[tauri::command]
+pub async fn file_syntax_profile(
+    input: ReadFileInput,
+    state: State<'_, AppState>,
+) -> Result<crate::syntax::service::SyntaxProfile, AppError> {
+    let _ = state
+        .projects
+        .resolve_project_path(&input.project_id)
+        .await?;
+    Ok(state.syntax.profile_for_path(&input.path))
+}
+
+#[tauri::command]
+pub async fn file_syntax_tokens(
+    input: SyntaxTokensInput,
+    state: State<'_, AppState>,
+) -> Result<crate::syntax::service::SyntaxTokensResponse, AppError> {
+    if let Some(content) = input.content {
+        return Ok(state.syntax.tokens_for_text(&input.path, &content));
+    }
+
+    let file = state
+        .fs
+        .read_file(&input.project_id, &input.path, &state.projects)
+        .await?;
+    if file.is_binary {
+        return Ok(crate::syntax::service::SyntaxTokensResponse {
+            profile: state.syntax.profile_for_path(&input.path),
+            tokens: Vec::new(),
+        });
+    }
+    Ok(state
+        .syntax
+        .tokens_for_text(&input.path, file.content.as_deref().unwrap_or_default()))
+}
+
+#[tauri::command]
 pub async fn file_search_paths(
     input: SearchInput,
     state: State<'_, AppState>,
@@ -309,6 +356,22 @@ pub async fn entry_rename(
         .rename_entry(&input.project_id, &input.from, &input.to, &state.projects)
         .await?;
     Ok(())
+}
+
+#[tauri::command]
+pub async fn file_import_external(
+    input: ImportExternalEntriesInput,
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, AppError> {
+    Ok(state
+        .fs
+        .import_external_entries(
+            &input.project_id,
+            &input.source_paths,
+            input.destination_dir.as_deref(),
+            &state.projects,
+        )
+        .await?)
 }
 
 #[tauri::command]

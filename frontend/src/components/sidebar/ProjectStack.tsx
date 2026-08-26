@@ -1,5 +1,5 @@
-import { memo, useState } from 'react'
-import { FolderPlus, FolderSearch, GripVertical } from 'lucide-react'
+import { memo, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { FolderPlus, FolderSearch } from 'lucide-react'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { projectAdd, projectReorder, toProject } from '@/lib/backend'
 import { useNotificationsStore } from '@/stores/notifications'
@@ -17,16 +17,18 @@ export const ProjectStack = memo(function ProjectStack() {
   const [newProjectPath, setNewProjectPath] = useState('')
   const [isAdding, setIsAdding] = useState(false)
   const [surfaceError, setSurfaceError] = useState<string | null>(null)
+  const [draggedProjectId, setDraggedProjectId] = useState<string | null>(null)
+  const [dropIndicatorIndex, setDropIndicatorIndex] = useState<number | null>(null)
+  const [suppressProjectClickId, setSuppressProjectClickId] = useState<string | null>(null)
+  const itemRefs = useRef(new Map<string, HTMLDivElement>())
+  const pointerDragRef = useRef<{
+    projectId: string
+    startY: number
+    hasMoved: boolean
+  } | null>(null)
 
-  const onMove = async (projectId: string, direction: -1 | 1) => {
-    const index = projectOrder.indexOf(projectId)
-    const nextIndex = index + direction
-    if (index < 0 || nextIndex < 0 || nextIndex >= projectOrder.length) return
+  const persistProjectOrder = async (nextOrder: string[]) => {
     const previousOrder = [...projectOrder]
-    const nextOrder = [...projectOrder]
-    const [moved] = nextOrder.splice(index, 1)
-    if (!moved) return
-    nextOrder.splice(nextIndex, 0, moved)
     reorderProjects(nextOrder)
     setSurfaceError(null)
     try {
@@ -37,6 +39,66 @@ export const ProjectStack = memo(function ProjectStack() {
       setSurfaceError(message)
       pushError('Project reorder failed', error, message)
     }
+  }
+
+  useEffect(() => {
+    if (!suppressProjectClickId) return
+    const timeout = window.setTimeout(() => {
+      setSuppressProjectClickId((current) => (current === suppressProjectClickId ? null : current))
+    }, 140)
+    return () => window.clearTimeout(timeout)
+  }, [suppressProjectClickId])
+
+  useEffect(() => {
+    const onPointerMove = (event: PointerEvent) => {
+      const drag = pointerDragRef.current
+      if (!drag) return
+      if (!drag.hasMoved && Math.abs(event.clientY - drag.startY) < 6) {
+        return
+      }
+      if (!drag.hasMoved) {
+        drag.hasMoved = true
+        setDraggedProjectId(drag.projectId)
+        setSuppressProjectClickId(drag.projectId)
+      }
+      setDropIndicatorIndex(getDropIndicatorIndex(projectOrder, itemRefs.current, event.clientY))
+    }
+
+    const finishDrag = () => {
+      const drag = pointerDragRef.current
+      pointerDragRef.current = null
+      if (!drag) return
+      const nextIndex = dropIndicatorIndex
+      setDraggedProjectId(null)
+      setDropIndicatorIndex(null)
+      if (!drag.hasMoved || nextIndex == null) {
+        return
+      }
+      const nextOrder = reorderProjectIds(projectOrder, drag.projectId, nextIndex)
+      if (nextOrder === projectOrder) {
+        return
+      }
+      void persistProjectOrder(nextOrder)
+    }
+
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', finishDrag)
+    window.addEventListener('pointercancel', finishDrag)
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', finishDrag)
+      window.removeEventListener('pointercancel', finishDrag)
+    }
+  }, [dropIndicatorIndex, projectOrder])
+
+  const onProjectPointerDown = (projectId: string) => (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return
+    pointerDragRef.current = {
+      projectId,
+      startY: event.clientY,
+      hasMoved: false,
+    }
+    setDropIndicatorIndex(projectOrder.indexOf(projectId))
   }
 
   const addProjectAtPath = async (rootPath: string) => {
@@ -60,7 +122,10 @@ export const ProjectStack = memo(function ProjectStack() {
 
   const onAddProject = async () => {
     const rootPath = newProjectPath.trim()
-    if (!rootPath) return
+    if (!rootPath) {
+      await onBrowseFolder()
+      return
+    }
     await addProjectAtPath(rootPath)
   }
 
@@ -114,11 +179,11 @@ export const ProjectStack = memo(function ProjectStack() {
             className={styles.addBtn}
             type="button"
             onClick={() => void onAddProject()}
-            disabled={isAdding || !newProjectPath.trim()}
-            title="Add project from the path entered above"
+            disabled={isAdding}
+            title={newProjectPath.trim() ? 'Add project from the path entered above' : 'Select a folder to add as a project'}
           >
             <FolderPlus size={13} />
-            <span>Add</span>
+            <span>{newProjectPath.trim() ? 'Add' : 'Select Folder'}</span>
           </button>
         </div>
         {surfaceError ? <div className={styles.errorBanner}>{surfaceError}</div> : null}
@@ -126,34 +191,59 @@ export const ProjectStack = memo(function ProjectStack() {
       {projectOrder.map((id) => {
         const project = projects.get(id)
         if (!project) return null
-        const index = projectOrder.indexOf(id)
+        const itemIndex = projectOrder.indexOf(id)
         return (
-          <div key={id} className={styles.projectCard}>
-            <div className={styles.reorderRail}>
-              <div className={styles.reorderHandle}>
-                <GripVertical size={12} />
-              </div>
-              <button
-                className={styles.reorderBtn}
-                type="button"
-                onClick={() => void onMove(id, -1)}
-                disabled={index === 0}
-              >
-                Up
-              </button>
-              <button
-                className={styles.reorderBtn}
-                type="button"
-                onClick={() => void onMove(id, 1)}
-                disabled={index === projectOrder.length - 1}
-              >
-                Down
-              </button>
-            </div>
-            <ProjectSection project={project} />
+          <div
+            key={id}
+            className={`${styles.projectItem} ${draggedProjectId === id ? styles.projectItemDragging : ''}`}
+            ref={(node) => {
+              if (node) itemRefs.current.set(id, node)
+              else itemRefs.current.delete(id)
+            }}
+          >
+            {dropIndicatorIndex === itemIndex ? <div className={styles.dropIndicator} /> : null}
+            <ProjectSection
+              project={project}
+              dragging={draggedProjectId === id}
+              suppressProjectClick={suppressProjectClickId === id}
+              onProjectPointerDown={onProjectPointerDown(id)}
+            />
+            {dropIndicatorIndex === itemIndex + 1 ? <div className={styles.dropIndicator} /> : null}
           </div>
         )
       })}
     </div>
   )
 })
+
+function getDropIndicatorIndex(order: string[], itemRefs: Map<string, HTMLDivElement>, pointerY: number) {
+  for (let index = 0; index < order.length; index += 1) {
+    const projectId = order[index]
+    if (!projectId) continue
+    const item = itemRefs.get(projectId)
+    if (!item) continue
+    const rect = item.getBoundingClientRect()
+    if (pointerY < rect.top + rect.height / 2) {
+      return index
+    }
+  }
+  return order.length
+}
+
+function reorderProjectIds(order: string[], draggedProjectId: string, targetIndex: number) {
+  const sourceIndex = order.indexOf(draggedProjectId)
+  if (sourceIndex < 0 || targetIndex < 0 || targetIndex > order.length) {
+    return order
+  }
+  const nextOrder = [...order]
+  const [moved] = nextOrder.splice(sourceIndex, 1)
+  if (!moved) {
+    return order
+  }
+  const insertionIndex = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex
+  if (insertionIndex === sourceIndex) {
+    return order
+  }
+  nextOrder.splice(insertionIndex, 0, moved)
+  return nextOrder
+}

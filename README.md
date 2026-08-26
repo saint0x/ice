@@ -46,6 +46,12 @@ cargo test
 
 When the frontend and Tauri shell are wired together for local app runs, use the project’s Tauri run flow from the repo root.
 
+For a repeatable production-style package, publish, and verification flow, run:
+
+```bash
+./scripts/install-ice.sh
+```
+
 ## Project Structure
 
 ```text
@@ -73,6 +79,7 @@ Fozzy verification examples:
 /Users/deepsaint/Desktop/fozzy/target/debug/fozzy validate tests/backend.production_gate.fozzy.json --json
 /Users/deepsaint/Desktop/fozzy/target/debug/fozzy doctor --deep --scenario tests/backend.production_gate.fozzy.json --runs 5 --seed 424242 --proc-backend host --fs-backend host --json
 /Users/deepsaint/Desktop/fozzy/target/debug/fozzy test --det --strict tests/backend.production_gate.fozzy.json tests/backend.topology.fozzy.json --proc-backend host --fs-backend host --json
+/Users/deepsaint/Desktop/fozzy/target/debug/fozzy test --det --strict tests/frontend.release_bundle.fozzy.json --proc-backend host --fs-backend host --json
 ```
 
 ## Storage
