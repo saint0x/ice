@@ -201,6 +201,10 @@ fn validate_session_state(session_state: &WorkspaceSessionState) -> Result<()> {
     use anyhow::anyhow;
     use std::collections::HashSet;
 
+    if session_state.active_pane_id.trim().is_empty() {
+        return Err(anyhow!("workspace session active pane id is blank"));
+    }
+
     let mut pane_ids = Vec::new();
     let mut node_ids = Vec::new();
     let mut referenced_tabs = Vec::new();
@@ -236,6 +240,15 @@ fn validate_session_state(session_state: &WorkspaceSessionState) -> Result<()> {
         return Err(anyhow!("workspace session contains duplicate tab ids"));
     }
     for tab in &session_state.tabs {
+        if tab.id.trim().is_empty() {
+            return Err(anyhow!("workspace session contains blank tab id"));
+        }
+        if tab.project_id.trim().is_empty() {
+            return Err(anyhow!(
+                "workspace session contains blank project id for tab {}",
+                tab.id
+            ));
+        }
         if !is_valid_workspace_tab_kind(&tab.kind) {
             return Err(anyhow!(
                 "workspace session contains unknown tab kind {}",
@@ -497,6 +510,54 @@ mod tests {
     }
 
     #[test]
+    fn rejects_blank_workspace_identifiers() {
+        let mut blank_project = tab("tab-1");
+        blank_project.project_id = "  ".to_string();
+        let session = WorkspaceSessionState {
+            active_pane_id: "pane-1".to_string(),
+            tabs: vec![blank_project],
+            root: WorkspacePaneNode::Leaf {
+                id: "pane-1".to_string(),
+                tabs: vec!["tab-1".to_string()],
+                active_tab_id: Some("tab-1".to_string()),
+            },
+        };
+        let error = validate_session_state(&session).expect_err("blank project id should fail");
+        assert!(error
+            .to_string()
+            .contains("workspace session contains blank project id for tab tab-1"));
+
+        let session = WorkspaceSessionState {
+            active_pane_id: " ".to_string(),
+            tabs: Vec::new(),
+            root: WorkspacePaneNode::Leaf {
+                id: " ".to_string(),
+                tabs: Vec::new(),
+                active_tab_id: None,
+            },
+        };
+        let error = validate_session_state(&session).expect_err("blank pane id should fail");
+        assert!(error
+            .to_string()
+            .contains("workspace session active pane id is blank"));
+    }
+
+    #[test]
+    fn recovers_blank_workspace_identifiers_to_default_on_read_boundary() {
+        let recovered = recover_session_state(WorkspaceSessionState {
+            active_pane_id: "pane-1".to_string(),
+            tabs: vec![tab(" ")],
+            root: WorkspacePaneNode::Leaf {
+                id: "pane-1".to_string(),
+                tabs: vec![" ".to_string()],
+                active_tab_id: Some(" ".to_string()),
+            },
+        });
+
+        assert_eq!(recovered, default_session_state());
+    }
+
+    #[test]
     fn recovers_unknown_tab_kind_to_default_on_read_boundary() {
         let mut unknown = tab("tab-unknown");
         unknown.kind = "banana".to_string();
@@ -562,10 +623,19 @@ fn collect_node_state(
             tabs,
             active_tab_id,
         } => {
+            if id.trim().is_empty() {
+                return Err(anyhow!("workspace session contains blank pane id"));
+            }
             node_ids.push(id.clone());
             pane_ids.push(id.clone());
+            if tabs.iter().any(|tab_id| tab_id.trim().is_empty()) {
+                return Err(anyhow!("workspace pane {} references blank tab id", id));
+            }
             referenced_tabs.extend(tabs.iter().cloned());
             if let Some(active_tab_id) = active_tab_id {
+                if active_tab_id.trim().is_empty() {
+                    return Err(anyhow!("workspace pane {} has blank active tab id", id));
+                }
                 if !tabs.iter().any(|tab_id| tab_id == active_tab_id) {
                     return Err(anyhow!(
                         "workspace pane {} has active tab {} that is not present",
@@ -576,6 +646,9 @@ fn collect_node_state(
             }
         }
         WorkspacePaneNode::Split(split) => {
+            if split.id.trim().is_empty() {
+                return Err(anyhow!("workspace session contains blank split id"));
+            }
             node_ids.push(split.id.clone());
             if split.children.len() < 2 {
                 return Err(anyhow!(
