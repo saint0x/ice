@@ -119,10 +119,14 @@ function syncCountersFromWorkspace(layout: PaneLayout, tabs: Tab[]) {
   _tabCounter = Math.max(_tabCounter, maxTab)
 }
 
+function isUsableHydratedTab(tab: Tab): boolean {
+  return tab.id.trim().length > 0 && tab.projectId.trim().length > 0
+}
+
 function normalizeHydratedLayout(layout: PaneLayout, tabIds: Set<TabId>, claimedTabs = new Set<TabId>()): PaneLayout {
   if (layout.type === 'leaf') {
     const tabs = layout.tabs.filter((tabId) => {
-      if (!tabIds.has(tabId) || claimedTabs.has(tabId)) return false
+      if (tabId.trim().length === 0 || !tabIds.has(tabId) || claimedTabs.has(tabId)) return false
       claimedTabs.add(tabId)
       return true
     })
@@ -182,14 +186,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
 
   hydrateWorkspace: (input) =>
     set(() => {
-      const inputTabsById = new Map(input.tabs.map((tab) => [tab.id, tab]))
+      const hydratedTabs = input.tabs.filter(isUsableHydratedTab)
+      const inputTabsById = new Map(hydratedTabs.map((tab) => [tab.id, tab]))
       const normalizedLayout = normalizeHydratedLayout(input.layout, new Set(inputTabsById.keys()))
       const layout = collectPaneIds(normalizedLayout).length > 0
         ? normalizedLayout
         : emptyWorkspaceLayout()
       const reachableTabIds = new Set(collectLayoutTabIds(layout))
       const tabs = new Map(
-        input.tabs
+        hydratedTabs
           .filter((tab) => reachableTabIds.has(tab.id))
           .map((tab) => [tab.id, tab]),
       )

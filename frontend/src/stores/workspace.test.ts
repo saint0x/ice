@@ -327,4 +327,50 @@ describe('workspace store focus synchronization', () => {
       activeTabId: null,
     })
   })
+
+  it('drops hydrated tabs with blank identifiers before layout reconciliation', () => {
+    useWorkspaceStore.getState().hydrateWorkspace({
+      layout: {
+        id: 'pane-1',
+        type: 'leaf',
+        tabs: ['tab-live', ' ', 'tab-blank-project'],
+        activeTabId: ' ',
+      },
+      tabs: [
+        {
+          id: 'tab-live',
+          type: 'editor',
+          title: 'index.ts',
+          projectId: 'project-1',
+        },
+        {
+          id: ' ',
+          type: 'browser',
+          title: 'Blank tab',
+          projectId: 'project-1',
+        },
+        {
+          id: 'tab-blank-project',
+          type: 'terminal',
+          title: 'Blank project',
+          projectId: ' ',
+        },
+      ],
+      activePaneId: 'pane-1',
+      sidebarOpen: true,
+      sidebarWidth: 240,
+      bottomDockOpen: true,
+      bottomDockHeight: 240,
+      chatPanelOpen: false,
+      chatPanelWidth: 360,
+    })
+
+    const state = useWorkspaceStore.getState()
+    expect([...state.tabs.keys()]).toEqual(['tab-live'])
+    expect(state.layout).toMatchObject({
+      id: 'pane-1',
+      tabs: ['tab-live'],
+      activeTabId: 'tab-live',
+    })
+  })
 })
