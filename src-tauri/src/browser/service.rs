@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use parking_lot::RwLock;
 use serde::Serialize;
 use tauri::{
@@ -848,9 +848,29 @@ impl BrowserService {
             .unwrap_or_default();
         let persistence = Arc::clone(&self.persistence);
         let tab_id = tab_id.to_string();
+        let project_id = record.project_id.clone();
+        let app = self.app.clone();
         tauri::async_runtime::spawn(async move {
-            let _ = persistence.upsert_browser_tab(record).await;
-            let _ = persistence.replace_browser_history(tab_id, history).await;
+            if let Err(error) = persistence.upsert_browser_tab(record).await {
+                emit_browser_persistence_failed(
+                    &app,
+                    &tab_id,
+                    &project_id,
+                    format!("Browser tab state was not saved: {error}"),
+                );
+                return;
+            }
+            if let Err(error) = persistence
+                .replace_browser_history(tab_id.clone(), history)
+                .await
+            {
+                emit_browser_persistence_failed(
+                    &app,
+                    &tab_id,
+                    &project_id,
+                    format!("Browser history was not saved: {error}"),
+                );
+            }
         });
     }
 
@@ -956,6 +976,23 @@ fn load_browser_tabs_for_startup(
         })
         .collect();
     Ok(tabs)
+}
+
+fn emit_browser_persistence_failed(
+    app: &AppHandle,
+    tab_id: &str,
+    project_id: &str,
+    message: String,
+) {
+    let _ = app.emit(
+        BROWSER_EVENT,
+        serde_json::json!({
+            "type": "persistenceFailed",
+            "tabId": tab_id,
+            "projectId": project_id,
+            "message": message,
+        }),
+    );
 }
 
 fn browser_security_origin(url: &str) -> Option<String> {
@@ -1198,8 +1235,9 @@ fn browser_runtime_init_script(tab_id: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        browser_security_origin, is_secure_url, load_browser_tabs_for_startup, trim_browser_history,
         BrowserHistoryEntry, BrowserTabRecord, BrowserTabState, MAX_BROWSER_HISTORY_ENTRIES,
+        browser_security_origin, is_secure_url, load_browser_tabs_for_startup,
+        trim_browser_history,
     };
     use crate::persistence::db::PersistenceService;
     use tempfile::tempdir;

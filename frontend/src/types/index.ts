@@ -124,6 +124,7 @@ export type BrowserRuntimeNoticeKind =
   | 'openExternalRequested'
   | 'rendererAttached'
   | 'rendererDetached'
+  | 'persistenceFailed'
 
 export interface BrowserRuntimeNotice {
   id: string

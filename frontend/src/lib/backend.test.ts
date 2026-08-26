@@ -21,6 +21,20 @@ describe('backend mappers', () => {
     expect(notice?.message).toContain('/tmp/archive.zip')
   })
 
+  it('maps browser persistence failures to runtime notices', () => {
+    const notice = toBrowserRuntimeNotice({
+      type: 'persistenceFailed',
+      tabId: 'tab-1',
+      projectId: 'project-1',
+      message: 'Browser history was not saved: disk full',
+    })
+
+    expect(notice).toBeTruthy()
+    expect(notice?.kind).toBe('persistenceFailed')
+    expect(notice?.projectId).toBe('project-1')
+    expect(notice?.message).toBe('Browser history was not saved: disk full')
+  })
+
   it('maps structured git mutation events', () => {
     const event = toGitMutationEvent({
       type: 'mutationCompleted',

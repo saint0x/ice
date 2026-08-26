@@ -352,6 +352,8 @@ interface BrowserEventPayload {
   type: string
   tab?: BrowserTabDto
   tabId?: string
+  projectId?: string
+  message?: string
   result?: BrowserFindInPageResultDto
   request?: BrowserExternalOpenRequestDto | BrowserDownloadRequestDto
   session?: {
@@ -1060,6 +1062,16 @@ export function toBrowserRuntimeNotice(payload: BrowserEventPayload): BrowserRun
       tabId: payload.session.tabId,
       kind: 'rendererDetached',
       message: 'Native browser renderer detached.',
+      createdAt,
+    }
+  }
+  if (payload.type === 'persistenceFailed' && payload.tabId) {
+    return {
+      id: `${payload.tabId}:persistence:${createdAt}`,
+      projectId: payload.projectId ?? '',
+      tabId: payload.tabId,
+      kind: 'persistenceFailed',
+      message: payload.message ?? 'Browser state could not be saved.',
       createdAt,
     }
   }
