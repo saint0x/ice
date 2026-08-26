@@ -1,5 +1,16 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { useTerminalStore } from '@/stores/terminal'
+import type { TerminalSession } from '@/types'
+
+const liveSession: TerminalSession = {
+  id: 'session-live',
+  projectId: 'project-1',
+  title: 'zsh',
+  cwd: '/tmp/project',
+  shell: 'zsh',
+  shellPath: '/bin/zsh',
+  isRunning: true,
+}
 
 describe('terminal scrollback retention', () => {
   beforeEach(() => {
@@ -21,15 +32,6 @@ describe('terminal scrollback retention', () => {
   })
 
   it('reconciles active sessions, scrollback, and diagnostics to hydrated backend sessions', () => {
-    const liveSession = {
-      id: 'session-live',
-      projectId: 'project-1',
-      title: 'zsh',
-      cwd: '/tmp/project',
-      shell: 'zsh',
-      shellPath: '/bin/zsh',
-      isRunning: true,
-    }
     useTerminalStore.setState({
       sessions: new Map([
         ['session-stale', {
@@ -71,5 +73,40 @@ describe('terminal scrollback retention', () => {
     expect(state.scrollback.has('session-stale')).toBe(false)
     expect(state.scrollback.get('session-live')).toBe('current')
     expect(state.diagnostics.has('session-stale')).toBe(false)
+  })
+
+  it('ignores attempts to activate missing or cross-project terminal sessions', () => {
+    useTerminalStore.setState({
+      sessions: new Map([
+        ['session-live', liveSession],
+        ['session-other', {
+          ...liveSession,
+          id: 'session-other',
+          projectId: 'project-2',
+        }],
+      ]),
+      activeSessionId: new Map([['project-1', 'session-live']]),
+      scrollback: new Map(),
+      diagnostics: new Map(),
+    })
+
+    useTerminalStore.getState().setActiveSession('project-1', 'session-missing')
+    expect(useTerminalStore.getState().activeSessionId.get('project-1')).toBe('session-live')
+
+    useTerminalStore.getState().setActiveSession('project-1', 'session-other')
+    expect(useTerminalStore.getState().activeSessionId.get('project-1')).toBe('session-live')
+  })
+
+  it('falls back to a real project session when the stored active terminal session is stale', () => {
+    useTerminalStore.setState({
+      sessions: new Map([['session-live', liveSession]]),
+      activeSessionId: new Map([['project-1', 'session-stale']]),
+      scrollback: new Map(),
+      diagnostics: new Map(),
+    })
+
+    useTerminalStore.getState().setActiveSession('project-1', 'session-missing')
+
+    expect(useTerminalStore.getState().activeSessionId.get('project-1')).toBe('session-live')
   })
 })

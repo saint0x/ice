@@ -129,7 +129,18 @@ export const useTerminalStore = create<TerminalState>((set) => ({
 
   setActiveSession: (projectId, id) =>
     set((s) => {
+      const session = s.sessions.get(id)
       const activeSessionId = new Map(s.activeSessionId)
+      if (!session || session.projectId !== projectId) {
+        const currentId = activeSessionId.get(projectId)
+        const currentSession = currentId ? s.sessions.get(currentId) : undefined
+        if (currentSession?.projectId === projectId) {
+          return {}
+        }
+        const fallback = [...s.sessions.values()].find((candidate) => candidate.projectId === projectId)
+        activeSessionId.set(projectId, fallback?.id ?? null)
+        return { activeSessionId }
+      }
       activeSessionId.set(projectId, id)
       return { activeSessionId }
     }),

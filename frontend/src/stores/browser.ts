@@ -87,7 +87,18 @@ export const useBrowserStore = create<BrowserState>((set) => ({
 
   setActiveTab: (projectId, tabId) =>
     set((s) => {
+      const tab = s.tabs.get(tabId)
       const activeTabId = new Map(s.activeTabId)
+      if (!tab || tab.projectId !== projectId) {
+        const currentId = activeTabId.get(projectId)
+        const currentTab = currentId ? s.tabs.get(currentId) : undefined
+        if (currentTab?.projectId === projectId) {
+          return {}
+        }
+        const fallback = [...s.tabs.values()].find((candidate) => candidate.projectId === projectId)
+        activeTabId.set(projectId, fallback?.id ?? null)
+        return { activeTabId }
+      }
       activeTabId.set(projectId, tabId)
       return { activeTabId }
     }),

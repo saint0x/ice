@@ -64,4 +64,39 @@ describe('browser store hydration', () => {
     expect(state.runtimeNotices.has('browser-stale')).toBe(false)
     expect(state.runtimeNotices.has('browser-live')).toBe(true)
   })
+
+  it('ignores attempts to activate missing or cross-project browser tabs', () => {
+    useBrowserStore.setState({
+      tabs: new Map([
+        ['browser-live', browserTab],
+        ['browser-other', {
+          ...browserTab,
+          id: 'browser-other',
+          projectId: 'project-2',
+        }],
+      ]),
+      activeTabId: new Map([['project-1', 'browser-live']]),
+      sidebarItems: new Map(),
+      runtimeNotices: new Map(),
+    })
+
+    useBrowserStore.getState().setActiveTab('project-1', 'browser-missing')
+    expect(useBrowserStore.getState().activeTabId.get('project-1')).toBe('browser-live')
+
+    useBrowserStore.getState().setActiveTab('project-1', 'browser-other')
+    expect(useBrowserStore.getState().activeTabId.get('project-1')).toBe('browser-live')
+  })
+
+  it('falls back to a real project tab when the stored active browser tab is stale', () => {
+    useBrowserStore.setState({
+      tabs: new Map([['browser-live', browserTab]]),
+      activeTabId: new Map([['project-1', 'browser-stale']]),
+      sidebarItems: new Map(),
+      runtimeNotices: new Map(),
+    })
+
+    useBrowserStore.getState().setActiveTab('project-1', 'browser-missing')
+
+    expect(useBrowserStore.getState().activeTabId.get('project-1')).toBe('browser-live')
+  })
 })
