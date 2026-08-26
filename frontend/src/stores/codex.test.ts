@@ -285,6 +285,58 @@ describe('codex store reconciliation', () => {
     expect(useCodexStore.getState().messagesByThread.has('thread-stale')).toBe(false)
   })
 
+  it('ignores message hydration and late message events for missing Codex threads', () => {
+    useCodexStore.getState().hydrateMessages('thread-missing', [
+      {
+        id: 'message-missing',
+        threadId: 'thread-missing',
+        projectId: 'project-a',
+        role: 'assistant',
+        content: 'late',
+        state: 'complete',
+        createdAt: '2026-05-01T00:00:00Z',
+        updatedAt: '2026-05-01T00:00:00Z',
+      },
+    ])
+    useCodexStore.getState().upsertMessage({
+      id: 'message-late',
+      threadId: 'thread-missing',
+      projectId: 'project-a',
+      role: 'assistant',
+      content: 'late event',
+      state: 'complete',
+      createdAt: '2026-05-01T00:00:00Z',
+      updatedAt: '2026-05-01T00:00:00Z',
+    })
+
+    expect(useCodexStore.getState().messagesByThread.has('thread-missing')).toBe(false)
+  })
+
+  it('ignores cross-project Codex message events', () => {
+    useCodexStore.getState().hydrateThreads([
+      {
+        id: 'thread-live',
+        projectId: 'project-a',
+        title: 'Live',
+        unread: false,
+        status: 'running',
+      },
+    ])
+
+    useCodexStore.getState().upsertMessage({
+      id: 'message-cross-project',
+      threadId: 'thread-live',
+      projectId: 'project-b',
+      role: 'assistant',
+      content: 'wrong project',
+      state: 'complete',
+      createdAt: '2026-05-01T00:00:00Z',
+      updatedAt: '2026-05-01T00:00:00Z',
+    })
+
+    expect(useCodexStore.getState().messagesByThread.has('thread-live')).toBe(false)
+  })
+
   it('reconciles sidebar Codex rows to hydrated backend threads', () => {
     useCodexStore.setState({
       threads: new Map([

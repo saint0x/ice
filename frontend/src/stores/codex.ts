@@ -261,6 +261,7 @@ export const useCodexStore = create<CodexState>((set) => ({
 
   hydrateMessages: (threadId, messages) =>
     set((s) => {
+      if (!s.threads.has(threadId)) return {}
       const messagesByThread = new Map(s.messagesByThread)
       messagesByThread.set(threadId, mergeThreadMessages(s.threads, messagesByThread.get(threadId) ?? [], messages))
       return { messagesByThread: pruneMessagesByThread(messagesByThread, s.activeThreadId) }
@@ -319,6 +320,8 @@ export const useCodexStore = create<CodexState>((set) => ({
 
   upsertMessage: (message) =>
     set((s) => {
+      const thread = s.threads.get(message.threadId)
+      if (!thread || thread.projectId !== message.projectId) return {}
       const messagesByThread = new Map(s.messagesByThread)
       const current = messagesByThread.get(message.threadId) ?? []
       const next = mergeThreadMessages(s.threads, current, [message])

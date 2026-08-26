@@ -123,6 +123,10 @@ export const useBrowserStore = create<BrowserState>((set) => ({
 
   pushRuntimeNotice: (notice) =>
     set((s) => {
+      const tab = s.tabs.get(notice.tabId)
+      if (!tab || (notice.projectId && tab.projectId !== notice.projectId)) {
+        return {}
+      }
       const runtimeNotices = new Map(s.runtimeNotices)
       const existing = runtimeNotices.get(notice.tabId) ?? []
       runtimeNotices.set(notice.tabId, [notice, ...existing].slice(0, 20))

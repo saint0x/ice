@@ -109,6 +109,43 @@ describe('browser store hydration', () => {
     expect(useBrowserStore.getState().sidebarItems.get('project-1')).toEqual([])
   })
 
+  it('ignores runtime notices for closed or cross-project browser tabs', () => {
+    useBrowserStore.setState({
+      tabs: new Map([['browser-live', browserTab]]),
+      activeTabId: new Map(),
+      sidebarItems: new Map(),
+      runtimeNotices: new Map(),
+    })
+
+    useBrowserStore.getState().pushRuntimeNotice({
+      id: 'notice-missing',
+      projectId: 'project-1',
+      tabId: 'browser-missing',
+      kind: 'rendererDetached',
+      message: 'Renderer detached',
+      createdAt: '2026-01-01T00:00:00Z',
+    })
+    useBrowserStore.getState().pushRuntimeNotice({
+      id: 'notice-cross-project',
+      projectId: 'project-2',
+      tabId: 'browser-live',
+      kind: 'rendererDetached',
+      message: 'Renderer detached',
+      createdAt: '2026-01-01T00:00:01Z',
+    })
+    useBrowserStore.getState().pushRuntimeNotice({
+      id: 'notice-live',
+      projectId: 'project-1',
+      tabId: 'browser-live',
+      kind: 'rendererAttached',
+      message: 'Renderer attached',
+      createdAt: '2026-01-01T00:00:02Z',
+    })
+
+    expect(useBrowserStore.getState().runtimeNotices.has('browser-missing')).toBe(false)
+    expect(useBrowserStore.getState().runtimeNotices.get('browser-live')?.map((notice) => notice.id)).toEqual(['notice-live'])
+  })
+
   it('ignores attempts to activate missing or cross-project browser tabs', () => {
     useBrowserStore.setState({
       tabs: new Map([

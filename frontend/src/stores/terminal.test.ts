@@ -23,6 +23,12 @@ describe('terminal scrollback retention', () => {
   })
 
   it('trims oversized scrollback buffers to a bounded window', () => {
+    useTerminalStore.setState({
+      sessions: new Map([['session-1', {
+        ...liveSession,
+        id: 'session-1',
+      }]]),
+    })
     const largeChunk = 'x'.repeat(140 * 1024)
 
     useTerminalStore.getState().setScrollback('session-1', largeChunk)
@@ -108,5 +114,27 @@ describe('terminal scrollback retention', () => {
     useTerminalStore.getState().setActiveSession('project-1', 'session-missing')
 
     expect(useTerminalStore.getState().activeSessionId.get('project-1')).toBe('session-live')
+  })
+
+  it('ignores late scrollback and diagnostics for closed terminal sessions', () => {
+    useTerminalStore.getState().setScrollback('session-missing', 'late')
+    useTerminalStore.getState().appendScrollback('session-missing', 'later')
+    useTerminalStore.getState().clearScrollback('session-missing')
+    useTerminalStore.getState().upsertDiagnostics({
+      sessionId: 'session-missing',
+      projectId: 'project-1',
+      cwd: '/tmp/project',
+      shell: 'zsh',
+      shellPath: '/bin/zsh',
+      title: 'zsh',
+      isRunning: false,
+      restoredFromPersistence: false,
+      scrollbackBytes: 4,
+      scrollbackLineCount: 1,
+      recentLines: ['late'],
+    })
+
+    expect(useTerminalStore.getState().scrollback.has('session-missing')).toBe(false)
+    expect(useTerminalStore.getState().diagnostics.has('session-missing')).toBe(false)
   })
 })

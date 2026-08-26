@@ -81,6 +81,7 @@ export const useTerminalStore = create<TerminalState>((set) => ({
 
   upsertDiagnostics: (diagnostics) =>
     set((s) => {
+      if (!s.sessions.has(diagnostics.sessionId)) return {}
       const next = new Map(s.diagnostics)
       next.set(diagnostics.sessionId, diagnostics)
       return { diagnostics: next }
@@ -88,6 +89,7 @@ export const useTerminalStore = create<TerminalState>((set) => ({
 
   setScrollback: (id, content) =>
     set((s) => {
+      if (!s.sessions.has(id)) return {}
       const scrollback = new Map(s.scrollback)
       scrollback.set(id, trimScrollback(content))
       return { scrollback }
@@ -95,6 +97,7 @@ export const useTerminalStore = create<TerminalState>((set) => ({
 
   appendScrollback: (id, chunk) =>
     set((s) => {
+      if (!s.sessions.has(id)) return {}
       const scrollback = new Map(s.scrollback)
       scrollback.set(id, trimScrollback(`${scrollback.get(id) ?? ''}${chunk}`))
       return { scrollback }
@@ -102,6 +105,7 @@ export const useTerminalStore = create<TerminalState>((set) => ({
 
   clearScrollback: (id) =>
     set((s) => {
+      if (!s.sessions.has(id)) return {}
       const scrollback = new Map(s.scrollback)
       scrollback.set(id, '')
       return { scrollback }
