@@ -16,6 +16,21 @@ interface ProjectsState {
   updateProject: (id: ProjectId, patch: Partial<Project>) => void
 }
 
+function normalizeProjectOrder(order: ProjectId[], projects: Map<ProjectId, Project>): ProjectId[] {
+  const seen = new Set<ProjectId>()
+  const normalized: ProjectId[] = []
+  for (const projectId of order) {
+    if (!projects.has(projectId) || seen.has(projectId)) continue
+    seen.add(projectId)
+    normalized.push(projectId)
+  }
+  for (const projectId of projects.keys()) {
+    if (seen.has(projectId)) continue
+    normalized.push(projectId)
+  }
+  return normalized
+}
+
 export const useProjectsStore = create<ProjectsState>((set) => ({
   projects: new Map(),
   projectOrder: [],
@@ -65,13 +80,15 @@ export const useProjectsStore = create<ProjectsState>((set) => ({
       }
       const projects = new Map(s.projects)
       const project = projects.get(id)
+      if (!project) return s
       if (project?.collapsed) {
         projects.set(id, { ...project, collapsed: false })
       }
       return { activeProjectId: id, projects }
     }),
 
-  reorderProjects: (order) => set({ projectOrder: order }),
+  reorderProjects: (order) =>
+    set((s) => ({ projectOrder: normalizeProjectOrder(order, s.projects) })),
 
   toggleProjectCollapsed: (id) =>
     set((s) => {

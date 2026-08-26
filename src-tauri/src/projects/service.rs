@@ -121,17 +121,7 @@ impl ProjectService {
             .into_iter()
             .map(|project| project.id)
             .collect::<Vec<_>>();
-        for project_id in &project_ids {
-            if !existing.iter().any(|existing_id| existing_id == project_id) {
-                return Err(anyhow!("unknown project {project_id}"));
-            }
-        }
-        let mut order = project_ids;
-        for project_id in existing {
-            if !order.iter().any(|candidate| candidate == &project_id) {
-                order.push(project_id);
-            }
-        }
+        let order = normalize_project_order(project_ids, existing)?;
         self.persistence
             .config_set("projects.order".to_string(), serde_json::json!(order))
             .await
@@ -267,6 +257,30 @@ fn color_from_name(name: &str) -> String {
     palette[idx].to_string()
 }
 
+fn normalize_project_order(project_ids: Vec<String>, existing: Vec<String>) -> Result<Vec<String>> {
+    let existing_set = existing
+        .iter()
+        .cloned()
+        .collect::<std::collections::HashSet<_>>();
+    let mut seen = std::collections::HashSet::new();
+    let mut order = Vec::with_capacity(existing.len());
+    for project_id in project_ids {
+        if !existing_set.contains(&project_id) {
+            return Err(anyhow!("unknown project {project_id}"));
+        }
+        if !seen.insert(project_id.clone()) {
+            return Err(anyhow!("duplicate project {project_id}"));
+        }
+        order.push(project_id);
+    }
+    for project_id in existing {
+        if !seen.contains(&project_id) {
+            order.push(project_id);
+        }
+    }
+    Ok(order)
+}
+
 fn order_projects(mut records: Vec<ProjectRecord>, stored_order: &[String]) -> Vec<ProjectRecord> {
     let mut ranking = stored_order
         .iter()
@@ -281,4 +295,44 @@ fn order_projects(mut records: Vec<ProjectRecord>, stored_order: &[String]) -> V
         )
     });
     records
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_project_order_appends_missing_existing_projects() {
+        let order = normalize_project_order(
+            vec!["project-b".to_string()],
+            vec!["project-a".to_string(), "project-b".to_string()],
+        )
+        .expect("valid project order");
+
+        assert_eq!(order, vec!["project-b", "project-a"]);
+    }
+
+    #[test]
+    fn normalize_project_order_rejects_unknown_projects() {
+        let error = normalize_project_order(
+            vec!["project-missing".to_string()],
+            vec!["project-a".to_string()],
+        )
+        .expect_err("unknown project should fail");
+
+        assert!(error
+            .to_string()
+            .contains("unknown project project-missing"));
+    }
+
+    #[test]
+    fn normalize_project_order_rejects_duplicate_projects() {
+        let error = normalize_project_order(
+            vec!["project-a".to_string(), "project-a".to_string()],
+            vec!["project-a".to_string()],
+        )
+        .expect_err("duplicate project should fail");
+
+        assert!(error.to_string().contains("duplicate project project-a"));
+    }
 }
