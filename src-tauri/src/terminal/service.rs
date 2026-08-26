@@ -126,7 +126,7 @@ impl TerminalService {
             project_id: project.id,
             cwd: cwd.unwrap_or(project.root_path),
             shell_path,
-            title: title.unwrap_or_else(|| "Terminal".to_string()),
+            title: normalize_initial_terminal_title(title.as_deref()),
             cols,
             rows,
             startup_command,
@@ -246,6 +246,7 @@ impl TerminalService {
     }
 
     pub async fn resize(&self, session_id: &str, cols: u16, rows: u16) -> Result<()> {
+        validate_terminal_size(cols, rows)?;
         let handle = self.get(session_id)?;
         handle.master.lock().resize(PtySize {
             rows,
@@ -315,9 +316,10 @@ impl TerminalService {
     }
 
     pub async fn rename(&self, session_id: &str, title: &str) -> Result<TerminalSessionRecord> {
+        let title = normalize_terminal_title(title)?;
         let updated = self
             .update_metadata(session_id, |record| {
-                record.title = title.to_string();
+                record.title = title.clone();
             })?
             .ok_or_else(|| anyhow!("unknown terminal session"))?;
         self.persistence
@@ -395,6 +397,7 @@ impl TerminalService {
         request: TerminalSpawnRequest,
         restored_from_persistence: bool,
     ) -> Result<TerminalSessionRecord> {
+        validate_terminal_size(request.cols, request.rows)?;
         let pty_system = native_pty_system();
         let pair = pty_system.openpty(PtySize {
             rows: request.rows,
@@ -737,6 +740,7 @@ fn resolve_login_shell() -> Option<String> {
 }
 
 fn resolve_shell_command(shell: &str) -> String {
+    let shell = shell.trim();
     if shell.is_empty() {
         return default_shell();
     }
@@ -752,6 +756,30 @@ fn resolve_shell_command(shell: &str) -> String {
         }
     }
     default_shell()
+}
+
+fn normalize_initial_terminal_title(title: Option<&str>) -> String {
+    title
+        .and_then(|value| {
+            let trimmed = value.trim();
+            (!trimmed.is_empty()).then(|| trimmed.to_string())
+        })
+        .unwrap_or_else(|| "Terminal".to_string())
+}
+
+fn normalize_terminal_title(title: &str) -> Result<String> {
+    let trimmed = title.trim();
+    if trimmed.is_empty() {
+        return Err(anyhow!("terminal title is required"));
+    }
+    Ok(trimmed.to_string())
+}
+
+fn validate_terminal_size(cols: u16, rows: u16) -> Result<()> {
+    if cols == 0 || rows == 0 {
+        return Err(anyhow!("terminal size must be at least 1x1"));
+    }
+    Ok(())
 }
 
 fn display_shell_name(shell: &str) -> String {
@@ -806,8 +834,9 @@ fn scrollback_line_count(content: &str) -> usize {
 #[cfg(test)]
 mod tests {
     use super::{
-        load_terminal_state_for_startup, recent_scrollback_lines, scrollback_line_count,
-        trim_scrollback, TerminalSessionRecord,
+        load_terminal_state_for_startup, normalize_initial_terminal_title,
+        normalize_terminal_title, recent_scrollback_lines, resolve_shell_command,
+        scrollback_line_count, trim_scrollback, validate_terminal_size, TerminalSessionRecord,
     };
     use crate::persistence::db::PersistenceService;
     use tempfile::tempdir;
@@ -830,6 +859,34 @@ mod tests {
     fn counts_scrollback_lines() {
         let content = "one\r\ntwo\r\nthree";
         assert_eq!(scrollback_line_count(content), 3);
+    }
+
+    #[test]
+    fn terminal_titles_are_trimmed_and_blank_initial_titles_default() {
+        assert_eq!(
+            normalize_initial_terminal_title(Some("  Dev Shell  ")),
+            "Dev Shell"
+        );
+        assert_eq!(normalize_initial_terminal_title(Some("   ")), "Terminal");
+        assert_eq!(normalize_initial_terminal_title(None), "Terminal");
+        assert_eq!(
+            normalize_terminal_title("  Production  ").expect("valid title"),
+            "Production"
+        );
+        assert!(normalize_terminal_title(" \t\n ").is_err());
+    }
+
+    #[test]
+    fn terminal_size_rejects_zero_dimensions() {
+        validate_terminal_size(1, 1).expect("positive pty size");
+        assert!(validate_terminal_size(0, 24).is_err());
+        assert!(validate_terminal_size(80, 0).is_err());
+    }
+
+    #[test]
+    fn shell_resolution_treats_whitespace_as_default_shell() {
+        let default = resolve_shell_command("");
+        assert_eq!(resolve_shell_command("   "), default);
     }
 
     #[test]
