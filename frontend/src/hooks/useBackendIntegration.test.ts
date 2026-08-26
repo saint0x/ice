@@ -146,4 +146,26 @@ describe('active project watch startup', () => {
     expect(projectWatchStop).toHaveBeenCalledWith('project-a')
     expect(watchedProjectRef.current).toBeNull()
   })
+
+  it('reports cleanup failures when a cancelled watcher cannot be stopped', async () => {
+    const watchedProjectRef = { current: null as string | null }
+    const stopError = new Error('watch stop failed')
+    const projectWatchStart = vi.fn().mockResolvedValue(undefined)
+    const projectWatchStop = vi.fn().mockRejectedValue(stopError)
+    const onCleanupError = vi.fn()
+
+    await expect(startProjectWatchForActiveProject({
+      projectId: 'project-a',
+      watchedProjectRef,
+      projectWatchStart,
+      projectWatchStop,
+      isCancelled: () => true,
+      onCleanupError,
+    })).resolves.toBeUndefined()
+
+    expect(projectWatchStart).toHaveBeenCalledWith('project-a')
+    expect(projectWatchStop).toHaveBeenCalledWith('project-a')
+    expect(onCleanupError).toHaveBeenCalledWith(stopError)
+    expect(watchedProjectRef.current).toBeNull()
+  })
 })

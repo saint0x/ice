@@ -93,12 +93,17 @@ export async function startProjectWatchForActiveProject(input: {
   projectWatchStart: (projectId: string) => Promise<unknown>
   projectWatchStop: (projectId: string) => Promise<unknown>
   isCancelled: () => boolean
+  onCleanupError?: (error: unknown) => void
 }) {
   if (input.watchedProjectRef.current === input.projectId) return
 
   await input.projectWatchStart(input.projectId)
   if (input.isCancelled()) {
-    await input.projectWatchStop(input.projectId)
+    try {
+      await input.projectWatchStop(input.projectId)
+    } catch (error) {
+      input.onCleanupError?.(error)
+    }
     return
   }
   input.watchedProjectRef.current = input.projectId
@@ -571,6 +576,7 @@ export function useBackendIntegration() {
           projectWatchStart,
           projectWatchStop,
           isCancelled: () => cancelled,
+          onCleanupError: (error) => pushError('Project watch stop failed', error),
         })
       } catch (error) {
         if (!cancelled) {
