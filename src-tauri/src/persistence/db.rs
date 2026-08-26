@@ -337,10 +337,6 @@ impl PersistenceService {
         .await?
     }
 
-    pub fn path(&self) -> &PathBuf {
-        &self.db_path
-    }
-
     pub fn load_projects_sync(&self) -> Result<Vec<ProjectRecord>> {
         let conn = self.connect()?;
         let mut stmt = conn.prepare(
@@ -1236,6 +1232,17 @@ impl PersistenceService {
         .await?
     }
 
+    pub async fn config_delete(&self, key: String) -> Result<()> {
+        let this = self.clone();
+        tokio::task::spawn_blocking(move || -> Result<()> {
+            let conn = this.connect()?;
+            conn.execute("DELETE FROM app_config WHERE key = ?1", params![key])?;
+            Ok(())
+        })
+        .await??;
+        Ok(())
+    }
+
     pub fn load_pending_approvals_sync(&self) -> Result<Vec<PendingApprovalRecord>> {
         let conn = self.connect()?;
         let mut stmt = conn.prepare(
@@ -1709,6 +1716,13 @@ mod tests {
         assert_eq!(
             db.config_get("storage.root").await.expect("config read"),
             Some(json!("/tmp/.ice"))
+        );
+        db.config_delete("storage.root".to_string())
+            .await
+            .expect("config delete");
+        assert_eq!(
+            db.config_get("storage.root").await.expect("config read"),
+            None
         );
 
         let approval = PendingApprovalRecord {

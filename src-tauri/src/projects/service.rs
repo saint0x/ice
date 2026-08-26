@@ -89,10 +89,8 @@ impl ProjectService {
             last_opened_at: chrono::Utc::now().to_rfc3339(),
         };
 
-        let db = self.persistence.path().clone();
         let persistence = self.persistence.clone();
         let cloned = record.clone();
-        let _ = db;
         tokio::task::spawn_blocking(move || persistence.insert_project_sync(&cloned)).await??;
         self.prepend_project_order(record.id.clone()).await?;
 
@@ -110,6 +108,9 @@ impl ProjectService {
         tokio::task::spawn_blocking(move || persistence.delete_project_sync(&delete_project_id))
             .await??;
         self.remove_project_order(&project_id).await?;
+        self.persistence
+            .config_delete(browser_restore_policy_key(&project_id))
+            .await?;
         Ok(())
     }
 
