@@ -21,6 +21,8 @@ use crate::projects::service::ProjectService;
 const DEFAULT_TREE_DEPTH: usize = 2;
 const DEFAULT_TREE_MAX_ENTRIES: usize = 5_000;
 const MAX_BINARY_SNIFF_BYTES: usize = 8 * 1024;
+const MIN_SEARCH_LIMIT: usize = 1;
+const MAX_SEARCH_LIMIT: usize = 200;
 
 pub struct FsService {
     app: AppHandle,
@@ -235,6 +237,7 @@ impl FsService {
     ) -> Result<FileSearchResult> {
         let root = projects.resolve_project_path(project_id).await?;
         let query = query.trim().to_lowercase();
+        let limit = normalize_search_limit(limit);
         if query.is_empty() {
             return Ok(FileSearchResult {
                 query,
@@ -259,6 +262,7 @@ impl FsService {
     ) -> Result<ContentSearchResult> {
         let root = projects.resolve_project_path(project_id).await?;
         let query = query.trim().to_string();
+        let limit = normalize_search_limit(limit);
         if query.is_empty() {
             return Ok(ContentSearchResult {
                 query,
@@ -795,6 +799,10 @@ fn system_time_to_millis(time: &SystemTime) -> u128 {
         .unwrap_or(0)
 }
 
+fn normalize_search_limit(limit: usize) -> usize {
+    limit.clamp(MIN_SEARCH_LIMIT, MAX_SEARCH_LIMIT)
+}
+
 fn search_paths_under_root(root: &Path, query: &str, limit: usize) -> Result<Vec<String>> {
     let mut paths = Vec::new();
     let mut builder = WalkBuilder::new(root);
@@ -1005,8 +1013,8 @@ mod tests {
     use super::{
         copy_external_entry, decode_text_bytes, encode_text_content, file_version,
         import_external_entries_blocking, is_binary_bytes, nest_tree_entries,
-        parse_rg_match_record, resolve_creatable_under_root, resolve_existing_under_root,
-        search_paths_under_root, walk_tree, FsEntry, TreeReadOptions,
+        normalize_search_limit, parse_rg_match_record, resolve_creatable_under_root,
+        resolve_existing_under_root, search_paths_under_root, walk_tree, FsEntry, TreeReadOptions,
     };
     use std::collections::HashMap;
     use std::fs;
@@ -1051,6 +1059,27 @@ mod tests {
 
         let paths = search_paths_under_root(root, "src", 20).expect("search paths");
         assert_eq!(paths, vec!["src-main.ts".to_string()]);
+    }
+
+    #[test]
+    fn search_limit_has_production_bounds() {
+        assert_eq!(normalize_search_limit(0), 1);
+        assert_eq!(normalize_search_limit(20), 20);
+        assert_eq!(normalize_search_limit(usize::MAX), 200);
+    }
+
+    #[test]
+    fn path_search_caps_excessive_limits() {
+        let temp = tempdir().expect("temp dir");
+        let root = temp.path();
+        for index in 0..250 {
+            fs::write(root.join(format!("match-{index:03}.txt")), "visible").expect("write file");
+        }
+
+        let paths = search_paths_under_root(root, "match", normalize_search_limit(usize::MAX))
+            .expect("search paths");
+
+        assert_eq!(paths.len(), 200);
     }
 
     #[test]
