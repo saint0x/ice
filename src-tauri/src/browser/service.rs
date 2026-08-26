@@ -17,6 +17,8 @@ use crate::persistence::db::PersistenceService;
 use crate::projects::models::ProjectBrowserSidebarItem;
 
 const MAX_BROWSER_HISTORY_ENTRIES: usize = 100;
+const DEFAULT_BROWSER_URL: &str = "about:blank";
+const DEFAULT_BROWSER_TITLE: &str = "New Tab";
 
 pub struct BrowserService {
     app: AppHandle,
@@ -144,8 +146,8 @@ impl BrowserService {
         url: Option<String>,
         title: Option<String>,
     ) -> Result<BrowserTabRecord> {
-        let url = url.unwrap_or_else(|| "about:blank".to_string());
-        let title = title.unwrap_or_else(|| "New Tab".to_string());
+        let url = normalize_browser_url(url);
+        let title = normalize_browser_title(title, DEFAULT_BROWSER_TITLE);
         let record = BrowserTabRecord {
             tab_id: Uuid::new_v4().to_string(),
             project_id,
@@ -154,7 +156,7 @@ impl BrowserService {
             is_pinned: false,
             can_go_back: false,
             can_go_forward: false,
-            is_loading: url != "about:blank",
+            is_loading: url != DEFAULT_BROWSER_URL,
             favicon_url: None,
             security_origin: browser_security_origin(&url),
             is_secure: is_secure_url(&url),
@@ -189,12 +191,13 @@ impl BrowserService {
         url: String,
         title: Option<String>,
     ) -> Result<BrowserTabRecord> {
+        let url = normalize_browser_url(Some(url));
+        let title = normalize_browser_title(title, &infer_title_from_url(&url));
         let state = {
             let mut tabs = self.tabs.write();
             let tab = tabs
                 .get_mut(tab_id)
                 .ok_or_else(|| anyhow!("unknown browser tab"))?;
-            let title = title.unwrap_or_else(|| infer_title_from_url(&url));
             tab.history.truncate(tab.current_index + 1);
             let position = tab.history.len();
             tab.history.push(BrowserHistoryEntry {
@@ -207,7 +210,7 @@ impl BrowserService {
             trim_browser_history(tab);
             tab.record.url = url.clone();
             tab.record.title = title;
-            tab.record.is_loading = true;
+            tab.record.is_loading = url != DEFAULT_BROWSER_URL;
             tab.record.security_origin = browser_security_origin(&url);
             tab.record.is_secure = is_secure_url(&url);
             refresh_record_navigation(tab);
@@ -252,14 +255,20 @@ impl BrowserService {
         let updated = self
             .update_tab(tab_id, |state| {
                 if let Some(url) = update.url.clone() {
-                    state.record.url = url.clone();
-                    state.record.security_origin = browser_security_origin(&url);
-                    state.record.is_secure = is_secure_url(&url);
+                    let url = url.trim();
+                    if !url.is_empty() {
+                        state.record.url = url.to_string();
+                        state.record.security_origin = browser_security_origin(url);
+                        state.record.is_secure = is_secure_url(url);
+                    }
                 }
                 if let Some(title) = update.title.clone() {
-                    state.record.title = title.clone();
-                    if let Some(current) = state.history.get_mut(state.current_index) {
-                        current.title = title;
+                    let title = title.trim();
+                    if !title.is_empty() {
+                        state.record.title = title.to_string();
+                        if let Some(current) = state.history.get_mut(state.current_index) {
+                            current.title = title.to_string();
+                        }
                     }
                 }
                 if let Some(is_loading) = update.is_loading {
@@ -934,6 +943,23 @@ fn infer_title_from_url(url: &str) -> String {
         .to_string()
 }
 
+fn normalize_browser_url(url: Option<String>) -> String {
+    url.as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(DEFAULT_BROWSER_URL)
+        .to_string()
+}
+
+fn normalize_browser_title(title: Option<String>, fallback: &str) -> String {
+    title
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(fallback)
+        .to_string()
+}
+
 fn load_browser_tabs_for_startup(
     persistence: &PersistenceService,
 ) -> Result<HashMap<String, BrowserTabState>> {
@@ -1236,7 +1262,8 @@ fn browser_runtime_init_script(tab_id: &str) -> String {
 mod tests {
     use super::{
         browser_security_origin, is_secure_url, load_browser_tabs_for_startup,
-        trim_browser_history, BrowserHistoryEntry, BrowserTabRecord, BrowserTabState,
+        normalize_browser_title, normalize_browser_url, trim_browser_history, BrowserHistoryEntry,
+        BrowserTabRecord, BrowserTabState, DEFAULT_BROWSER_TITLE, DEFAULT_BROWSER_URL,
         MAX_BROWSER_HISTORY_ENTRIES,
     };
     use crate::persistence::db::PersistenceService;
@@ -1250,6 +1277,27 @@ mod tests {
         );
         assert!(is_secure_url("https://example.com"));
         assert!(!is_secure_url("http://example.com"));
+    }
+
+    #[test]
+    fn normalizes_blank_browser_url_and_title_inputs() {
+        assert_eq!(normalize_browser_url(None), DEFAULT_BROWSER_URL);
+        assert_eq!(
+            normalize_browser_url(Some("  https://example.com/docs  ".to_string())),
+            "https://example.com/docs"
+        );
+        assert_eq!(
+            normalize_browser_url(Some("   ".to_string())),
+            DEFAULT_BROWSER_URL
+        );
+        assert_eq!(
+            normalize_browser_title(Some("  Docs  ".to_string()), DEFAULT_BROWSER_TITLE),
+            "Docs"
+        );
+        assert_eq!(
+            normalize_browser_title(Some("  ".to_string()), DEFAULT_BROWSER_TITLE),
+            DEFAULT_BROWSER_TITLE
+        );
     }
 
     #[test]

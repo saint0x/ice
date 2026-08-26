@@ -35,7 +35,7 @@
       "cmd": "/bin/sh",
       "args": [
         "-lc",
-        "cd src-tauri && cargo test browser::service::tests::infers_secure_origin_from_https_url -- --exact"
+        "cd src-tauri && cargo test browser::service::tests::infers_secure_origin_from_https_url -- --exact && cargo test browser::service::tests::normalizes_blank_browser_url_and_title_inputs -- --exact"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -47,7 +47,7 @@
       "cmd": "/bin/sh",
       "args": [
         "-lc",
-        "cd src-tauri && cargo test browser::service::tests::infers_secure_origin_from_https_url -- --exact"
+        "cd src-tauri && cargo test browser::service::tests::infers_secure_origin_from_https_url -- --exact && cargo test browser::service::tests::normalizes_blank_browser_url_and_title_inputs -- --exact"
       ],
       "expect_exit": 0
     },
