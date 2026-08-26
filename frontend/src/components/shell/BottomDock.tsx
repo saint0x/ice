@@ -6,6 +6,7 @@ import { useProjectsStore } from '@/stores/projects'
 import { useNotificationsStore } from '@/stores/notifications'
 import { terminalDiagnosticsRead, terminalRename, terminalRespawn, terminalScrollbackClear, toTerminalDiagnostics, toTerminalSession } from '@/lib/backend'
 import { createAndFocusTerminalSession, resolveTerminalProjectId } from '@/lib/terminalSessions'
+import { copyTerminalHistory } from '@/lib/terminalHistoryActions'
 import { ensureTerminalScrollback } from '@/lib/terminalScrollback'
 import { closeTerminalSessionEverywhere } from '@/lib/workspaceTabs'
 import styles from './BottomDock.module.css'
@@ -198,15 +199,13 @@ export const BottomDock = memo(function BottomDock() {
   }
 
   const onCopyHistory = async () => {
-    try {
-      if (!activeSession) return
-      const scrollback = await ensureTerminalScrollback(activeSession.id, { force: true })
-      await navigator.clipboard.writeText(scrollback)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to copy terminal history'
-      setSurfaceError(message)
-      pushError('Terminal history copy failed', error, message)
-    }
+    await copyTerminalHistory({
+      sessionId: activeSession?.id ?? null,
+      readScrollback: (sessionId) => ensureTerminalScrollback(sessionId, { force: true }),
+      writeClipboard: (scrollback) => navigator.clipboard.writeText(scrollback),
+      setSurfaceError,
+      pushError,
+    })
   }
 
   const onCreateSession = async () => {

@@ -6,7 +6,7 @@
       "type": "trace_event",
       "name": "verify_terminal_lifecycle_contract",
       "fields": {
-        "target": "src-tauri/terminal+persistence"
+        "target": "src-tauri/terminal+persistence+frontend/terminal-history-actions"
       }
     },
     {
@@ -56,7 +56,7 @@
       "cmd": "/bin/sh",
       "args": [
         "-lc",
-        "cd frontend && npm test -- --run src/lib/backend.test.ts"
+        "cd frontend && npm test -- --run src/lib/backend.test.ts src/lib/terminalHistoryActions.test.ts"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -68,7 +68,7 @@
       "cmd": "/bin/sh",
       "args": [
         "-lc",
-        "cd frontend && npm test -- --run src/lib/backend.test.ts"
+        "cd frontend && npm test -- --run src/lib/backend.test.ts src/lib/terminalHistoryActions.test.ts"
       ],
       "expect_exit": 0
     }
