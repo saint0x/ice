@@ -111,7 +111,7 @@ impl WorkspaceService {
     }
 
     pub async fn get_session_state(&self, workspace_id: &str) -> Result<WorkspaceSessionState> {
-        Ok(normalize_session_state(
+        Ok(recover_session_state(
             self.persistence
                 .read_workspace_session(workspace_id)
                 .await?
@@ -171,6 +171,14 @@ fn default_session_state() -> WorkspaceSessionState {
 fn normalize_session_state(mut session: WorkspaceSessionState) -> WorkspaceSessionState {
     normalize_node_geometry(&mut session.root);
     session
+}
+
+fn recover_session_state(session: WorkspaceSessionState) -> WorkspaceSessionState {
+    let session = normalize_session_state(session);
+    if validate_session_state(&session).is_ok() {
+        return session;
+    }
+    default_session_state()
 }
 
 fn normalize_node_geometry(node: &mut WorkspacePaneNode) {
@@ -421,6 +429,22 @@ mod tests {
         assert!(error
             .to_string()
             .contains("workspace session contains orphan tab id tab-orphan"));
+    }
+
+    #[test]
+    fn recovers_invalid_session_state_to_default_on_read_boundary() {
+        let recovered = recover_session_state(WorkspaceSessionState {
+            active_pane_id: "pane-missing".to_string(),
+            tabs: vec![tab("tab-orphan")],
+            root: WorkspacePaneNode::Split(WorkspaceSplitNode {
+                id: "split-empty".to_string(),
+                direction: "diagonal".to_string(),
+                children: Vec::new(),
+                ratio: f64::NAN,
+            }),
+        });
+
+        assert_eq!(recovered, default_session_state());
     }
 }
 

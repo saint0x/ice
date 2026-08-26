@@ -159,6 +159,15 @@ function removeEmptyPanes(layout: PaneLayout): PaneLayout | null {
   return { ...layout, children }
 }
 
+function emptyWorkspaceLayout(): PaneNode {
+  return {
+    id: 'pane-1',
+    type: 'leaf',
+    tabs: [],
+    activeTabId: null,
+  }
+}
+
 export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   layout: initialLayout,
   tabs: new Map(),
@@ -174,7 +183,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
   hydrateWorkspace: (input) =>
     set(() => {
       const inputTabsById = new Map(input.tabs.map((tab) => [tab.id, tab]))
-      const layout = normalizeHydratedLayout(input.layout, new Set(inputTabsById.keys()))
+      const normalizedLayout = normalizeHydratedLayout(input.layout, new Set(inputTabsById.keys()))
+      const layout = collectPaneIds(normalizedLayout).length > 0
+        ? normalizedLayout
+        : emptyWorkspaceLayout()
       const reachableTabIds = new Set(collectLayoutTabIds(layout))
       const tabs = new Map(
         input.tabs
@@ -184,7 +196,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       const paneIds = collectPaneIds(layout)
       const activePaneId = paneIds.includes(input.activePaneId)
         ? input.activePaneId
-        : paneIds[0]
+        : paneIds[0]!
       syncCountersFromWorkspace(layout, [...tabs.values()])
       return {
         layout,

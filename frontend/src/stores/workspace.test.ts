@@ -289,4 +289,42 @@ describe('workspace store focus synchronization', () => {
       ],
     })
   })
+
+  it('recovers pane-less hydrated layouts to a valid empty workspace', () => {
+    useWorkspaceStore.getState().hydrateWorkspace({
+      layout: {
+        id: 'split-empty',
+        type: 'split',
+        direction: 'horizontal',
+        ratio: 0.5,
+        children: [],
+      },
+      tabs: [
+        {
+          id: 'tab-orphan',
+          type: 'editor',
+          title: 'orphan.ts',
+          projectId: 'project-1',
+          meta: { path: 'orphan.ts' },
+        },
+      ],
+      activePaneId: 'pane-missing',
+      sidebarOpen: true,
+      sidebarWidth: 240,
+      bottomDockOpen: true,
+      bottomDockHeight: 240,
+      chatPanelOpen: false,
+      chatPanelWidth: 360,
+    })
+
+    const state = useWorkspaceStore.getState()
+    expect(state.activePaneId).toBe('pane-1')
+    expect(state.tabs.size).toBe(0)
+    expect(state.layout).toEqual({
+      id: 'pane-1',
+      type: 'leaf',
+      tabs: [],
+      activeTabId: null,
+    })
+  })
 })

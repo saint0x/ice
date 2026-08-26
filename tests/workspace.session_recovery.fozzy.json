@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "name": "workspace-session-recovery",
+  "steps": [
+    {
+      "type": "trace_event",
+      "name": "verify_workspace_session_recovery_contract",
+      "fields": {
+        "target": "src-tauri/workspace+frontend/stores/workspace"
+      }
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test workspace::service::tests::recovers_invalid_session_state_to_default_on_read_boundary -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd frontend && npm test -- workspace --run"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd frontend && npm test -- workspace --run"
+      ],
+      "expect_exit": 0
+    }
+  ]
+}
