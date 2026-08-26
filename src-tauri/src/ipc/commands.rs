@@ -183,10 +183,11 @@ pub async fn project_snapshot(
         .find(|project| project.project.id == input.project_id)
         .ok_or_else(|| AppError::from(anyhow::anyhow!("unknown project {}", input.project_id)))?;
     let git = state.git.read_status(&project_summary.project).await?;
+    let project_id = project_summary.project.id.as_str();
     let tree = state
         .fs
         .read_tree(
-            &input.project_id,
+            project_id,
             None,
             TreeReadOptions {
                 max_depth: input.tree_depth.unwrap_or(3),
@@ -196,10 +197,10 @@ pub async fn project_snapshot(
             &state.git,
         )
         .await?;
-    let browser_tabs = state.browser.list_tabs(Some(&input.project_id)).await;
-    let terminal_sessions = state.terminal.list(Some(&input.project_id)).await;
-    let codex_threads = state.codex.list_threads(Some(&input.project_id)).await;
-    let approvals = state.security.list_approvals(Some(&input.project_id)).await;
+    let browser_tabs = state.browser.list_tabs(Some(project_id)).await;
+    let terminal_sessions = state.terminal.list(Some(project_id)).await;
+    let codex_threads = state.codex.list_threads(Some(project_id)).await;
+    let approvals = state.security.list_approvals(Some(project_id)).await;
     Ok(ProjectSnapshotDto {
         project: project_summary,
         tree,
@@ -907,7 +908,12 @@ pub async fn terminal_list(
     project_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Vec<crate::terminal::service::TerminalSessionRecord>, AppError> {
-    Ok(state.terminal.list(project_id.as_deref()).await)
+    if let Some(project_id) = project_id.as_deref() {
+        let project = state.projects.require_project(project_id).await?;
+        return Ok(state.terminal.list(Some(&project.id)).await);
+    }
+
+    Ok(state.terminal.list(None).await)
 }
 
 #[tauri::command]
@@ -1017,7 +1023,12 @@ pub async fn codex_threads_list(
     project_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Vec<crate::codex::service::CodexThreadBinding>, AppError> {
-    Ok(state.codex.list_threads(project_id.as_deref()).await)
+    if let Some(project_id) = project_id.as_deref() {
+        let project = state.projects.require_project(project_id).await?;
+        return Ok(state.codex.list_threads(Some(&project.id)).await);
+    }
+
+    Ok(state.codex.list_threads(None).await)
 }
 
 #[tauri::command]
@@ -1071,7 +1082,12 @@ pub async fn codex_approvals_list(
     project_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Vec<crate::security::approvals::PendingApprovalRecord>, AppError> {
-    Ok(state.security.list_approvals(project_id.as_deref()).await)
+    if let Some(project_id) = project_id.as_deref() {
+        let project = state.projects.require_project(project_id).await?;
+        return Ok(state.security.list_approvals(Some(&project.id)).await);
+    }
+
+    Ok(state.security.list_approvals(None).await)
 }
 
 #[tauri::command]
@@ -1079,5 +1095,10 @@ pub async fn approval_audit_list(
     project_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Vec<crate::security::approvals::ApprovalAuditRecord>, AppError> {
-    Ok(state.security.list_audit_log(project_id.as_deref()).await?)
+    if let Some(project_id) = project_id.as_deref() {
+        let project = state.projects.require_project(project_id).await?;
+        return Ok(state.security.list_audit_log(Some(&project.id)).await?);
+    }
+
+    Ok(state.security.list_audit_log(None).await?)
 }

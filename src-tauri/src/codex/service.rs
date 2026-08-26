@@ -297,7 +297,7 @@ impl CodexService {
             .unwrap_or_else(|| Uuid::new_v4().to_string().leak())
             .to_string();
         let binding = CodexThreadBinding {
-            project_id,
+            project_id: project.id.clone(),
             thread_id: thread_id.clone(),
             title,
             model,
