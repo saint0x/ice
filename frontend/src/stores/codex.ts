@@ -221,17 +221,23 @@ export const useCodexStore = create<CodexState>((set) => ({
     set((s) => {
       const nextThreads = new Map<ThreadId, CodexThread>()
       const nextActiveThreadId = new Map(s.activeThreadId)
+      const threadsByProject = new Map<ProjectId, CodexThread[]>()
       for (const thread of threads) {
         if (s.removedProjectIds.has(thread.projectId)) continue
         nextThreads.set(thread.id, thread)
+        threadsByProject.set(thread.projectId, [...(threadsByProject.get(thread.projectId) ?? []), thread])
       }
       const projectIds = new Set<string>([
-        ...threads.map((thread) => thread.projectId),
+        ...threadsByProject.keys(),
         ...nextActiveThreadId.keys(),
       ])
       for (const projectId of projectIds) {
+        if (s.removedProjectIds.has(projectId)) {
+          nextActiveThreadId.delete(projectId)
+          continue
+        }
         const activeId = nextActiveThreadId.get(projectId)
-        const projectThreads = threads.filter((thread) => thread.projectId === projectId)
+        const projectThreads = threadsByProject.get(projectId) ?? []
         if (projectThreads.length === 0) {
           nextActiveThreadId.delete(projectId)
           continue
@@ -263,6 +269,10 @@ export const useCodexStore = create<CodexState>((set) => ({
       const approvals = filterApprovalsForThreads(s.approvals, nextThreads)
       const sidebarItems = new Map(s.sidebarItems)
       for (const [projectId, items] of sidebarItems.entries()) {
+        if (s.removedProjectIds.has(projectId)) {
+          sidebarItems.delete(projectId)
+          continue
+        }
         sidebarItems.set(
           projectId,
           items.filter((item) => {

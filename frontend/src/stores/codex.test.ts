@@ -611,6 +611,39 @@ describe('codex store reconciliation', () => {
     expect(state.removedProjectIds.has('project-a')).toBe(true)
   })
 
+  it('does not resurrect removed project active Codex state from stale hydration', () => {
+    useCodexStore.getState().hydrateThreads([
+      {
+        id: 'thread-live',
+        projectId: 'project-a',
+        title: 'Live',
+        unread: true,
+        status: 'running',
+      },
+    ])
+    useCodexStore.getState().setActiveThread('project-a', 'thread-live')
+    useCodexStore.getState().hydrateSidebarItems('project-a', [
+      { threadId: 'thread-live', title: 'Live', status: 'running', unread: true },
+    ])
+
+    useCodexStore.getState().removeProjectThreads('project-a')
+    useCodexStore.getState().hydrateThreads([
+      {
+        id: 'thread-live',
+        projectId: 'project-a',
+        title: 'Stale',
+        unread: false,
+        status: 'idle',
+      },
+    ])
+
+    const state = useCodexStore.getState()
+    expect(state.threads.has('thread-live')).toBe(false)
+    expect(state.activeThreadId.has('project-a')).toBe(false)
+    expect(state.sidebarItems.has('project-a')).toBe(false)
+    expect(state.removedProjectIds.has('project-a')).toBe(true)
+  })
+
   it('ignores attempts to activate missing or cross-project Codex threads', () => {
     useCodexStore.getState().hydrateThreads([
       {
