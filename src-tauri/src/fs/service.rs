@@ -993,6 +993,7 @@ fn copy_external_entry(project_root: &Path, source: &Path, destination: &Path) -
         .with_context(|| format!("failed to read metadata for {}", source.display()))?;
 
     if metadata.is_dir() {
+        ensure_import_directory_destination_available(destination)?;
         stdfs::create_dir_all(destination).with_context(|| {
             format!(
                 "failed to create import destination directory {}",
@@ -1021,6 +1022,7 @@ fn copy_external_entry(project_root: &Path, source: &Path, destination: &Path) -
         })?;
     }
 
+    ensure_import_file_destination_available(destination)?;
     stdfs::copy(source, destination).with_context(|| {
         format!(
             "failed to copy {} to {}",
@@ -1029,6 +1031,38 @@ fn copy_external_entry(project_root: &Path, source: &Path, destination: &Path) -
         )
     })?;
     Ok(())
+}
+
+fn ensure_import_directory_destination_available(destination: &Path) -> Result<()> {
+    match stdfs::symlink_metadata(destination) {
+        Ok(metadata) => {
+            if metadata.is_dir() {
+                Ok(())
+            } else {
+                Err(anyhow!(
+                    "import destination already exists: {}",
+                    destination.display()
+                ))
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error).with_context(|| {
+            format!("failed to inspect import destination {}", destination.display())
+        }),
+    }
+}
+
+fn ensure_import_file_destination_available(destination: &Path) -> Result<()> {
+    match stdfs::symlink_metadata(destination) {
+        Ok(_) => Err(anyhow!(
+            "import destination already exists: {}",
+            destination.display()
+        )),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error).with_context(|| {
+            format!("failed to inspect import destination {}", destination.display())
+        }),
+    }
 }
 
 fn ensure_destination_under_root(project_root: &Path, destination: &Path) -> Result<()> {
@@ -1229,6 +1263,61 @@ mod tests {
         assert_eq!(
             fs::read_to_string(imported_file).expect("read imported file"),
             "{\"ok\":true}"
+        );
+    }
+
+    #[test]
+    fn import_rejects_existing_file_destination_without_overwriting() {
+        let source_root = tempdir().expect("source temp dir");
+        let project_root = tempdir().expect("project temp dir");
+        let source_file = source_root.path().join("notes.txt");
+        let destination = project_root.path().join("notes.txt");
+        fs::write(&source_file, "incoming").expect("write source file");
+        fs::write(&destination, "existing").expect("write destination file");
+
+        assert!(import_external_entries_blocking(
+            project_root.path(),
+            project_root.path(),
+            &[source_file.to_string_lossy().to_string()],
+        )
+        .expect_err("import should reject destination collision")
+        .to_string()
+        .contains("import destination already exists"));
+        assert_eq!(
+            fs::read_to_string(destination).expect("destination unchanged"),
+            "existing"
+        );
+    }
+
+    #[test]
+    fn import_rejects_nested_file_destination_without_overwriting() {
+        let source_root = tempdir().expect("source temp dir");
+        let project_root = tempdir().expect("project temp dir");
+        let source_dir = source_root.path().join("fixtures");
+        let source_file = source_dir.join("nested").join("data.json");
+        let destination_file = project_root
+            .path()
+            .join("fixtures")
+            .join("nested")
+            .join("data.json");
+        fs::create_dir_all(source_file.parent().expect("source parent"))
+            .expect("create source parent");
+        fs::create_dir_all(destination_file.parent().expect("destination parent"))
+            .expect("create destination parent");
+        fs::write(&source_file, "{\"incoming\":true}").expect("write source file");
+        fs::write(&destination_file, "{\"existing\":true}").expect("write destination file");
+
+        assert!(copy_external_entry(
+            project_root.path(),
+            &source_dir,
+            &project_root.path().join("fixtures"),
+        )
+        .expect_err("nested import should reject destination collision")
+        .to_string()
+        .contains("import destination already exists"));
+        assert_eq!(
+            fs::read_to_string(destination_file).expect("destination unchanged"),
+            "{\"existing\":true}"
         );
     }
 

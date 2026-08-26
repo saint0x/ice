@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "name": "backend-fs-import",
+  "steps": [
+    {
+      "type": "trace_event",
+      "name": "verify_filesystem_import_contract",
+      "fields": {
+        "target": "src-tauri/fs-import"
+      }
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test fs::service::tests::copies_external_file_into_project_root -- --exact && cargo test fs::service::tests::copies_external_directory_recursively -- --exact && cargo test fs::service::tests::import_rejects_existing_file_destination_without_overwriting -- --exact && cargo test fs::service::tests::import_rejects_nested_file_destination_without_overwriting -- --exact && cargo test fs::service::tests::import_rejects_nested_destination_symlink_escape -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test fs::service::tests::copies_external_file_into_project_root -- --exact && cargo test fs::service::tests::copies_external_directory_recursively -- --exact && cargo test fs::service::tests::import_rejects_existing_file_destination_without_overwriting -- --exact && cargo test fs::service::tests::import_rejects_nested_file_destination_without_overwriting -- --exact && cargo test fs::service::tests::import_rejects_nested_destination_symlink_escape -- --exact"
+      ],
+      "expect_exit": 0
+    }
+  ]
+}
