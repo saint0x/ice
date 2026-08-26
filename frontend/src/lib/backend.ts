@@ -1118,10 +1118,10 @@ export function toBrowserRuntimeNotice(payload: BrowserEventPayload): BrowserRun
       createdAt,
     }
   }
-  if (payload.type === 'persistenceFailed' && payload.tabId) {
+  if (payload.type === 'persistenceFailed' && payload.tabId && payload.projectId?.trim()) {
     return {
       id: `${payload.tabId}:persistence:${createdAt}`,
-      projectId: payload.projectId ?? '',
+      projectId: payload.projectId,
       tabId: payload.tabId,
       kind: 'persistenceFailed',
       message: payload.message ?? 'Browser state could not be saved.',

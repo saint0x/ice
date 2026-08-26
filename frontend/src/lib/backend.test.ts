@@ -42,6 +42,20 @@ describe('backend mappers', () => {
     expect(notice?.message).toBe('Browser history was not saved: disk full')
   })
 
+  it('does not manufacture browser persistence notices without a project id', () => {
+    expect(toBrowserRuntimeNotice({
+      type: 'persistenceFailed',
+      tabId: 'tab-1',
+      message: 'Browser history was not saved: disk full',
+    })).toBeNull()
+    expect(toBrowserRuntimeNotice({
+      type: 'persistenceFailed',
+      tabId: 'tab-1',
+      projectId: '   ',
+      message: 'Browser history was not saved: disk full',
+    })).toBeNull()
+  })
+
   it('maps terminal persistence failures to runtime errors', () => {
     const error = toTerminalRuntimeError({
       type: 'persistenceFailed',
