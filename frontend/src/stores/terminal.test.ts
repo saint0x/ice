@@ -19,6 +19,7 @@ describe('terminal scrollback retention', () => {
       activeSessionId: new Map(),
       scrollback: new Map(),
       diagnostics: new Map(),
+      closedSessionIds: new Set(),
     })
   })
 
@@ -136,5 +137,39 @@ describe('terminal scrollback retention', () => {
 
     expect(useTerminalStore.getState().scrollback.has('session-missing')).toBe(false)
     expect(useTerminalStore.getState().diagnostics.has('session-missing')).toBe(false)
+  })
+
+  it('does not resurrect closed terminal sessions from late upsert events', () => {
+    useTerminalStore.setState({
+      sessions: new Map([['session-live', liveSession]]),
+      activeSessionId: new Map([['project-1', 'session-live']]),
+      scrollback: new Map([['session-live', 'output']]),
+      diagnostics: new Map(),
+      closedSessionIds: new Set(),
+    })
+
+    useTerminalStore.getState().closeSession('session-live')
+    useTerminalStore.getState().upsertSession({ ...liveSession, title: 'late exit' })
+
+    expect(useTerminalStore.getState().sessions.has('session-live')).toBe(false)
+    expect(useTerminalStore.getState().activeSessionId.get('project-1')).toBeNull()
+    expect(useTerminalStore.getState().scrollback.has('session-live')).toBe(false)
+  })
+
+  it('lets authoritative terminal hydration restore tombstoned live sessions', () => {
+    useTerminalStore.setState({
+      sessions: new Map(),
+      activeSessionId: new Map([['project-1', null]]),
+      scrollback: new Map(),
+      diagnostics: new Map(),
+      closedSessionIds: new Set(['session-live']),
+    })
+
+    useTerminalStore.getState().hydrateSessions([liveSession])
+
+    const state = useTerminalStore.getState()
+    expect(state.sessions.get('session-live')).toEqual(liveSession)
+    expect(state.activeSessionId.get('project-1')).toBe('session-live')
+    expect(state.closedSessionIds.has('session-live')).toBe(false)
   })
 })

@@ -6,6 +6,7 @@ interface BrowserState {
   activeTabId: Map<ProjectId, string | null>
   sidebarItems: Map<ProjectId, ProjectBrowserSidebarItem[]>
   runtimeNotices: Map<string, BrowserRuntimeNotice[]>
+  closedTabIds: Set<string>
 
   hydrateTabs: (tabs: BrowserTab[]) => void
   hydrateSidebarItems: (projectId: ProjectId, items: ProjectBrowserSidebarItem[]) => void
@@ -21,14 +22,17 @@ export const useBrowserStore = create<BrowserState>((set) => ({
   activeTabId: new Map(),
   sidebarItems: new Map(),
   runtimeNotices: new Map(),
+  closedTabIds: new Set(),
 
   hydrateTabs: (tabs) =>
     set((s) => {
       const nextTabs = new Map<string, BrowserTab>()
       const nextActiveTabId = new Map(s.activeTabId)
+      const closedTabIds = new Set(s.closedTabIds)
       const tabsByProject = new Map<ProjectId, BrowserTab[]>()
       for (const tab of tabs) {
         nextTabs.set(tab.id, tab)
+        closedTabIds.delete(tab.id)
         tabsByProject.set(tab.projectId, [...(tabsByProject.get(tab.projectId) ?? []), tab])
       }
       const projectIds = new Set<string>([
@@ -58,7 +62,7 @@ export const useBrowserStore = create<BrowserState>((set) => ({
           }),
         )
       }
-      return { tabs: nextTabs, activeTabId: nextActiveTabId, sidebarItems, runtimeNotices }
+      return { tabs: nextTabs, activeTabId: nextActiveTabId, sidebarItems, runtimeNotices, closedTabIds }
     }),
 
   hydrateSidebarItems: (projectId, items) =>
@@ -73,6 +77,7 @@ export const useBrowserStore = create<BrowserState>((set) => ({
 
   upsertTab: (tab) =>
     set((s) => {
+      if (s.closedTabIds.has(tab.id)) return {}
       const tabs = new Map(s.tabs)
       tabs.set(tab.id, tab)
       const activeTabId = new Map(s.activeTabId)
@@ -87,9 +92,11 @@ export const useBrowserStore = create<BrowserState>((set) => ({
       const tabs = new Map(s.tabs)
       const tab = tabs.get(tabId)
       tabs.delete(tabId)
+      const closedTabIds = new Set(s.closedTabIds)
+      closedTabIds.add(tabId)
       const runtimeNotices = new Map(s.runtimeNotices)
       runtimeNotices.delete(tabId)
-      if (!tab) return { tabs, runtimeNotices }
+      if (!tab) return { tabs, runtimeNotices, closedTabIds }
       const activeTabId = new Map(s.activeTabId)
       if (activeTabId.get(tab.projectId) === tabId) {
         const remaining = [...tabs.values()].filter((candidate) => candidate.projectId === tab.projectId)
@@ -100,7 +107,7 @@ export const useBrowserStore = create<BrowserState>((set) => ({
       if (projectItems) {
         sidebarItems.set(tab.projectId, projectItems.filter((item) => item.tabId !== tabId))
       }
-      return { tabs, activeTabId, sidebarItems, runtimeNotices }
+      return { tabs, activeTabId, sidebarItems, runtimeNotices, closedTabIds }
     }),
 
   setActiveTab: (projectId, tabId) =>

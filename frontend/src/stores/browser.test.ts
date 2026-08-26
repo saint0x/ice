@@ -20,6 +20,7 @@ describe('browser store hydration', () => {
       activeTabId: new Map(),
       sidebarItems: new Map(),
       runtimeNotices: new Map(),
+      closedTabIds: new Set(),
     })
   })
 
@@ -81,6 +82,7 @@ describe('browser store hydration', () => {
         ]],
       ]),
       runtimeNotices: new Map(),
+      closedTabIds: new Set(),
     })
 
     useBrowserStore.getState().hydrateTabs([browserTab])
@@ -96,6 +98,7 @@ describe('browser store hydration', () => {
       activeTabId: new Map([['project-1', 'browser-live']]),
       sidebarItems: new Map(),
       runtimeNotices: new Map(),
+      closedTabIds: new Set(),
     })
 
     useBrowserStore.getState().hydrateSidebarItems('project-1', [
@@ -115,6 +118,7 @@ describe('browser store hydration', () => {
       activeTabId: new Map(),
       sidebarItems: new Map(),
       runtimeNotices: new Map(),
+      closedTabIds: new Set(),
     })
 
     useBrowserStore.getState().pushRuntimeNotice({
@@ -159,6 +163,7 @@ describe('browser store hydration', () => {
       activeTabId: new Map([['project-1', 'browser-live']]),
       sidebarItems: new Map(),
       runtimeNotices: new Map(),
+      closedTabIds: new Set(),
     })
 
     useBrowserStore.getState().setActiveTab('project-1', 'browser-missing')
@@ -174,10 +179,43 @@ describe('browser store hydration', () => {
       activeTabId: new Map([['project-1', 'browser-stale']]),
       sidebarItems: new Map(),
       runtimeNotices: new Map(),
+      closedTabIds: new Set(),
     })
 
     useBrowserStore.getState().setActiveTab('project-1', 'browser-missing')
 
     expect(useBrowserStore.getState().activeTabId.get('project-1')).toBe('browser-live')
+  })
+
+  it('does not resurrect closed browser tabs from late upsert events', () => {
+    useBrowserStore.setState({
+      tabs: new Map([['browser-live', browserTab]]),
+      activeTabId: new Map([['project-1', 'browser-live']]),
+      sidebarItems: new Map(),
+      runtimeNotices: new Map(),
+      closedTabIds: new Set(),
+    })
+
+    useBrowserStore.getState().closeTab('browser-live')
+    useBrowserStore.getState().upsertTab({ ...browserTab, title: 'Late update' })
+
+    expect(useBrowserStore.getState().tabs.has('browser-live')).toBe(false)
+    expect(useBrowserStore.getState().activeTabId.get('project-1')).toBeNull()
+  })
+
+  it('lets authoritative browser hydration restore tombstoned live tabs', () => {
+    useBrowserStore.setState({
+      tabs: new Map(),
+      activeTabId: new Map([['project-1', null]]),
+      sidebarItems: new Map(),
+      runtimeNotices: new Map(),
+      closedTabIds: new Set(['browser-live']),
+    })
+
+    useBrowserStore.getState().hydrateTabs([browserTab])
+
+    const state = useBrowserStore.getState()
+    expect(state.tabs.get('browser-live')).toEqual(browserTab)
+    expect(state.closedTabIds.has('browser-live')).toBe(false)
   })
 })
