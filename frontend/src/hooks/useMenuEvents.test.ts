@@ -81,6 +81,32 @@ describe('native menu listener registration', () => {
     expect(pushError).not.toHaveBeenCalled()
   })
 
+  it('reports unlisten failures when registration resolves after cancellation', async () => {
+    const cleanupError = new Error('menu cleanup failed')
+    const unlisten = vi.fn(() => {
+      throw cleanupError
+    })
+    const listenMenu = vi.fn().mockResolvedValue(unlisten)
+    const setUnlisten = vi.fn()
+    const pushError = vi.fn()
+    const onCleanupError = vi.fn()
+
+    registerMenuEventListener({
+      listenMenu,
+      handler: vi.fn(),
+      setUnlisten,
+      isCancelled: () => true,
+      pushError,
+      onCleanupError,
+    })
+    await Promise.resolve()
+
+    expect(unlisten).toHaveBeenCalled()
+    expect(setUnlisten).not.toHaveBeenCalled()
+    expect(pushError).not.toHaveBeenCalled()
+    expect(onCleanupError).toHaveBeenCalledWith(cleanupError)
+  })
+
   it('suppresses native menu listener failures after cancellation', async () => {
     const listenMenu = vi.fn().mockRejectedValue(new Error('window gone'))
     const setUnlisten = vi.fn()

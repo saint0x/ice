@@ -34,11 +34,16 @@ export function registerMenuEventListener(input: {
   setUnlisten: (unlisten: UnlistenFn) => void
   isCancelled?: () => boolean
   pushError: (title: string, error: unknown, fallbackMessage?: string) => string
+  onCleanupError?: (error: unknown) => void
 }) {
   void input.listenMenu(input.handler)
     .then((unlisten) => {
       if (input.isCancelled?.()) {
-        unlisten()
+        try {
+          unlisten()
+        } catch (error) {
+          input.onCleanupError?.(error)
+        }
         return
       }
       input.setUnlisten(unlisten)
@@ -239,10 +244,19 @@ export function useMenuEvents(): void {
       },
       isCancelled: () => cancelled,
       pushError: notifications.pushError,
+      onCleanupError: (error) => {
+        notifications.pushError('Native menu cleanup failed', error, 'Failed to disconnect native menu commands')
+      },
     })
     return () => {
       cancelled = true
-      if (unlisten) unlisten()
+      if (unlisten) {
+        try {
+          unlisten()
+        } catch (error) {
+          notifications.pushError('Native menu cleanup failed', error, 'Failed to disconnect native menu commands')
+        }
+      }
     }
   }, [])
 }
