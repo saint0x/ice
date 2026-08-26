@@ -134,4 +134,94 @@ describe('editor cache retention', () => {
     expect(useEditorStore.getState().documents.has('project-a:src/main.ts')).toBe(false)
     expect(useEditorStore.getState().documents.has('project-a:src/other.ts')).toBe(false)
   })
+
+  it('does not hydrate a disk snapshot over dirty or saving editor content', () => {
+    useEditorStore.setState({
+      documents: new Map([
+        ['project-a:src/main.ts', {
+          projectId: 'project-a',
+          path: 'src/main.ts',
+          content: 'local edits',
+          isBinary: false,
+          sizeBytes: 11,
+          hasBom: false,
+          loadedAt: 1,
+          lastTouchedAt: 2,
+          syntaxMode: 'full',
+          isDirty: true,
+          isLoading: false,
+          isSaving: true,
+        }],
+      ]),
+    })
+
+    useEditorStore.getState().hydrateDocument({
+      projectId: 'project-a',
+      path: 'src/main.ts',
+      content: 'late disk read',
+      isBinary: false,
+      sizeBytes: 14,
+      hasBom: false,
+      loadedAt: 3,
+      lastTouchedAt: 3,
+      syntaxMode: 'full',
+      isDirty: false,
+      isLoading: false,
+      isSaving: false,
+    })
+
+    expect(useEditorStore.getState().documents.get('project-a:src/main.ts')).toMatchObject({
+      content: 'local edits',
+      isDirty: true,
+      isSaving: true,
+    })
+  })
+
+  it('keeps edits typed after a save started dirty when save reconciliation finishes', () => {
+    useEditorStore.setState({
+      documents: new Map([
+        ['project-a:src/main.ts', {
+          projectId: 'project-a',
+          path: 'src/main.ts',
+          content: 'saved before',
+          isBinary: false,
+          sizeBytes: 12,
+          encoding: 'utf-8',
+          hasBom: false,
+          modifiedAtMs: 1,
+          versionToken: 'v1',
+          loadedAt: 1,
+          lastTouchedAt: 2,
+          syntaxMode: 'full',
+          isDirty: true,
+          isLoading: false,
+          isSaving: true,
+        }],
+      ]),
+    })
+    useEditorStore.getState().updateContent('project-a', 'src/main.ts', 'new unsaved edit')
+
+    useEditorStore.getState().markSaved('project-a', 'src/main.ts', {
+      projectId: 'project-a',
+      path: 'src/main.ts',
+      content: 'saved before',
+      isBinary: false,
+      sizeBytes: 12,
+      encoding: 'utf-8',
+      hasBom: false,
+      modifiedAtMs: 2,
+      versionToken: 'v2',
+      loadedAt: 3,
+      lastTouchedAt: 3,
+      syntaxMode: 'full',
+    })
+
+    expect(useEditorStore.getState().documents.get('project-a:src/main.ts')).toMatchObject({
+      content: 'new unsaved edit',
+      sizeBytes: 16,
+      versionToken: 'v2',
+      isDirty: true,
+      isSaving: false,
+    })
+  })
 })

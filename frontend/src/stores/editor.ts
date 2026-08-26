@@ -100,7 +100,10 @@ export const useEditorStore = create<EditorState>((set) => ({
     set((state) => {
       if (state.removedProjectIds.has(document.projectId)) return state
       const documents = new Map(state.documents)
-      documents.set(documentKey(document.projectId, document.path), document)
+      const key = documentKey(document.projectId, document.path)
+      const current = documents.get(key)
+      if (current?.isDirty || current?.isSaving) return state
+      documents.set(key, document)
       return { documents }
     }),
 
@@ -178,11 +181,18 @@ export const useEditorStore = create<EditorState>((set) => ({
     set((state) => {
       if (state.removedProjectIds.has(projectId)) return state
       const documents = new Map(state.documents)
-      documents.set(documentKey(projectId, path), {
+      const key = documentKey(projectId, path)
+      const current = documents.get(key)
+      const hasNewerLocalContent = Boolean(current?.isDirty && current.content !== payload.content)
+      documents.set(key, {
         ...payload,
         projectId,
         path,
-        isDirty: false,
+        content: hasNewerLocalContent ? current!.content : payload.content,
+        sizeBytes: hasNewerLocalContent
+          ? new TextEncoder().encode(current!.content).length
+          : payload.sizeBytes,
+        isDirty: hasNewerLocalContent,
         isLoading: false,
         isSaving: false,
         readFailed: false,

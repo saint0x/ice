@@ -194,6 +194,51 @@ describe('editor document prefetch planning', () => {
     })
   })
 
+  it('does not force-hydrate a disk snapshot over a dirty editor document', async () => {
+    useEditorStore.setState({
+      documents: new Map([
+        ['project-a:src/dirty.ts', {
+          projectId: 'project-a',
+          path: 'src/dirty.ts',
+          content: 'local draft',
+          isBinary: false,
+          sizeBytes: 11,
+          encoding: 'utf-8',
+          hasBom: false,
+          modifiedAtMs: 10,
+          versionToken: 'v1',
+          loadedAt: 1,
+          lastTouchedAt: 2,
+          syntaxMode: 'full',
+          isDirty: true,
+          isLoading: false,
+          isSaving: false,
+        }],
+      ]),
+    })
+    vi.mocked(fileRead).mockResolvedValueOnce({
+      path: 'src/dirty.ts',
+      content: 'disk snapshot',
+      isBinary: false,
+      sizeBytes: 13,
+      encoding: 'utf-8',
+      hasBom: false,
+      modifiedAtMs: 20,
+      versionToken: 'v2',
+    })
+
+    await expect(ensureEditorDocument('project-a', 'src/dirty.ts', { force: true })).resolves.toMatchObject({
+      content: 'disk snapshot',
+      versionToken: 'v2',
+    })
+
+    expect(useEditorStore.getState().documents.get('project-a:src/dirty.ts')).toMatchObject({
+      content: 'local draft',
+      versionToken: 'v1',
+      isDirty: true,
+    })
+  })
+
   it('does not hydrate an editor document after its project was removed mid-read', async () => {
     let resolveRead: (value: Awaited<ReturnType<typeof fileRead>>) => void = () => {}
     vi.mocked(fileRead).mockReturnValueOnce(new Promise((resolve) => {
