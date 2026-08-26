@@ -7,6 +7,7 @@ import { useNotificationsStore } from '@/stores/notifications'
 import { useProjectsStore } from '@/stores/projects'
 import { useTerminalStore } from '@/stores/terminal'
 import { useWorkspaceStore } from '@/stores/workspace'
+import type { PaneLayout } from '@/types'
 
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
@@ -14,7 +15,7 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return target.isContentEditable || tag === 'input' || tag === 'textarea' || tag === 'select'
 }
 
-function findPaneTabs(layout: ReturnType<typeof useWorkspaceStore.getState>['layout'], paneId: string): string[] {
+function findPaneTabs(layout: PaneLayout, paneId: string): string[] {
   if (layout.type === 'leaf') {
     return layout.id === paneId ? layout.tabs : []
   }
@@ -25,7 +26,7 @@ function findPaneTabs(layout: ReturnType<typeof useWorkspaceStore.getState>['lay
   return []
 }
 
-function findActiveTabId(layout: ReturnType<typeof useWorkspaceStore.getState>['layout'], paneId: string): string | null {
+export function findActiveTabId(layout: PaneLayout, paneId: string): string | null {
   if (layout.type === 'leaf') {
     return layout.id === paneId ? layout.activeTabId : null
   }
@@ -64,15 +65,8 @@ export function useKeyboardShortcuts() {
         workspace.setChatPanelOpen(!workspace.chatPanelOpen)
       } else if (meta && e.key === 'w') {
         e.preventDefault()
-        const activePaneTabs = findPaneTabs(workspace.layout, workspace.activePaneId)
-        const activeTabId = (() => {
-          if (workspace.layout.type === 'leaf' && workspace.layout.id === workspace.activePaneId) {
-            return workspace.layout.activeTabId
-          }
-          return activePaneTabs[activePaneTabs.length - 1] ?? null
-        })()
-        if (activeTabId) {
-          void closeWorkspaceTab(workspace.activePaneId, activeTabId).catch((error: unknown) => {
+        if (activePaneTabId) {
+          void closeWorkspaceTab(workspace.activePaneId, activePaneTabId).catch((error: unknown) => {
             notifications.pushError('Tab close failed', error, 'Failed to close tab')
           })
         }
