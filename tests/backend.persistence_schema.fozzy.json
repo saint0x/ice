@@ -35,7 +35,7 @@
       "cmd": "/bin/sh",
       "args": [
         "-lc",
-        "cd src-tauri && cargo test persistence::db::tests::persists_workspace_browser_terminal_codex_and_config_state -- --exact"
+        "cd src-tauri && cargo test persistence::db::tests::persists_workspace_browser_terminal_codex_and_config_state -- --exact && cargo test persistence::db::tests::rejects_blank_config_keys -- --exact"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -47,7 +47,7 @@
       "cmd": "/bin/sh",
       "args": [
         "-lc",
-        "cd src-tauri && cargo test persistence::db::tests::persists_workspace_browser_terminal_codex_and_config_state -- --exact"
+        "cd src-tauri && cargo test persistence::db::tests::persists_workspace_browser_terminal_codex_and_config_state -- --exact && cargo test persistence::db::tests::rejects_blank_config_keys -- --exact"
       ],
       "expect_exit": 0
     },

@@ -1336,6 +1336,7 @@ impl PersistenceService {
     }
 
     pub async fn config_set(&self, key: String, value: Value) -> Result<()> {
+        let key = normalize_config_key(&key)?;
         let this = self.clone();
         tokio::task::spawn_blocking(move || -> Result<()> {
             let conn = this.connect()?;
@@ -1357,7 +1358,7 @@ impl PersistenceService {
 
     pub async fn config_get(&self, key: &str) -> Result<Option<Value>> {
         let this = self.clone();
-        let key = key.to_string();
+        let key = normalize_config_key(key)?;
         tokio::task::spawn_blocking(move || -> Result<Option<Value>> {
             let conn = this.connect()?;
             let raw = conn
@@ -1373,6 +1374,7 @@ impl PersistenceService {
     }
 
     pub async fn config_delete(&self, key: String) -> Result<()> {
+        let key = normalize_config_key(&key)?;
         let this = self.clone();
         tokio::task::spawn_blocking(move || -> Result<()> {
             let conn = this.connect()?;
@@ -1679,6 +1681,14 @@ fn canonical_codex_thread_status(status: &str) -> Result<&'static str> {
     }
 }
 
+fn normalize_config_key(key: &str) -> Result<String> {
+    let key = key.trim();
+    if key.is_empty() {
+        return Err(anyhow!("config key is blank"));
+    }
+    Ok(key.to_string())
+}
+
 fn validate_codex_message_record(message: &CodexMessageRecord) -> Result<()> {
     validate_codex_message_role_and_state(&message.role, &message.state)
 }
@@ -1940,6 +1950,25 @@ mod tests {
             None
         );
 
+        db.config_set(" feature.flag ".to_string(), json!(true))
+            .await
+            .expect("trimmed config write");
+        assert_eq!(
+            db.config_get("feature.flag")
+                .await
+                .expect("trimmed config read"),
+            Some(json!(true))
+        );
+        db.config_delete(" feature.flag ".to_string())
+            .await
+            .expect("trimmed config delete");
+        assert_eq!(
+            db.config_get("feature.flag")
+                .await
+                .expect("trimmed config read after delete"),
+            None
+        );
+
         let approval = PendingApprovalRecord {
             request_id: 7,
             project_id: "project-a".to_string(),
@@ -2018,6 +2047,30 @@ mod tests {
             .load_pending_approvals_sync()
             .expect("approval empty")
             .is_empty());
+    }
+
+    #[tokio::test]
+    async fn rejects_blank_config_keys() {
+        let temp = tempdir().expect("temp dir");
+        let db = PersistenceService::new(temp.path().join("ice.db")).expect("db");
+
+        let error = db
+            .config_set("  ".to_string(), json!(true))
+            .await
+            .expect_err("blank config writes should fail");
+        assert!(error.to_string().contains("config key is blank"));
+
+        let error = db
+            .config_get("")
+            .await
+            .expect_err("blank config reads should fail");
+        assert!(error.to_string().contains("config key is blank"));
+
+        let error = db
+            .config_delete("\t".to_string())
+            .await
+            .expect_err("blank config deletes should fail");
+        assert!(error.to_string().contains("config key is blank"));
     }
 
     #[tokio::test]
