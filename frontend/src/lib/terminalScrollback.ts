@@ -16,7 +16,11 @@ export async function ensureTerminalScrollback(sessionId: string, options?: { fo
 
   const loadPromise = terminalScrollbackRead(sessionId)
     .then((result) => {
-      useTerminalStore.getState().setScrollback(sessionId, result.content)
+      const store = useTerminalStore.getState()
+      const current = store.scrollback.get(sessionId)
+      if (current == null || result.content.startsWith(current)) {
+        store.setScrollback(sessionId, result.content)
+      }
       return result.content
     })
     .finally(() => {
