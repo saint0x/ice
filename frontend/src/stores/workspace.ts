@@ -263,7 +263,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
       }
       const paneIds = collectPaneIds(layout)
       const activePaneId = paneIds.includes(s.activePaneId) ? s.activePaneId : paneIds[0]
-      return { tabs, layout, activePaneId }
+      const pendingFocusPaneId = s.pendingFocusPaneId && paneIds.includes(s.pendingFocusPaneId)
+        ? s.pendingFocusPaneId
+        : null
+      return { tabs, layout, activePaneId, pendingFocusPaneId }
     }),
 
   activateTab: (paneId, tabId) =>

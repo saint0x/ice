@@ -176,6 +176,64 @@ describe('workspace store focus synchronization', () => {
     })
   })
 
+  it('clears pending focus when closing a tab removes that pane', () => {
+    useWorkspaceStore.getState().hydrateWorkspace({
+      layout: {
+        id: 'split-root',
+        type: 'split',
+        direction: 'horizontal',
+        ratio: 0.5,
+        children: [
+          {
+            id: 'pane-1',
+            type: 'leaf',
+            tabs: ['tab-1'],
+            activeTabId: 'tab-1',
+          },
+          {
+            id: 'pane-2',
+            type: 'leaf',
+            tabs: ['tab-2'],
+            activeTabId: 'tab-2',
+          },
+        ],
+      },
+      tabs: [
+        {
+          id: 'tab-1',
+          type: 'editor',
+          title: 'index.ts',
+          projectId: 'project-1',
+        },
+        {
+          id: 'tab-2',
+          type: 'git',
+          title: 'Git',
+          projectId: 'project-1',
+        },
+      ],
+      activePaneId: 'pane-1',
+      sidebarOpen: true,
+      sidebarWidth: 240,
+      bottomDockOpen: true,
+      bottomDockHeight: 240,
+      chatPanelOpen: false,
+      chatPanelWidth: 360,
+    })
+    useWorkspaceStore.setState({ pendingFocusPaneId: 'pane-2' })
+
+    useWorkspaceStore.getState().closeTab('pane-2', 'tab-2')
+
+    const state = useWorkspaceStore.getState()
+    expect(state.activePaneId).toBe('pane-1')
+    expect(state.pendingFocusPaneId).toBeNull()
+    expect(state.layout).toMatchObject({
+      id: 'pane-1',
+      tabs: ['tab-1'],
+      activeTabId: 'tab-1',
+    })
+  })
+
   it('ignores pane focus and split requests for missing panes', () => {
     useWorkspaceStore.getState().setActivePane('pane-missing')
     useWorkspaceStore.getState().splitPane('pane-missing', 'vertical')
