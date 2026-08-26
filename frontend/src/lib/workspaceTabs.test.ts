@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  closeBrowserTabEverywhere,
+  closeTerminalSessionEverywhere,
   closeWorkspaceTab,
   closeWorkspaceTabsForBrowserTab,
   closeWorkspaceTabsForProject,
@@ -162,6 +164,58 @@ describe('closeWorkspaceTab', () => {
     expect(useWorkspaceStore.getState().tabs.has('tab-2')).toBe(false)
   })
 
+  it('closes browser backing state and every matching workspace tab together', async () => {
+    useWorkspaceStore.setState((state) => ({
+      layout: {
+        id: 'split-1',
+        type: 'split',
+        direction: 'horizontal',
+        ratio: 0.5,
+        children: [
+          {
+            id: 'pane-1',
+            type: 'leaf',
+            tabs: ['tab-1'],
+            activeTabId: 'tab-1',
+          },
+          {
+            id: 'pane-2',
+            type: 'leaf',
+            tabs: ['tab-2'],
+            activeTabId: 'tab-2',
+          },
+        ],
+      },
+      tabs: new Map([
+        ...state.tabs,
+        ['tab-2', {
+          id: 'tab-2',
+          projectId: 'project-1',
+          type: 'browser',
+          title: 'Docs duplicate',
+          meta: { tabId: 'browser-1' },
+        }],
+      ]),
+    }))
+    vi.mocked(browserTabClose).mockResolvedValue(undefined)
+
+    await closeBrowserTabEverywhere('browser-1')
+
+    expect(browserTabClose).toHaveBeenCalledWith('browser-1')
+    expect(useBrowserStore.getState().tabs.has('browser-1')).toBe(false)
+    expect(useWorkspaceStore.getState().tabs.has('tab-1')).toBe(false)
+    expect(useWorkspaceStore.getState().tabs.has('tab-2')).toBe(false)
+  })
+
+  it('keeps browser backing state and workspace tabs when sidebar close fails', async () => {
+    vi.mocked(browserTabClose).mockRejectedValue(new Error('backend unavailable'))
+
+    await expect(closeBrowserTabEverywhere('browser-1')).rejects.toThrow('backend unavailable')
+
+    expect(useBrowserStore.getState().tabs.has('browser-1')).toBe(true)
+    expect(useWorkspaceStore.getState().tabs.has('tab-1')).toBe(true)
+  })
+
   it('closes backend terminal sessions before removing terminal workspace tabs', async () => {
     useWorkspaceStore.setState((state) => ({
       tabs: new Map([
@@ -253,6 +307,83 @@ describe('closeWorkspaceTab', () => {
 
     expect(useWorkspaceStore.getState().tabs.has('tab-1')).toBe(false)
     expect(useWorkspaceStore.getState().tabs.has('tab-2')).toBe(false)
+  })
+
+  it('closes terminal backing state and every matching workspace tab together', async () => {
+    useWorkspaceStore.setState((state) => ({
+      layout: {
+        id: 'split-1',
+        type: 'split',
+        direction: 'horizontal',
+        ratio: 0.5,
+        children: [
+          {
+            id: 'pane-1',
+            type: 'leaf',
+            tabs: ['tab-1'],
+            activeTabId: 'tab-1',
+          },
+          {
+            id: 'pane-2',
+            type: 'leaf',
+            tabs: ['tab-2'],
+            activeTabId: 'tab-2',
+          },
+        ],
+      },
+      tabs: new Map([
+        ['tab-1', {
+          ...state.tabs.get('tab-1')!,
+          type: 'terminal',
+          meta: { sessionId: 'terminal-1' },
+        }],
+        ['tab-2', {
+          id: 'tab-2',
+          projectId: 'project-1',
+          type: 'terminal',
+          title: 'zsh duplicate',
+          meta: { sessionId: 'terminal-1' },
+        }],
+      ]),
+    }))
+    useTerminalStore.setState({
+      sessions: new Map([['terminal-1', terminalSession]]),
+      activeSessionId: new Map([['project-1', 'terminal-1']]),
+      scrollback: new Map([['terminal-1', 'hello']]),
+      diagnostics: new Map(),
+    })
+    vi.mocked(terminalClose).mockResolvedValue(undefined)
+
+    await closeTerminalSessionEverywhere('terminal-1')
+
+    expect(terminalClose).toHaveBeenCalledWith('terminal-1')
+    expect(useTerminalStore.getState().sessions.has('terminal-1')).toBe(false)
+    expect(useWorkspaceStore.getState().tabs.has('tab-1')).toBe(false)
+    expect(useWorkspaceStore.getState().tabs.has('tab-2')).toBe(false)
+  })
+
+  it('keeps terminal backing state and workspace tabs when sidebar close fails', async () => {
+    useWorkspaceStore.setState((state) => ({
+      tabs: new Map([
+        ['tab-1', {
+          ...state.tabs.get('tab-1')!,
+          type: 'terminal',
+          meta: { sessionId: 'terminal-1' },
+        }],
+      ]),
+    }))
+    useTerminalStore.setState({
+      sessions: new Map([['terminal-1', terminalSession]]),
+      activeSessionId: new Map([['project-1', 'terminal-1']]),
+      scrollback: new Map(),
+      diagnostics: new Map(),
+    })
+    vi.mocked(terminalClose).mockRejectedValue(new Error('backend unavailable'))
+
+    await expect(closeTerminalSessionEverywhere('terminal-1')).rejects.toThrow('backend unavailable')
+
+    expect(useTerminalStore.getState().sessions.has('terminal-1')).toBe(true)
+    expect(useWorkspaceStore.getState().tabs.has('tab-1')).toBe(true)
   })
 
   it('removes every workspace tab owned by a project', () => {

@@ -1,8 +1,8 @@
 import { memo, useMemo } from 'react'
 import { Terminal, Plus, X } from 'lucide-react'
 import type { ProjectId } from '@/types'
-import { terminalClose } from '@/lib/backend'
 import { createAndFocusTerminalSession } from '@/lib/terminalSessions'
+import { closeTerminalSessionEverywhere } from '@/lib/workspaceTabs'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useTerminalStore } from '@/stores/terminal'
 import { useWorkspaceStore } from '@/stores/workspace'
@@ -12,7 +12,6 @@ export const TerminalList = memo(function TerminalList({ projectId }: { projectI
   const allSessions = useTerminalStore((s) => s.sessions)
   const activeSessionId = useTerminalStore((s) => s.activeSessionId.get(projectId))
   const setActiveSession = useTerminalStore((s) => s.setActiveSession)
-  const closeSession = useTerminalStore((s) => s.closeSession)
   const pushError = useNotificationsStore((s) => s.pushError)
   const setBottomDockOpen = useWorkspaceStore((s) => s.setBottomDockOpen)
 
@@ -41,11 +40,10 @@ export const TerminalList = memo(function TerminalList({ projectId }: { projectI
             className={styles.closeBtn}
             onClick={(e) => {
               e.stopPropagation()
-              void terminalClose(session.id).then(() => {
-                closeSession(session.id)
-              }).catch((error: unknown) => {
-                pushError('Terminal close failed', error, 'Failed to close terminal')
-              })
+              void closeTerminalSessionEverywhere(session.id)
+                .catch((error: unknown) => {
+                  pushError('Terminal close failed', error, 'Failed to close terminal')
+                })
             }}
             aria-label="Close terminal"
           >

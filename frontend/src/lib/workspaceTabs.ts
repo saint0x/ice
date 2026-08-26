@@ -56,20 +56,28 @@ export async function closeWorkspaceTab(paneId: PaneId, tabId: TabId) {
     ? tab.meta.tabId
     : null
 
-  if (browserTabId && useBrowserStore.getState().tabs.has(browserTabId)) {
-    await browserTabClose(browserTabId)
-    useBrowserStore.getState().closeTab(browserTabId)
+  if (browserTabId) {
+    await closeBrowserTabEverywhere(browserTabId)
+    return
   }
 
   const terminalSessionId = tab?.type === 'terminal'
     ? ((typeof tab.meta?.sessionId === 'string' && tab.meta.sessionId) || tab.id)
     : null
-  if (terminalSessionId && useTerminalStore.getState().sessions.has(terminalSessionId)) {
-    await terminalClose(terminalSessionId)
-    useTerminalStore.getState().closeSession(terminalSessionId)
+  if (terminalSessionId) {
+    await closeTerminalSessionEverywhere(terminalSessionId)
+    return
   }
 
   useWorkspaceStore.getState().closeTab(paneId, tabId)
+}
+
+export async function closeBrowserTabEverywhere(browserTabId: string) {
+  if (useBrowserStore.getState().tabs.has(browserTabId)) {
+    await browserTabClose(browserTabId)
+    useBrowserStore.getState().closeTab(browserTabId)
+  }
+  closeWorkspaceTabsForBrowserTab(browserTabId)
 }
 
 export function closeWorkspaceTabsForBrowserTab(browserTabId: string) {
@@ -79,6 +87,14 @@ export function closeWorkspaceTabsForBrowserTab(browserTabId: string) {
   for (const match of matches) {
     useWorkspaceStore.getState().closeTab(match.paneId, match.tabId)
   }
+}
+
+export async function closeTerminalSessionEverywhere(sessionId: string) {
+  if (useTerminalStore.getState().sessions.has(sessionId)) {
+    await terminalClose(sessionId)
+    useTerminalStore.getState().closeSession(sessionId)
+  }
+  closeWorkspaceTabsForTerminalSession(sessionId)
 }
 
 export function closeWorkspaceTabsForTerminalSession(sessionId: string) {

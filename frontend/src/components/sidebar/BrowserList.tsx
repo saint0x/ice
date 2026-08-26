@@ -2,7 +2,6 @@ import { memo, useEffect, useState } from 'react'
 import { Globe, Plus, X, Lock, Circle, Pin } from 'lucide-react'
 import type { ProjectId } from '@/types'
 import {
-  browserTabClose,
   browserTabPinSet,
   projectBrowserRestorePolicyGet,
   projectBrowserRestorePolicySet,
@@ -10,6 +9,7 @@ import {
   type BrowserRestorePolicy,
 } from '@/lib/backend'
 import { createAndOpenBrowserTab } from '@/lib/browserTabs'
+import { closeBrowserTabEverywhere } from '@/lib/workspaceTabs'
 import { useBrowserStore } from '@/stores/browser'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useWorkspaceStore } from '@/stores/workspace'
@@ -22,7 +22,6 @@ export const BrowserList = memo(function BrowserList({ projectId }: { projectId:
   const activeTabId = useBrowserStore((s) => s.activeTabId.get(projectId))
   const setActiveTab = useBrowserStore((s) => s.setActiveTab)
   const upsertTab = useBrowserStore((s) => s.upsertTab)
-  const closeTab = useBrowserStore((s) => s.closeTab)
   const pushError = useNotificationsStore((s) => s.pushError)
   const openTab = useWorkspaceStore((s) => s.openTab)
   const activePaneId = useWorkspaceStore((s) => s.activePaneId)
@@ -98,11 +97,10 @@ export const BrowserList = memo(function BrowserList({ projectId }: { projectId:
             className={styles.iconBtn}
             onClick={(event) => {
               event.stopPropagation()
-              void browserTabClose(tab.tabId).then(() => {
-                closeTab(tab.tabId)
-              }).catch((error: unknown) => {
-                pushError('Browser tab close failed', error, 'Failed to close browser tab')
-              })
+              void closeBrowserTabEverywhere(tab.tabId)
+                .catch((error: unknown) => {
+                  pushError('Browser tab close failed', error, 'Failed to close browser tab')
+                })
             }}
             aria-label="Close browser tab"
           >
