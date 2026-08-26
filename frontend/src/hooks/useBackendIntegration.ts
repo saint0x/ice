@@ -56,6 +56,34 @@ const TREE_REFRESH_EVENT_TYPES = new Set([
   'watchStarted',
 ])
 
+type BackendEventRegistrar<TPayload> = (handler: (payload: TPayload) => void) => Promise<() => void>
+
+export function registerBackendEventListener<TPayload>(input: {
+  label: string
+  listen: BackendEventRegistrar<TPayload>
+  handler: (payload: TPayload) => void
+  setUnlisten: (unlisten: () => void) => void
+  isDisposed?: () => boolean
+  pushError: (title: string, error: unknown, fallbackMessage?: string) => string
+}) {
+  void input.listen(input.handler)
+    .then((unlisten) => {
+      if (input.isDisposed?.()) {
+        unlisten()
+        return
+      }
+      input.setUnlisten(unlisten)
+    })
+    .catch((error: unknown) => {
+      if (input.isDisposed?.()) return
+      input.pushError(
+        `${input.label} listener failed`,
+        error,
+        `Failed to connect ${input.label.toLowerCase()} updates`,
+      )
+    })
+}
+
 export function useBackendIntegration() {
   const hydrateProjects = useProjectsStore((state) => state.hydrateProjects)
   const activeProjectId = useProjectsStore((state) => state.activeProjectId)
@@ -234,161 +262,196 @@ export function useBackendIntegration() {
       )
     })
 
-    void listenFsEvents((payload) => {
-      if (!TREE_REFRESH_EVENT_TYPES.has(payload.type)) return
-      void refreshTree(payload.projectId)
-    }).then((unlisten) => {
-      fsUnlisten = unlisten
+    registerBackendEventListener({
+      label: 'Project file',
+      listen: listenFsEvents,
+      handler: (payload) => {
+        if (!TREE_REFRESH_EVENT_TYPES.has(payload.type)) return
+        void refreshTree(payload.projectId)
+      },
+      setUnlisten: (unlisten) => {
+        fsUnlisten = unlisten
+      },
+      isDisposed: () => disposed,
+      pushError,
     })
 
-    void listenGitEvents((payload) => {
-      if (!payload.summary) return
-      hydrateGitState(payload.projectId, toGitState(payload.summary))
-      updateProject(payload.projectId, { branch: payload.summary.branch ?? 'detached' })
-      const mutation = toGitMutationEvent(payload)
-      if (mutation) {
-        recordGitMutation(mutation)
-      }
-    }).then((unlisten) => {
-      gitUnlisten = unlisten
-    })
-
-    void listenBrowserEvents((payload) => {
-      const runtimeNotice = toBrowserRuntimeNotice(payload)
-      if (runtimeNotice) {
-        if (!runtimeNotice.projectId && payload.tab) {
-          runtimeNotice.projectId = payload.tab.projectId
+    registerBackendEventListener({
+      label: 'Git',
+      listen: listenGitEvents,
+      handler: (payload) => {
+        if (!payload.summary) return
+        hydrateGitState(payload.projectId, toGitState(payload.summary))
+        updateProject(payload.projectId, { branch: payload.summary.branch ?? 'detached' })
+        const mutation = toGitMutationEvent(payload)
+        if (mutation) {
+          recordGitMutation(mutation)
         }
-        if (!runtimeNotice.projectId && payload.request && 'projectId' in payload.request) {
-          runtimeNotice.projectId = payload.request.projectId
-        }
-        pushBrowserRuntimeNotice(runtimeNotice)
-      }
-      if (
-        (payload.type === 'tabCreated' ||
-          payload.type === 'tabNavigated' ||
-          payload.type === 'tabPinChanged' ||
-          payload.type === 'tabUpdated' ||
-          payload.type === 'tabLoadStateChanged' ||
-          payload.type === 'tabRendererStateChanged' ||
-          payload.type === 'tabHistoryChanged' ||
-          payload.type === 'tabReloaded') &&
-        payload.tab
-      ) {
-        upsertBrowserTab(toBrowserTab(payload.tab))
-        void refreshBrowserSidebar(payload.tab.projectId)
-        return
-      }
-      if (payload.type === 'tabClosed' && payload.tabId) {
-        closeBrowserTab(payload.tabId)
-        closeWorkspaceTabsForBrowserTab(payload.tabId)
-      }
-    }).then((unlisten) => {
-      browserUnlisten = unlisten
+      },
+      setUnlisten: (unlisten) => {
+        gitUnlisten = unlisten
+      },
+      isDisposed: () => disposed,
+      pushError,
     })
 
-    void listenTerminalEvents((payload) => {
-      if (
-        (payload.type === 'sessionCreated' ||
-          payload.type === 'sessionRenamed' ||
-          payload.type === 'sessionExited' ||
-          payload.type === 'sessionReadError') &&
-        payload.session
-      ) {
-        upsertSession(toTerminalSession(payload.session))
-        return
-      }
-      if (payload.type === 'data' && payload.sessionId && payload.data) {
-        appendScrollback(payload.sessionId, payload.data)
-        return
-      }
-      if (payload.type === 'scrollbackCleared' && payload.sessionId) {
-        clearScrollback(payload.sessionId)
-        if (payload.session) {
+    registerBackendEventListener({
+      label: 'Browser',
+      listen: listenBrowserEvents,
+      handler: (payload) => {
+        const runtimeNotice = toBrowserRuntimeNotice(payload)
+        if (runtimeNotice) {
+          if (!runtimeNotice.projectId && payload.tab) {
+            runtimeNotice.projectId = payload.tab.projectId
+          }
+          if (!runtimeNotice.projectId && payload.request && 'projectId' in payload.request) {
+            runtimeNotice.projectId = payload.request.projectId
+          }
+          pushBrowserRuntimeNotice(runtimeNotice)
+        }
+        if (
+          (payload.type === 'tabCreated' ||
+            payload.type === 'tabNavigated' ||
+            payload.type === 'tabPinChanged' ||
+            payload.type === 'tabUpdated' ||
+            payload.type === 'tabLoadStateChanged' ||
+            payload.type === 'tabRendererStateChanged' ||
+            payload.type === 'tabHistoryChanged' ||
+            payload.type === 'tabReloaded') &&
+          payload.tab
+        ) {
+          upsertBrowserTab(toBrowserTab(payload.tab))
+          void refreshBrowserSidebar(payload.tab.projectId)
+          return
+        }
+        if (payload.type === 'tabClosed' && payload.tabId) {
+          closeBrowserTab(payload.tabId)
+          closeWorkspaceTabsForBrowserTab(payload.tabId)
+        }
+      },
+      setUnlisten: (unlisten) => {
+        browserUnlisten = unlisten
+      },
+      isDisposed: () => disposed,
+      pushError,
+    })
+
+    registerBackendEventListener({
+      label: 'Terminal',
+      listen: listenTerminalEvents,
+      handler: (payload) => {
+        if (
+          (payload.type === 'sessionCreated' ||
+            payload.type === 'sessionRenamed' ||
+            payload.type === 'sessionExited' ||
+            payload.type === 'sessionReadError') &&
+          payload.session
+        ) {
           upsertSession(toTerminalSession(payload.session))
+          return
         }
-        return
-      }
-      if (payload.type === 'sessionClosed' && payload.sessionId) {
-        closeSession(payload.sessionId)
-        closeWorkspaceTabsForTerminalSession(payload.sessionId)
-      }
-    }).then((unlisten) => {
-      terminalUnlisten = unlisten
+        if (payload.type === 'data' && payload.sessionId && payload.data) {
+          appendScrollback(payload.sessionId, payload.data)
+          return
+        }
+        if (payload.type === 'scrollbackCleared' && payload.sessionId) {
+          clearScrollback(payload.sessionId)
+          if (payload.session) {
+            upsertSession(toTerminalSession(payload.session))
+          }
+          return
+        }
+        if (payload.type === 'sessionClosed' && payload.sessionId) {
+          closeSession(payload.sessionId)
+          closeWorkspaceTabsForTerminalSession(payload.sessionId)
+        }
+      },
+      setUnlisten: (unlisten) => {
+        terminalUnlisten = unlisten
+      },
+      isDisposed: () => disposed,
+      pushError,
     })
 
-    void listenCodexEvents((payload) => {
-      if ((payload.type === 'threadCreated' || payload.type === 'threadUpdated') && payload.thread) {
-        const thread = toCodexThread(payload.thread)
-        if (payload.type === 'threadCreated') {
-          addThread(thread)
-          void refreshCodexSidebar(thread.projectId)
-        } else {
-          updateThread(thread.id, thread)
+    registerBackendEventListener({
+      label: 'Codex',
+      listen: listenCodexEvents,
+      handler: (payload) => {
+        if ((payload.type === 'threadCreated' || payload.type === 'threadUpdated') && payload.thread) {
+          const thread = toCodexThread(payload.thread)
+          if (payload.type === 'threadCreated') {
+            addThread(thread)
+            void refreshCodexSidebar(thread.projectId)
+          } else {
+            updateThread(thread.id, thread)
+          }
+          return
         }
-        return
-      }
-      if (payload.type === 'messageUpserted' && payload.message) {
-        const message = toCodexMessage(payload.message)
-        scheduleCodexMessage(message)
-        if (message.role === 'assistant' && message.state === 'complete') {
-          updateThread(message.threadId, { status: 'idle' })
+        if (payload.type === 'messageUpserted' && payload.message) {
+          const message = toCodexMessage(payload.message)
+          scheduleCodexMessage(message)
+          if (message.role === 'assistant' && message.state === 'complete') {
+            updateThread(message.threadId, { status: 'idle' })
+          }
+          return
         }
-        return
-      }
-      if (payload.type === 'approvalPending' && payload.approval) {
-        addApproval(toCodexApproval(payload.approval))
-        void refreshCodexSidebar(payload.approval.projectId)
-        return
-      }
-      if (payload.type === 'approvalBlocked' && payload.approval) {
-        resolveApproval(String(payload.approval.requestId))
-        void refreshCodexSidebar(payload.approval.projectId)
-        return
-      }
-      if (payload.type === 'serverDisconnected') {
-        const reason = typeof payload.reason === 'string' && payload.reason.trim()
-          ? payload.reason.trim()
-          : 'The Codex app server disconnected.'
-        const recentLines = Array.isArray(payload.recentLines)
-          ? payload.recentLines.filter((line): line is string => typeof line === 'string' && line.trim().length > 0)
-          : []
-        const detail = recentLines.length > 0
-          ? `${reason} Recent runtime output: ${recentLines.join(' | ')}`
-          : `${reason} Retry the request to reconnect, or open Settings to inspect Codex runtime health.`
-        const lastDisconnect = lastCodexDisconnectRef.current
-        const now = Date.now()
-        if (!lastDisconnect || lastDisconnect.message !== detail || now - lastDisconnect.at > 4000) {
-          lastCodexDisconnectRef.current = { message: detail, at: now }
-          pushError('Codex disconnected', detail)
+        if (payload.type === 'approvalPending' && payload.approval) {
+          addApproval(toCodexApproval(payload.approval))
+          void refreshCodexSidebar(payload.approval.projectId)
+          return
         }
-        return
-      }
-      if (payload.type === 'notification' && payload.payload?.method === 'error') {
-        const error = payload.payload.params?.error as { message?: string } | undefined
-        const threadId = payload.payload.params?.threadId as string | undefined
-        if (threadId) {
-          updateThread(threadId, { status: 'error' })
+        if (payload.type === 'approvalBlocked' && payload.approval) {
+          resolveApproval(String(payload.approval.requestId))
+          void refreshCodexSidebar(payload.approval.projectId)
+          return
         }
-        pushError(
-          'Codex turn failed',
-          error,
-          typeof error?.message === 'string'
-            ? error.message
-            : 'The Codex turn failed before producing a response.',
-        )
-        return
-      }
-      if (payload.type === 'notification' && payload.payload?.method) {
-        const threadId = extractCodexThreadId(payload.payload.params)
-        if (!threadId) return
-        const status = inferCodexStatusFromNotification(payload.payload.method, payload.payload.params)
-        if (status) {
-          updateThread(threadId, { status })
+        if (payload.type === 'serverDisconnected') {
+          const reason = typeof payload.reason === 'string' && payload.reason.trim()
+            ? payload.reason.trim()
+            : 'The Codex app server disconnected.'
+          const recentLines = Array.isArray(payload.recentLines)
+            ? payload.recentLines.filter((line): line is string => typeof line === 'string' && line.trim().length > 0)
+            : []
+          const detail = recentLines.length > 0
+            ? `${reason} Recent runtime output: ${recentLines.join(' | ')}`
+            : `${reason} Retry the request to reconnect, or open Settings to inspect Codex runtime health.`
+          const lastDisconnect = lastCodexDisconnectRef.current
+          const now = Date.now()
+          if (!lastDisconnect || lastDisconnect.message !== detail || now - lastDisconnect.at > 4000) {
+            lastCodexDisconnectRef.current = { message: detail, at: now }
+            pushError('Codex disconnected', detail)
+          }
+          return
         }
-      }
-    }).then((unlisten) => {
-      codexUnlisten = unlisten
+        if (payload.type === 'notification' && payload.payload?.method === 'error') {
+          const error = payload.payload.params?.error as { message?: string } | undefined
+          const threadId = payload.payload.params?.threadId as string | undefined
+          if (threadId) {
+            updateThread(threadId, { status: 'error' })
+          }
+          pushError(
+            'Codex turn failed',
+            error,
+            typeof error?.message === 'string'
+              ? error.message
+              : 'The Codex turn failed before producing a response.',
+          )
+          return
+        }
+        if (payload.type === 'notification' && payload.payload?.method) {
+          const threadId = extractCodexThreadId(payload.payload.params)
+          if (!threadId) return
+          const status = inferCodexStatusFromNotification(payload.payload.method, payload.payload.params)
+          if (status) {
+            updateThread(threadId, { status })
+          }
+        }
+      },
+      setUnlisten: (unlisten) => {
+        codexUnlisten = unlisten
+      },
+      isDisposed: () => disposed,
+      pushError,
     })
 
     return () => {
