@@ -1072,11 +1072,20 @@ impl PersistenceService {
     pub async fn delete_browser_tabs_for_project(&self, project_id: String) -> Result<()> {
         let this = self.clone();
         tokio::task::spawn_blocking(move || -> Result<()> {
-            let conn = this.connect()?;
-            conn.execute(
+            let mut conn = this.connect()?;
+            let tx = conn.transaction()?;
+            tx.execute(
+                "
+                DELETE FROM browser_history
+                WHERE tab_id IN (SELECT tab_id FROM browser_tabs WHERE project_id = ?1)
+                ",
+                params![project_id.clone()],
+            )?;
+            tx.execute(
                 "DELETE FROM browser_tabs WHERE project_id = ?1",
                 params![project_id],
             )?;
+            tx.commit()?;
             Ok(())
         })
         .await??;
@@ -1091,6 +1100,7 @@ impl PersistenceService {
                 "
                 DELETE FROM browser_history
                 WHERE tab_id IN (SELECT tab_id FROM browser_tabs WHERE project_id = ?1)
+                   OR tab_id NOT IN (SELECT tab_id FROM browser_tabs)
                 ",
                 params![project_id],
             )?;
@@ -1287,11 +1297,20 @@ impl PersistenceService {
     pub async fn delete_terminal_sessions_for_project(&self, project_id: String) -> Result<()> {
         let this = self.clone();
         tokio::task::spawn_blocking(move || -> Result<()> {
-            let conn = this.connect()?;
-            conn.execute(
+            let mut conn = this.connect()?;
+            let tx = conn.transaction()?;
+            tx.execute(
+                "
+                DELETE FROM terminal_scrollback
+                WHERE session_id IN (SELECT session_id FROM terminal_sessions WHERE project_id = ?1)
+                ",
+                params![project_id.clone()],
+            )?;
+            tx.execute(
                 "DELETE FROM terminal_sessions WHERE project_id = ?1",
                 params![project_id],
             )?;
+            tx.commit()?;
             Ok(())
         })
         .await??;
@@ -1306,6 +1325,7 @@ impl PersistenceService {
                 "
                 DELETE FROM terminal_scrollback
                 WHERE session_id IN (SELECT session_id FROM terminal_sessions WHERE project_id = ?1)
+                   OR session_id NOT IN (SELECT session_id FROM terminal_sessions)
                 ",
                 params![project_id],
             )?;
@@ -1975,8 +1995,16 @@ mod tests {
             .expect("browser empty")
             .is_empty());
         assert!(db
+            .load_browser_history_sync()
+            .expect("browser history empty")
+            .is_empty());
+        assert!(db
             .load_terminal_sessions_sync()
             .expect("terminal empty")
+            .is_empty());
+        assert!(db
+            .load_terminal_scrollback_sync()
+            .expect("terminal scrollback empty")
             .is_empty());
         assert!(db
             .load_codex_threads_sync()
