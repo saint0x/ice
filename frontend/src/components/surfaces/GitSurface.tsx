@@ -20,6 +20,7 @@ import {
   gitUnstagePaths,
   toGitState,
 } from '@/lib/backend'
+import { nextSelectedHistoryCommit } from '@/lib/gitHistorySelection'
 import { useGitStore } from '@/stores/git'
 import styles from './GitSurface.module.css'
 
@@ -200,7 +201,7 @@ export const GitSurface = memo(function GitSurface({ tab }: Props) {
       .then((entries) => {
         if (!disposed) {
           setHistoryEntries(entries)
-          setSelectedHistoryCommit((current) => current ?? entries[0]?.commit ?? null)
+          setSelectedHistoryCommit((current) => nextSelectedHistoryCommit(current, entries))
           setIsHistoryLoading(false)
         }
       })
