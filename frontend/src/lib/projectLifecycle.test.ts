@@ -129,6 +129,8 @@ function resetStores() {
       ['browser-1', []],
       ['browser-2', []],
     ]),
+    closedTabIds: new Set(),
+    removedProjectIds: new Set(),
   })
 
   useTerminalStore.setState({
@@ -157,6 +159,8 @@ function resetStores() {
       ['terminal-2', 'beta'],
     ]),
     diagnostics: new Map(),
+    closedSessionIds: new Set(),
+    removedProjectIds: new Set(),
   })
 
   useCodexStore.setState({
@@ -220,6 +224,7 @@ function resetStores() {
       ['project-1', [{ threadId: 'thread-1', title: 'Alpha thread', status: 'idle', unread: true }]],
       ['project-2', [{ threadId: 'thread-2', title: 'Beta thread', status: 'idle', unread: false }]],
     ]),
+    removedProjectIds: new Set(),
   })
 
   useEditorStore.setState({
@@ -281,18 +286,21 @@ describe('project lifecycle cleanup', () => {
     expect(useBrowserStore.getState().activeTabId.has('project-1')).toBe(false)
     expect(useBrowserStore.getState().sidebarItems.has('project-1')).toBe(false)
     expect(useBrowserStore.getState().closedTabIds.has('browser-1')).toBe(true)
+    expect(useBrowserStore.getState().removedProjectIds.has('project-1')).toBe(true)
 
     expect(useTerminalStore.getState().sessions.has('terminal-1')).toBe(false)
     expect(useTerminalStore.getState().sessions.has('terminal-2')).toBe(true)
     expect(useTerminalStore.getState().activeSessionId.has('project-1')).toBe(false)
     expect(useTerminalStore.getState().scrollback.has('terminal-1')).toBe(false)
     expect(useTerminalStore.getState().closedSessionIds.has('terminal-1')).toBe(true)
+    expect(useTerminalStore.getState().removedProjectIds.has('project-1')).toBe(true)
 
     expect(useCodexStore.getState().threads.has('thread-1')).toBe(false)
     expect(useCodexStore.getState().threads.has('thread-2')).toBe(true)
     expect(useCodexStore.getState().messagesByThread.has('thread-1')).toBe(false)
     expect(useCodexStore.getState().activeThreadId.has('project-1')).toBe(false)
     expect(useCodexStore.getState().approvals.map((approval) => approval.id)).toEqual(['approval-2'])
+    expect(useCodexStore.getState().removedProjectIds.has('project-1')).toBe(true)
 
     expect(useEditorStore.getState().documents.has('project-1:old.ts')).toBe(false)
     expect(useEditorStore.getState().documents.has('project-2:keep.ts')).toBe(true)

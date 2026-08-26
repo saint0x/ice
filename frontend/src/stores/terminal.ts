@@ -16,6 +16,7 @@ interface TerminalState {
   scrollback: Map<TerminalId, string>
   diagnostics: Map<TerminalId, TerminalDiagnostics>
   closedSessionIds: Set<TerminalId>
+  removedProjectIds: Set<ProjectId>
 
   hydrateSessions: (sessions: TerminalSession[]) => void
   upsertSession: (session: TerminalSession) => void
@@ -26,6 +27,7 @@ interface TerminalState {
   closeSession: (id: TerminalId) => void
   setActiveSession: (projectId: ProjectId, id: TerminalId) => void
   renameSession: (id: TerminalId, title: string) => void
+  removeProjectSessions: (projectId: ProjectId) => void
 }
 
 export const useTerminalStore = create<TerminalState>((set) => ({
@@ -34,6 +36,7 @@ export const useTerminalStore = create<TerminalState>((set) => ({
   scrollback: new Map(),
   diagnostics: new Map(),
   closedSessionIds: new Set(),
+  removedProjectIds: new Set(),
 
   hydrateSessions: (sessions) =>
     set((s) => {
@@ -42,6 +45,7 @@ export const useTerminalStore = create<TerminalState>((set) => ({
       const closedSessionIds = new Set(s.closedSessionIds)
       const sessionsByProject = new Map<ProjectId, TerminalSession[]>()
       for (const session of sessions) {
+        if (s.removedProjectIds.has(session.projectId)) continue
         nextSessions.set(session.id, session)
         closedSessionIds.delete(session.id)
         sessionsByProject.set(session.projectId, [...(sessionsByProject.get(session.projectId) ?? []), session])
@@ -78,7 +82,7 @@ export const useTerminalStore = create<TerminalState>((set) => ({
 
   upsertSession: (session) =>
     set((s) => {
-      if (s.closedSessionIds.has(session.id)) return {}
+      if (s.removedProjectIds.has(session.projectId) || s.closedSessionIds.has(session.id)) return {}
       const sessions = new Map(s.sessions)
       sessions.set(session.id, session)
       const activeSessionId = new Map(s.activeSessionId)
@@ -90,6 +94,7 @@ export const useTerminalStore = create<TerminalState>((set) => ({
 
   upsertDiagnostics: (diagnostics) =>
     set((s) => {
+      if (s.removedProjectIds.has(diagnostics.projectId)) return {}
       if (!s.sessions.has(diagnostics.sessionId)) return {}
       const next = new Map(s.diagnostics)
       next.set(diagnostics.sessionId, diagnostics)
@@ -144,6 +149,7 @@ export const useTerminalStore = create<TerminalState>((set) => ({
 
   setActiveSession: (projectId, id) =>
     set((s) => {
+      if (s.removedProjectIds.has(projectId)) return s
       const session = s.sessions.get(id)
       const activeSessionId = new Map(s.activeSessionId)
       if (!session || session.projectId !== projectId) {
@@ -164,8 +170,30 @@ export const useTerminalStore = create<TerminalState>((set) => ({
     set((s) => {
       const sessions = new Map(s.sessions)
       const session = sessions.get(id)
+      if (session && s.removedProjectIds.has(session.projectId)) return s
       if (!session) return s
       sessions.set(id, { ...session, title })
       return { sessions }
+    }),
+
+  removeProjectSessions: (projectId) =>
+    set((s) => {
+      const sessions = new Map(s.sessions)
+      const scrollback = new Map(s.scrollback)
+      const diagnostics = new Map(s.diagnostics)
+      const closedSessionIds = new Set(s.closedSessionIds)
+      for (const session of sessions.values()) {
+        if (session.projectId === projectId) {
+          sessions.delete(session.id)
+          scrollback.delete(session.id)
+          diagnostics.delete(session.id)
+          closedSessionIds.add(session.id)
+        }
+      }
+      const activeSessionId = new Map(s.activeSessionId)
+      activeSessionId.delete(projectId)
+      const removedProjectIds = new Set(s.removedProjectIds)
+      removedProjectIds.add(projectId)
+      return { sessions, activeSessionId, scrollback, diagnostics, closedSessionIds, removedProjectIds }
     }),
 }))

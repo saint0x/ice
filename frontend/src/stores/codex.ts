@@ -193,6 +193,7 @@ interface CodexState {
   activeThreadId: Map<ProjectId, ThreadId | null>
   messagesByThread: Map<ThreadId, CodexMessage[]>
   sidebarItems: Map<ProjectId, ProjectCodexSidebarItem[]>
+  removedProjectIds: Set<ProjectId>
 
   hydrateThreads: (threads: CodexThread[]) => void
   hydrateApprovals: (approvals: CodexApproval[]) => void
@@ -205,6 +206,7 @@ interface CodexState {
   addApproval: (approval: CodexApproval) => void
   resolveApproval: (id: string) => void
   clearUnread: (threadId: ThreadId) => void
+  removeProjectThreads: (projectId: ProjectId) => void
 }
 
 export const useCodexStore = create<CodexState>((set) => ({
@@ -213,12 +215,14 @@ export const useCodexStore = create<CodexState>((set) => ({
   activeThreadId: new Map(),
   messagesByThread: new Map(),
   sidebarItems: new Map(),
+  removedProjectIds: new Set(),
 
   hydrateThreads: (threads) =>
     set((s) => {
       const nextThreads = new Map<ThreadId, CodexThread>()
       const nextActiveThreadId = new Map(s.activeThreadId)
       for (const thread of threads) {
+        if (s.removedProjectIds.has(thread.projectId)) continue
         nextThreads.set(thread.id, thread)
       }
       const projectIds = new Set<string>([
@@ -272,11 +276,17 @@ export const useCodexStore = create<CodexState>((set) => ({
     }),
 
   hydrateApprovals: (approvals) =>
-    set((s) => ({ approvals: filterApprovalsForThreads(approvals, s.threads) })),
+    set((s) => ({
+      approvals: filterApprovalsForThreads(
+        approvals.filter((approval) => !s.removedProjectIds.has(approval.projectId)),
+        s.threads,
+      ),
+    })),
 
   hydrateMessages: (threadId, messages) =>
     set((s) => {
-      if (!s.threads.has(threadId)) return {}
+      const thread = s.threads.get(threadId)
+      if (!thread || s.removedProjectIds.has(thread.projectId)) return {}
       const messagesByThread = new Map(s.messagesByThread)
       messagesByThread.set(threadId, mergeThreadMessages(s.threads, messagesByThread.get(threadId) ?? [], messages))
       return { messagesByThread: pruneMessagesByThread(messagesByThread, s.activeThreadId) }
@@ -284,6 +294,7 @@ export const useCodexStore = create<CodexState>((set) => ({
 
   hydrateSidebarItems: (projectId, items) =>
     set((s) => {
+      if (s.removedProjectIds.has(projectId)) return s
       const sidebarItems = new Map(s.sidebarItems)
       sidebarItems.set(
         projectId,
@@ -294,6 +305,7 @@ export const useCodexStore = create<CodexState>((set) => ({
 
   addThread: (thread) =>
     set((s) => {
+      if (s.removedProjectIds.has(thread.projectId)) return {}
       const threads = new Map(s.threads)
       threads.set(thread.id, thread)
       return { threads }
@@ -301,6 +313,7 @@ export const useCodexStore = create<CodexState>((set) => ({
 
   setActiveThread: (projectId, threadId) =>
     set((s) => {
+      if (s.removedProjectIds.has(projectId)) return s
       const activeThreadId = new Map(s.activeThreadId)
       const threads = new Map(s.threads)
       const thread = threads.get(threadId)
@@ -325,6 +338,7 @@ export const useCodexStore = create<CodexState>((set) => ({
       const thread = threads.get(threadId)
       if (!thread) return s
       const nextThread = { ...thread, ...patch }
+      if (s.removedProjectIds.has(nextThread.projectId)) return s
       threads.set(threadId, nextThread)
       const messagesByThread = pruneMessagesByThread(
         reconcileThreadMessages(s.messagesByThread, threadId, nextThread.status),
@@ -335,6 +349,7 @@ export const useCodexStore = create<CodexState>((set) => ({
 
   upsertMessage: (message) =>
     set((s) => {
+      if (s.removedProjectIds.has(message.projectId)) return {}
       const thread = s.threads.get(message.threadId)
       if (!thread || thread.projectId !== message.projectId) return {}
       const messagesByThread = new Map(s.messagesByThread)
@@ -346,6 +361,7 @@ export const useCodexStore = create<CodexState>((set) => ({
 
   addApproval: (approval) =>
     set((s) => {
+      if (s.removedProjectIds.has(approval.projectId)) return {}
       const thread = s.threads.get(approval.threadId)
       if (thread?.projectId !== approval.projectId) return {}
       return { approvals: [...s.approvals.filter((item) => item.id !== approval.id), approval] }
@@ -358,8 +374,29 @@ export const useCodexStore = create<CodexState>((set) => ({
     set((s) => {
       const threads = new Map(s.threads)
       const thread = threads.get(threadId)
+      if (thread && s.removedProjectIds.has(thread.projectId)) return s
       if (!thread) return s
       threads.set(threadId, { ...thread, unread: false })
       return { threads }
+    }),
+
+  removeProjectThreads: (projectId) =>
+    set((s) => {
+      const threads = new Map(s.threads)
+      const messagesByThread = new Map(s.messagesByThread)
+      for (const thread of threads.values()) {
+        if (thread.projectId === projectId) {
+          threads.delete(thread.id)
+          messagesByThread.delete(thread.id)
+        }
+      }
+      const activeThreadId = new Map(s.activeThreadId)
+      activeThreadId.delete(projectId)
+      const sidebarItems = new Map(s.sidebarItems)
+      sidebarItems.delete(projectId)
+      const approvals = s.approvals.filter((approval) => approval.projectId !== projectId)
+      const removedProjectIds = new Set(s.removedProjectIds)
+      removedProjectIds.add(projectId)
+      return { threads, activeThreadId, messagesByThread, sidebarItems, approvals, removedProjectIds }
     }),
 }))

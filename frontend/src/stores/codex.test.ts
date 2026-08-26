@@ -10,6 +10,7 @@ describe('codex store reconciliation', () => {
       activeThreadId: new Map(),
       messagesByThread: new Map(),
       sidebarItems: new Map(),
+      removedProjectIds: new Set(),
     })
     useWorkspaceStore.setState({
       layout: {
@@ -541,6 +542,73 @@ describe('codex store reconciliation', () => {
 
     expect(useCodexStore.getState().approvals).toHaveLength(1)
     expect(useCodexStore.getState().approvals[0]?.description).toBe('second')
+  })
+
+  it('does not resurrect removed project Codex state from new late events', () => {
+    useCodexStore.getState().hydrateThreads([
+      {
+        id: 'thread-live',
+        projectId: 'project-a',
+        title: 'Live',
+        unread: true,
+        status: 'waitingApproval',
+      },
+    ])
+    useCodexStore.getState().hydrateApprovals([
+      {
+        id: 'approval-live',
+        projectId: 'project-a',
+        threadId: 'thread-live',
+        actionType: 'exec',
+        category: 'shell',
+        riskLevel: 'low',
+        policyAction: 'prompt',
+        description: 'live',
+      },
+    ])
+
+    useCodexStore.getState().removeProjectThreads('project-a')
+    useCodexStore.getState().addThread({
+      id: 'thread-late',
+      projectId: 'project-a',
+      title: 'Late',
+      unread: false,
+      status: 'running',
+    })
+    useCodexStore.getState().hydrateSidebarItems('project-a', [
+      { threadId: 'thread-late', title: 'Late', status: 'running', unread: false },
+    ])
+    useCodexStore.getState().upsertMessage({
+      id: 'message-late',
+      threadId: 'thread-late',
+      projectId: 'project-a',
+      role: 'assistant',
+      content: 'late',
+      state: 'streaming',
+      createdAt: '2026-05-01T00:00:00Z',
+      updatedAt: '2026-05-01T00:00:00Z',
+    })
+    useCodexStore.getState().addApproval({
+      id: 'approval-late',
+      projectId: 'project-a',
+      threadId: 'thread-late',
+      actionType: 'exec',
+      category: 'shell',
+      riskLevel: 'low',
+      policyAction: 'prompt',
+      description: 'late',
+    })
+    useCodexStore.getState().setActiveThread('project-a', 'thread-late')
+
+    const state = useCodexStore.getState()
+    expect(state.threads.has('thread-live')).toBe(false)
+    expect(state.threads.has('thread-late')).toBe(false)
+    expect(state.messagesByThread.has('thread-live')).toBe(false)
+    expect(state.messagesByThread.has('thread-late')).toBe(false)
+    expect(state.approvals).toEqual([])
+    expect(state.sidebarItems.has('project-a')).toBe(false)
+    expect(state.activeThreadId.has('project-a')).toBe(false)
+    expect(state.removedProjectIds.has('project-a')).toBe(true)
   })
 
   it('ignores attempts to activate missing or cross-project Codex threads', () => {

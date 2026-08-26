@@ -20,6 +20,7 @@ describe('terminal scrollback retention', () => {
       scrollback: new Map(),
       diagnostics: new Map(),
       closedSessionIds: new Set(),
+      removedProjectIds: new Set(),
     })
   })
 
@@ -174,6 +175,46 @@ describe('terminal scrollback retention', () => {
     expect(useTerminalStore.getState().sessions.has('session-live')).toBe(false)
     expect(useTerminalStore.getState().activeSessionId.get('project-1')).toBeNull()
     expect(useTerminalStore.getState().scrollback.has('session-live')).toBe(false)
+  })
+
+  it('does not resurrect removed project terminal state from new late events', () => {
+    useTerminalStore.setState({
+      sessions: new Map([['session-live', liveSession]]),
+      activeSessionId: new Map([['project-1', 'session-live']]),
+      scrollback: new Map([['session-live', 'output']]),
+      diagnostics: new Map(),
+      closedSessionIds: new Set(),
+      removedProjectIds: new Set(),
+    })
+
+    useTerminalStore.getState().removeProjectSessions('project-1')
+    useTerminalStore.getState().upsertSession({
+      ...liveSession,
+      id: 'session-late',
+      title: 'late',
+    })
+    useTerminalStore.getState().upsertDiagnostics({
+      sessionId: 'session-late',
+      projectId: 'project-1',
+      cwd: '/tmp/project',
+      shell: 'zsh',
+      shellPath: '/bin/zsh',
+      title: 'late',
+      isRunning: false,
+      restoredFromPersistence: false,
+      scrollbackBytes: 4,
+      scrollbackLineCount: 1,
+      recentLines: ['late'],
+    })
+    useTerminalStore.getState().setActiveSession('project-1', 'session-late')
+
+    const state = useTerminalStore.getState()
+    expect(state.sessions.has('session-live')).toBe(false)
+    expect(state.sessions.has('session-late')).toBe(false)
+    expect(state.activeSessionId.has('project-1')).toBe(false)
+    expect(state.scrollback.has('session-live')).toBe(false)
+    expect(state.diagnostics.has('session-late')).toBe(false)
+    expect(state.removedProjectIds.has('project-1')).toBe(true)
   })
 
   it('lets authoritative terminal hydration restore tombstoned live sessions', () => {
