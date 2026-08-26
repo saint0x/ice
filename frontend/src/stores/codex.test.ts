@@ -265,6 +265,16 @@ describe('codex store reconciliation', () => {
   it('drops cached messages for threads missing from backend hydration', () => {
     useCodexStore.setState({
       activeThreadId: new Map([['project-a', 'thread-stale']]),
+      approvals: [{
+        id: 'approval-stale',
+        projectId: 'project-a',
+        threadId: 'thread-stale',
+        actionType: 'exec',
+        category: 'shell',
+        riskLevel: 'low',
+        policyAction: 'prompt',
+        description: 'stale approval',
+      }],
       messagesByThread: new Map([
         ['thread-stale', [{
           id: 'message-stale',
@@ -282,6 +292,7 @@ describe('codex store reconciliation', () => {
     useCodexStore.getState().hydrateThreads([])
 
     expect(useCodexStore.getState().activeThreadId.has('project-a')).toBe(false)
+    expect(useCodexStore.getState().approvals).toEqual([])
     expect(useCodexStore.getState().messagesByThread.has('thread-stale')).toBe(false)
   })
 
@@ -412,6 +423,124 @@ describe('codex store reconciliation', () => {
     ])
 
     expect(useCodexStore.getState().sidebarItems.get('project-a')?.map((item) => item.threadId)).toEqual(['thread-live'])
+  })
+
+  it('filters approval hydration to live matching Codex threads', () => {
+    useCodexStore.getState().hydrateThreads([
+      {
+        id: 'thread-live',
+        projectId: 'project-a',
+        title: 'Live',
+        unread: false,
+        status: 'waitingApproval',
+      },
+    ])
+
+    useCodexStore.getState().hydrateApprovals([
+      {
+        id: 'approval-live',
+        projectId: 'project-a',
+        threadId: 'thread-live',
+        actionType: 'exec',
+        category: 'shell',
+        riskLevel: 'low',
+        policyAction: 'prompt',
+        description: 'live',
+      },
+      {
+        id: 'approval-missing',
+        projectId: 'project-a',
+        threadId: 'thread-missing',
+        actionType: 'exec',
+        category: 'shell',
+        riskLevel: 'low',
+        policyAction: 'prompt',
+        description: 'missing',
+      },
+      {
+        id: 'approval-cross-project',
+        projectId: 'project-b',
+        threadId: 'thread-live',
+        actionType: 'exec',
+        category: 'shell',
+        riskLevel: 'low',
+        policyAction: 'prompt',
+        description: 'cross project',
+      },
+    ])
+
+    expect(useCodexStore.getState().approvals.map((approval) => approval.id)).toEqual(['approval-live'])
+  })
+
+  it('ignores late approval events for missing or cross-project Codex threads', () => {
+    useCodexStore.getState().hydrateThreads([
+      {
+        id: 'thread-live',
+        projectId: 'project-a',
+        title: 'Live',
+        unread: false,
+        status: 'waitingApproval',
+      },
+    ])
+
+    useCodexStore.getState().addApproval({
+      id: 'approval-missing',
+      projectId: 'project-a',
+      threadId: 'thread-missing',
+      actionType: 'exec',
+      category: 'shell',
+      riskLevel: 'low',
+      policyAction: 'prompt',
+      description: 'missing',
+    })
+    useCodexStore.getState().addApproval({
+      id: 'approval-cross-project',
+      projectId: 'project-b',
+      threadId: 'thread-live',
+      actionType: 'exec',
+      category: 'shell',
+      riskLevel: 'low',
+      policyAction: 'prompt',
+      description: 'cross project',
+    })
+
+    expect(useCodexStore.getState().approvals).toEqual([])
+  })
+
+  it('replaces duplicate approval events instead of stacking stale copies', () => {
+    useCodexStore.getState().hydrateThreads([
+      {
+        id: 'thread-live',
+        projectId: 'project-a',
+        title: 'Live',
+        unread: false,
+        status: 'waitingApproval',
+      },
+    ])
+
+    useCodexStore.getState().addApproval({
+      id: 'approval-live',
+      projectId: 'project-a',
+      threadId: 'thread-live',
+      actionType: 'exec',
+      category: 'shell',
+      riskLevel: 'low',
+      policyAction: 'prompt',
+      description: 'first',
+    })
+    useCodexStore.getState().addApproval({
+      id: 'approval-live',
+      projectId: 'project-a',
+      threadId: 'thread-live',
+      actionType: 'exec',
+      category: 'shell',
+      riskLevel: 'low',
+      policyAction: 'prompt',
+      description: 'second',
+    })
+
+    expect(useCodexStore.getState().approvals).toHaveLength(1)
+    expect(useCodexStore.getState().approvals[0]?.description).toBe('second')
   })
 
   it('ignores attempts to activate missing or cross-project Codex threads', () => {

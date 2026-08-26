@@ -177,6 +177,16 @@ function pruneMessagesByThread(
   return next
 }
 
+function filterApprovalsForThreads(
+  approvals: CodexApproval[],
+  threads: Map<ThreadId, CodexThread>,
+) {
+  return approvals.filter((approval) => {
+    const thread = threads.get(approval.threadId)
+    return thread?.projectId === approval.projectId
+  })
+}
+
 interface CodexState {
   threads: Map<ThreadId, CodexThread>
   approvals: CodexApproval[]
@@ -246,6 +256,7 @@ export const useCodexStore = create<CodexState>((set) => ({
           messagesByThread.delete(threadId)
         }
       }
+      const approvals = filterApprovalsForThreads(s.approvals, nextThreads)
       const sidebarItems = new Map(s.sidebarItems)
       for (const [projectId, items] of sidebarItems.entries()) {
         sidebarItems.set(
@@ -257,10 +268,11 @@ export const useCodexStore = create<CodexState>((set) => ({
         )
       }
       messagesByThread = pruneMessagesByThread(messagesByThread, nextActiveThreadId)
-      return { threads: nextThreads, activeThreadId: nextActiveThreadId, messagesByThread, sidebarItems }
+      return { threads: nextThreads, activeThreadId: nextActiveThreadId, messagesByThread, approvals, sidebarItems }
     }),
 
-  hydrateApprovals: (approvals) => set({ approvals }),
+  hydrateApprovals: (approvals) =>
+    set((s) => ({ approvals: filterApprovalsForThreads(approvals, s.threads) })),
 
   hydrateMessages: (threadId, messages) =>
     set((s) => {
@@ -333,7 +345,11 @@ export const useCodexStore = create<CodexState>((set) => ({
     }),
 
   addApproval: (approval) =>
-    set((s) => ({ approvals: [...s.approvals, approval] })),
+    set((s) => {
+      const thread = s.threads.get(approval.threadId)
+      if (thread?.projectId !== approval.projectId) return {}
+      return { approvals: [...s.approvals.filter((item) => item.id !== approval.id), approval] }
+    }),
 
   resolveApproval: (id) =>
     set((s) => ({ approvals: s.approvals.filter((a) => a.id !== id) })),
