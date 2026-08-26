@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { buildProjectPrefetchPlan, ensureEditorDocument } from '@/lib/editorDocuments'
+import { buildProjectPrefetchPlan, ensureEditorDocument, readEditorDocumentSnapshot } from '@/lib/editorDocuments'
 import { fileRead } from '@/lib/backend'
 import { useEditorStore } from '@/stores/editor'
 import type { FileEntry, Tab } from '@/types'
@@ -146,5 +146,51 @@ describe('editor document prefetch planning', () => {
     })
     expect(document).not.toHaveProperty('readFailed', true)
     expect(document).not.toHaveProperty('error')
+  })
+
+  it('reads a disk snapshot without overwriting a dirty editor document', async () => {
+    useEditorStore.setState({
+      documents: new Map([
+        ['project-a:src/conflict.ts', {
+          projectId: 'project-a',
+          path: 'src/conflict.ts',
+          content: 'user edits',
+          isBinary: false,
+          sizeBytes: 10,
+          encoding: 'utf-8',
+          hasBom: false,
+          modifiedAtMs: 10,
+          versionToken: 'v1',
+          loadedAt: 1,
+          lastTouchedAt: 2,
+          syntaxMode: 'full',
+          isDirty: true,
+          isLoading: false,
+          isSaving: true,
+        }],
+      ]),
+    })
+    vi.mocked(fileRead).mockResolvedValueOnce({
+      path: 'src/conflict.ts',
+      content: 'disk edits',
+      isBinary: false,
+      sizeBytes: 10,
+      encoding: 'utf-8',
+      hasBom: false,
+      modifiedAtMs: 20,
+      versionToken: 'v2',
+    })
+
+    await expect(readEditorDocumentSnapshot('project-a', 'src/conflict.ts')).resolves.toMatchObject({
+      content: 'disk edits',
+      versionToken: 'v2',
+    })
+
+    expect(useEditorStore.getState().documents.get('project-a:src/conflict.ts')).toMatchObject({
+      content: 'user edits',
+      versionToken: 'v1',
+      isDirty: true,
+      isSaving: true,
+    })
   })
 })

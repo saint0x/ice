@@ -4,9 +4,9 @@
   "steps": [
     {
       "type": "trace_event",
-      "name": "verify_file_tree_selection_contract",
+      "name": "verify_file_and_editor_state_contract",
       "fields": {
-        "target": "frontend/stores/files"
+        "target": "frontend/stores/files+editor+lib/editorDocuments"
       }
     },
     {
@@ -14,7 +14,7 @@
       "cmd": "/bin/sh",
       "args": [
         "-lc",
-        "cd frontend && npm test -- files --run"
+        "cd frontend && npm test -- files editor editorDocuments --run"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -26,7 +26,7 @@
       "cmd": "/bin/sh",
       "args": [
         "-lc",
-        "cd frontend && npm test -- files --run"
+        "cd frontend && npm test -- files editor editorDocuments --run"
       ],
       "expect_exit": 0
     }

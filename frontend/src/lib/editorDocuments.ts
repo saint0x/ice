@@ -44,6 +44,10 @@ function toEditorDocument(projectId: string, path: string, result: Awaited<Retur
   }
 }
 
+export async function readEditorDocumentSnapshot(projectId: string, path: string) {
+  return toEditorDocument(projectId, path, await fileRead(projectId, path))
+}
+
 function collectLeafPaths(entries: FileEntry[], paths: string[], limit = Number.POSITIVE_INFINITY) {
   for (const entry of entries) {
     if (paths.length >= limit) return
@@ -94,9 +98,8 @@ export async function ensureEditorDocument(
   if (existing) return existing
 
   store.setLoading(projectId, path)
-  const loadPromise = fileRead(projectId, path)
-    .then((result) => {
-      const document = toEditorDocument(projectId, path, result)
+  const loadPromise = readEditorDocumentSnapshot(projectId, path)
+    .then((document) => {
       const state = useEditorStore.getState()
       state.hydrateDocument(document)
       state.pruneCachedDocuments()

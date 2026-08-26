@@ -7,7 +7,7 @@ import { LanguageDescription, defaultHighlightStyle, syntaxHighlighting } from '
 import { languages } from '@codemirror/language-data'
 import type { Tab } from '@/types'
 import { fileSyntaxProfile, fileSyntaxTokens, fileWriteText } from '@/lib/backend'
-import { ensureEditorDocument } from '@/lib/editorDocuments'
+import { ensureEditorDocument, readEditorDocumentSnapshot } from '@/lib/editorDocuments'
 import { tabMetaString } from '@/lib/tabMeta'
 import { useEditorStore } from '@/stores/editor'
 import { useWorkspaceStore } from '@/stores/workspace'
@@ -146,10 +146,7 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
       const message = error instanceof Error ? error.message : 'Failed to save file'
       if (message.startsWith('save conflict:')) {
         try {
-          const latest = await ensureEditorDocument(tab.projectId, filePath, { force: true })
-          if (!latest) {
-            throw new Error('Failed to reload conflicting file from disk')
-          }
+          const latest = await readEditorDocumentSnapshot(tab.projectId, filePath)
           setConflict(
             tab.projectId,
             filePath,
