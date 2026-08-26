@@ -285,6 +285,59 @@ describe('codex store reconciliation', () => {
     expect(useCodexStore.getState().messagesByThread.has('thread-stale')).toBe(false)
   })
 
+  it('reconciles sidebar Codex rows to hydrated backend threads', () => {
+    useCodexStore.setState({
+      threads: new Map([
+        ['thread-stale', {
+          id: 'thread-stale',
+          projectId: 'project-a',
+          title: 'Stale',
+          unread: false,
+          status: 'idle',
+        }],
+      ]),
+      sidebarItems: new Map([
+        ['project-a', [
+          { threadId: 'thread-stale', title: 'Stale', status: 'idle', unread: false },
+          { threadId: 'thread-live', title: 'Live', status: 'idle', unread: false },
+        ]],
+      ]),
+    })
+
+    useCodexStore.getState().hydrateThreads([
+      {
+        id: 'thread-live',
+        projectId: 'project-a',
+        title: 'Live',
+        unread: false,
+        status: 'idle',
+      },
+    ])
+
+    expect(useCodexStore.getState().sidebarItems.get('project-a')).toEqual([
+      { threadId: 'thread-live', title: 'Live', status: 'idle', unread: false },
+    ])
+  })
+
+  it('drops stale Codex sidebar rows during sidebar hydration', () => {
+    useCodexStore.getState().hydrateThreads([
+      {
+        id: 'thread-live',
+        projectId: 'project-a',
+        title: 'Live',
+        unread: false,
+        status: 'idle',
+      },
+    ])
+
+    useCodexStore.getState().hydrateSidebarItems('project-a', [
+      { threadId: 'thread-live', title: 'Live', status: 'idle', unread: false },
+      { threadId: 'thread-missing', title: 'Missing', status: 'idle', unread: false },
+    ])
+
+    expect(useCodexStore.getState().sidebarItems.get('project-a')?.map((item) => item.threadId)).toEqual(['thread-live'])
+  })
+
   it('ignores attempts to activate missing or cross-project Codex threads', () => {
     useCodexStore.getState().hydrateThreads([
       {

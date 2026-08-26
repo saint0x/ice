@@ -48,13 +48,26 @@ export const useBrowserStore = create<BrowserState>((set) => ({
           runtimeNotices.delete(tabId)
         }
       }
-      return { tabs: nextTabs, activeTabId: nextActiveTabId, runtimeNotices }
+      const sidebarItems = new Map(s.sidebarItems)
+      for (const [projectId, items] of sidebarItems.entries()) {
+        sidebarItems.set(
+          projectId,
+          items.filter((item) => {
+            const tab = nextTabs.get(item.tabId)
+            return tab?.projectId === projectId
+          }),
+        )
+      }
+      return { tabs: nextTabs, activeTabId: nextActiveTabId, sidebarItems, runtimeNotices }
     }),
 
   hydrateSidebarItems: (projectId, items) =>
     set((s) => {
       const sidebarItems = new Map(s.sidebarItems)
-      sidebarItems.set(projectId, items)
+      sidebarItems.set(
+        projectId,
+        items.filter((item) => s.tabs.get(item.tabId)?.projectId === projectId),
+      )
       return { sidebarItems }
     }),
 
@@ -82,7 +95,12 @@ export const useBrowserStore = create<BrowserState>((set) => ({
         const remaining = [...tabs.values()].filter((candidate) => candidate.projectId === tab.projectId)
         activeTabId.set(tab.projectId, remaining[0]?.id ?? null)
       }
-      return { tabs, activeTabId, runtimeNotices }
+      const sidebarItems = new Map(s.sidebarItems)
+      const projectItems = sidebarItems.get(tab.projectId)
+      if (projectItems) {
+        sidebarItems.set(tab.projectId, projectItems.filter((item) => item.tabId !== tabId))
+      }
+      return { tabs, activeTabId, sidebarItems, runtimeNotices }
     }),
 
   setActiveTab: (projectId, tabId) =>

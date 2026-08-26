@@ -65,6 +65,50 @@ describe('browser store hydration', () => {
     expect(state.runtimeNotices.has('browser-live')).toBe(true)
   })
 
+  it('reconciles sidebar browser rows to hydrated backend tabs', () => {
+    useBrowserStore.setState({
+      tabs: new Map([
+        ['browser-stale', {
+          ...browserTab,
+          id: 'browser-stale',
+        }],
+      ]),
+      activeTabId: new Map(),
+      sidebarItems: new Map([
+        ['project-1', [
+          { tabId: 'browser-stale', title: 'Stale', url: 'https://example.com/stale', isPinned: false, isLoading: false, isSecure: true },
+          { tabId: 'browser-live', title: 'Live', url: 'https://example.com', isPinned: false, isLoading: false, isSecure: true },
+        ]],
+      ]),
+      runtimeNotices: new Map(),
+    })
+
+    useBrowserStore.getState().hydrateTabs([browserTab])
+
+    expect(useBrowserStore.getState().sidebarItems.get('project-1')).toEqual([
+      { tabId: 'browser-live', title: 'Live', url: 'https://example.com', isPinned: false, isLoading: false, isSecure: true },
+    ])
+  })
+
+  it('drops stale browser sidebar rows during sidebar hydration and tab close', () => {
+    useBrowserStore.setState({
+      tabs: new Map([['browser-live', browserTab]]),
+      activeTabId: new Map([['project-1', 'browser-live']]),
+      sidebarItems: new Map(),
+      runtimeNotices: new Map(),
+    })
+
+    useBrowserStore.getState().hydrateSidebarItems('project-1', [
+      { tabId: 'browser-live', title: 'Live', url: 'https://example.com', isPinned: false, isLoading: false, isSecure: true },
+      { tabId: 'browser-missing', title: 'Missing', url: 'https://example.com/missing', isPinned: false, isLoading: false, isSecure: true },
+    ])
+    expect(useBrowserStore.getState().sidebarItems.get('project-1')?.map((item) => item.tabId)).toEqual(['browser-live'])
+
+    useBrowserStore.getState().closeTab('browser-live')
+
+    expect(useBrowserStore.getState().sidebarItems.get('project-1')).toEqual([])
+  })
+
   it('ignores attempts to activate missing or cross-project browser tabs', () => {
     useBrowserStore.setState({
       tabs: new Map([

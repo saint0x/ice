@@ -243,8 +243,18 @@ export const useCodexStore = create<CodexState>((set) => ({
           messagesByThread.delete(threadId)
         }
       }
+      const sidebarItems = new Map(s.sidebarItems)
+      for (const [projectId, items] of sidebarItems.entries()) {
+        sidebarItems.set(
+          projectId,
+          items.filter((item) => {
+            const thread = nextThreads.get(item.threadId)
+            return thread?.projectId === projectId
+          }),
+        )
+      }
       messagesByThread = pruneMessagesByThread(messagesByThread, nextActiveThreadId)
-      return { threads: nextThreads, activeThreadId: nextActiveThreadId, messagesByThread }
+      return { threads: nextThreads, activeThreadId: nextActiveThreadId, messagesByThread, sidebarItems }
     }),
 
   hydrateApprovals: (approvals) => set({ approvals }),
@@ -259,7 +269,10 @@ export const useCodexStore = create<CodexState>((set) => ({
   hydrateSidebarItems: (projectId, items) =>
     set((s) => {
       const sidebarItems = new Map(s.sidebarItems)
-      sidebarItems.set(projectId, items)
+      sidebarItems.set(
+        projectId,
+        items.filter((item) => s.threads.get(item.threadId)?.projectId === projectId),
+      )
       return { sidebarItems }
     }),
 
