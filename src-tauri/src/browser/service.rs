@@ -156,7 +156,7 @@ impl BrowserService {
             is_pinned: false,
             can_go_back: false,
             can_go_forward: false,
-            is_loading: url != DEFAULT_BROWSER_URL,
+            is_loading: browser_url_enters_loading(&url),
             favicon_url: None,
             security_origin: browser_security_origin(&url),
             is_secure: is_secure_url(&url),
@@ -210,7 +210,7 @@ impl BrowserService {
             trim_browser_history(tab);
             tab.record.url = url.clone();
             tab.record.title = title;
-            tab.record.is_loading = url != DEFAULT_BROWSER_URL;
+            tab.record.is_loading = browser_url_enters_loading(&url);
             tab.record.security_origin = browser_security_origin(&url);
             tab.record.is_secure = is_secure_url(&url);
             refresh_record_navigation(tab);
@@ -272,7 +272,8 @@ impl BrowserService {
                     }
                 }
                 if let Some(is_loading) = update.is_loading {
-                    state.record.is_loading = is_loading;
+                    state.record.is_loading =
+                        is_loading && browser_url_enters_loading(&state.record.url);
                 }
                 if let Some(favicon_url) = update.favicon_url.clone() {
                     state.record.favicon_url = favicon_url;
@@ -571,7 +572,7 @@ impl BrowserService {
     pub async fn reload(&self, tab_id: &str) -> Result<BrowserTabRecord> {
         let record = self
             .update_tab(tab_id, |state| {
-                state.record.is_loading = true;
+                state.record.is_loading = browser_url_enters_loading(&state.record.url);
             })?
             .ok_or_else(|| anyhow!("unknown browser tab"))?;
         self.persistence.upsert_browser_tab(record.clone()).await?;
@@ -695,7 +696,7 @@ impl BrowserService {
             let current = tab.history[tab.current_index].clone();
             tab.record.url = current.url.clone();
             tab.record.title = current.title;
-            tab.record.is_loading = true;
+            tab.record.is_loading = browser_url_enters_loading(&current.url);
             tab.record.security_origin = browser_security_origin(&current.url);
             tab.record.is_secure = is_secure_url(&current.url);
             refresh_record_navigation(tab);
@@ -744,7 +745,7 @@ impl BrowserService {
                 state.record.title = title;
             }
             state.record.url = url_string.clone();
-            state.record.is_loading = true;
+            state.record.is_loading = browser_url_enters_loading(&url_string);
             state.record.security_origin = browser_security_origin(&url_string);
             state.record.is_secure = is_secure_url(&url_string);
             refresh_record_navigation(state);
@@ -760,8 +761,9 @@ impl BrowserService {
 
     fn handle_native_page_load(&self, tab_id: &str, url: String, finished: bool) {
         if let Ok(Some(record)) = self.update_tab(tab_id, |state| {
+            let url = normalize_browser_url(Some(url.clone()));
             state.record.url = url.clone();
-            state.record.is_loading = !finished;
+            state.record.is_loading = !finished && browser_url_enters_loading(&url);
             state.record.security_origin = browser_security_origin(&url);
             state.record.is_secure = is_secure_url(&url);
             refresh_record_navigation(state);
@@ -958,6 +960,10 @@ fn normalize_browser_title(title: Option<String>, fallback: &str) -> String {
         .filter(|value| !value.is_empty())
         .unwrap_or(fallback)
         .to_string()
+}
+
+fn browser_url_enters_loading(url: &str) -> bool {
+    url != DEFAULT_BROWSER_URL
 }
 
 fn load_browser_tabs_for_startup(
@@ -1261,10 +1267,10 @@ fn browser_runtime_init_script(tab_id: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        browser_security_origin, is_secure_url, load_browser_tabs_for_startup,
-        normalize_browser_title, normalize_browser_url, trim_browser_history, BrowserHistoryEntry,
-        BrowserTabRecord, BrowserTabState, DEFAULT_BROWSER_TITLE, DEFAULT_BROWSER_URL,
-        MAX_BROWSER_HISTORY_ENTRIES,
+        browser_security_origin, browser_url_enters_loading, is_secure_url,
+        load_browser_tabs_for_startup, normalize_browser_title, normalize_browser_url,
+        trim_browser_history, BrowserHistoryEntry, BrowserTabRecord, BrowserTabState,
+        DEFAULT_BROWSER_TITLE, DEFAULT_BROWSER_URL, MAX_BROWSER_HISTORY_ENTRIES,
     };
     use crate::persistence::db::PersistenceService;
     use tempfile::tempdir;
@@ -1298,6 +1304,8 @@ mod tests {
             normalize_browser_title(Some("  ".to_string()), DEFAULT_BROWSER_TITLE),
             DEFAULT_BROWSER_TITLE
         );
+        assert!(!browser_url_enters_loading(DEFAULT_BROWSER_URL));
+        assert!(browser_url_enters_loading("https://example.com"));
     }
 
     #[test]
