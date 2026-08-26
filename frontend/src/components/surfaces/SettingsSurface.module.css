@@ -118,6 +118,15 @@
   background: var(--bg-element-selected);
 }
 
+.dangerArmed {
+  background: color-mix(in srgb, var(--color-error) 16%, var(--bg-element));
+  color: var(--color-error);
+}
+
+.dangerArmed:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-error) 24%, var(--bg-element-selected));
+}
+
 .iconBtn:disabled {
   color: var(--text-disabled);
   cursor: not-allowed;

@@ -17,6 +17,7 @@ import {
   toFileTree,
 } from '@/lib/backend'
 import { ensureEditorDocument } from '@/lib/editorDocuments'
+import { resolveDeleteIntent } from '@/lib/fileMutationState'
 import { closeWorkspaceTabsForEditorPath, openOrFocusEditorWorkspaceTab, renameWorkspaceEditorPath } from '@/lib/workspaceTabs'
 import { tabMetaUtilityTool } from '@/lib/tabMeta'
 import { useNotificationsStore } from '@/stores/notifications'
@@ -60,9 +61,11 @@ export const SettingsSurface = memo(function SettingsSurface({ tab }: Props) {
   const [isLoading, setIsLoading] = useState(false)
   const [isFileMutating, setIsFileMutating] = useState(false)
   const [surfaceError, setSurfaceError] = useState<string | null>(null)
+  const [deleteArmedPath, setDeleteArmedPath] = useState<string | null>(null)
 
   useEffect(() => {
     setRenamePath(selectedPath ?? '')
+    setDeleteArmedPath(null)
   }, [selectedPath])
 
   useEffect(() => {
@@ -213,7 +216,10 @@ export const SettingsSurface = memo(function SettingsSurface({ tab }: Props) {
   }
 
   const deleteSelectedFile = async () => {
-    if (!selectedPath) return
+    const intent = resolveDeleteIntent(selectedPath, deleteArmedPath)
+    setDeleteArmedPath(intent.armedPath)
+    if (!selectedPath || !intent.confirmed) return
+
     setIsFileMutating(true)
     setSurfaceError(null)
     try {
@@ -226,6 +232,7 @@ export const SettingsSurface = memo(function SettingsSurface({ tab }: Props) {
       setSurfaceError(message)
       pushError('File delete failed', error, message)
     } finally {
+      setDeleteArmedPath(null)
       setIsFileMutating(false)
     }
   }
@@ -290,7 +297,12 @@ export const SettingsSurface = memo(function SettingsSurface({ tab }: Props) {
                 <button className={styles.iconBtn} title="Rename selected file" onClick={() => void renameSelectedFile()} disabled={isFileMutating || !selectedPath || !normalizeRelativePath(renamePath) || normalizeRelativePath(renamePath) === selectedPath}>
                   <Pencil size={12} />
                 </button>
-                <button className={styles.iconBtn} title="Delete selected file" onClick={() => void deleteSelectedFile()} disabled={isFileMutating || !selectedPath}>
+                <button
+                  className={`${styles.iconBtn} ${deleteArmedPath === selectedPath ? styles.dangerArmed : ''}`}
+                  title={deleteArmedPath === selectedPath ? 'Confirm delete selected file' : 'Delete selected file'}
+                  onClick={() => void deleteSelectedFile()}
+                  disabled={isFileMutating || !selectedPath}
+                >
                   <Trash2 size={12} />
                 </button>
               </div>
