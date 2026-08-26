@@ -6,6 +6,7 @@ import {
   closeWorkspaceTabsForBrowserTab,
   closeWorkspaceTabsForProject,
   closeWorkspaceTabsForTerminalSession,
+  reconcileWorkspaceBackingResources,
 } from '@/lib/workspaceTabs'
 import { browserTabClose, terminalClose } from '@/lib/backend'
 import { useBrowserStore } from '@/stores/browser'
@@ -423,5 +424,141 @@ describe('closeWorkspaceTab', () => {
     closeWorkspaceTabsForProject('project-1')
 
     expect([...useWorkspaceStore.getState().tabs.values()].map((tab) => tab.projectId)).toEqual(['project-2'])
+  })
+
+  it('removes restored browser and terminal workspace tabs whose backing resources are absent', () => {
+    useWorkspaceStore.setState({
+      layout: {
+        id: 'split-root',
+        type: 'split',
+        direction: 'horizontal',
+        ratio: 0.5,
+        children: [
+          {
+            id: 'pane-1',
+            type: 'leaf',
+            tabs: ['tab-browser-live', 'tab-browser-stale', 'tab-browser-missing-meta'],
+            activeTabId: 'tab-browser-stale',
+          },
+          {
+            id: 'pane-2',
+            type: 'leaf',
+            tabs: ['tab-terminal-live', 'tab-terminal-stale', 'tab-editor-live', 'tab-git-live'],
+            activeTabId: 'tab-terminal-stale',
+          },
+        ],
+      },
+      tabs: new Map([
+        ['tab-browser-live', {
+          id: 'tab-browser-live',
+          projectId: 'project-1',
+          type: 'browser',
+          title: 'Docs',
+          meta: { tabId: 'browser-live' },
+        }],
+        ['tab-browser-stale', {
+          id: 'tab-browser-stale',
+          projectId: 'project-1',
+          type: 'browser',
+          title: 'Old docs',
+          meta: { tabId: 'browser-stale' },
+        }],
+        ['tab-browser-missing-meta', {
+          id: 'tab-browser-missing-meta',
+          projectId: 'project-1',
+          type: 'browser',
+          title: 'Unknown browser',
+        }],
+        ['tab-terminal-live', {
+          id: 'tab-terminal-live',
+          projectId: 'project-1',
+          type: 'terminal',
+          title: 'zsh',
+          meta: { sessionId: 'terminal-live' },
+        }],
+        ['tab-terminal-stale', {
+          id: 'tab-terminal-stale',
+          projectId: 'project-1',
+          type: 'terminal',
+          title: 'old zsh',
+          meta: { sessionId: 'terminal-stale' },
+        }],
+        ['tab-editor-live', {
+          id: 'tab-editor-live',
+          projectId: 'project-1',
+          type: 'editor',
+          title: 'index.ts',
+          meta: { path: 'index.ts' },
+        }],
+        ['tab-git-live', {
+          id: 'tab-git-live',
+          projectId: 'project-1',
+          type: 'git',
+          title: 'Git',
+        }],
+      ]),
+      activePaneId: 'pane-2',
+      pendingFocusPaneId: null,
+      sidebarOpen: true,
+      sidebarWidth: 240,
+      bottomDockOpen: true,
+      bottomDockHeight: 240,
+      chatPanelOpen: false,
+      chatPanelWidth: 360,
+    })
+
+    reconcileWorkspaceBackingResources({
+      browserTabIds: ['browser-live'],
+      terminalSessionIds: ['terminal-live'],
+    })
+
+    const state = useWorkspaceStore.getState()
+    expect([...state.tabs.keys()]).toEqual([
+      'tab-browser-live',
+      'tab-terminal-live',
+      'tab-editor-live',
+      'tab-git-live',
+    ])
+    expect(state.layout).toMatchObject({
+      type: 'split',
+      children: [
+        {
+          id: 'pane-1',
+          tabs: ['tab-browser-live'],
+          activeTabId: 'tab-browser-live',
+        },
+        {
+          id: 'pane-2',
+          tabs: ['tab-terminal-live', 'tab-editor-live', 'tab-git-live'],
+          activeTabId: 'tab-git-live',
+        },
+      ],
+    })
+  })
+
+  it('keeps terminal workspace tabs whose tab id is the live backing session id', () => {
+    useWorkspaceStore.setState((state) => ({
+      tabs: new Map([
+        ['terminal-1', {
+          ...state.tabs.get('tab-1')!,
+          id: 'terminal-1',
+          type: 'terminal',
+          meta: undefined,
+        }],
+      ]),
+      layout: {
+        id: 'pane-1',
+        type: 'leaf',
+        tabs: ['terminal-1'],
+        activeTabId: 'terminal-1',
+      },
+    }))
+
+    reconcileWorkspaceBackingResources({
+      browserTabIds: [],
+      terminalSessionIds: ['terminal-1'],
+    })
+
+    expect(useWorkspaceStore.getState().tabs.has('terminal-1')).toBe(true)
   })
 })

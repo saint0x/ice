@@ -36,7 +36,7 @@ import {
 } from '@/lib/backend'
 import { prefetchProjectDocuments as prefetchEditorProjectDocuments } from '@/lib/editorDocuments'
 import { logFrontendEvent } from '@/lib/diagnostics'
-import { closeWorkspaceTabsForBrowserTab, closeWorkspaceTabsForTerminalSession } from '@/lib/workspaceTabs'
+import { closeWorkspaceTabsForBrowserTab, closeWorkspaceTabsForTerminalSession, reconcileWorkspaceBackingResources } from '@/lib/workspaceTabs'
 import { useFilesStore } from '@/stores/files'
 import { useGitStore } from '@/stores/git'
 import { useNotificationsStore } from '@/stores/notifications'
@@ -205,8 +205,14 @@ export function useBackendIntegration() {
         codexApprovalsList(),
       ])
       if (disposed) return
-      hydrateBrowserTabs(browserTabs.map(toBrowserTab))
-      hydrateSessions(terminalSessions.map(toTerminalSession))
+      const hydratedBrowserTabs = browserTabs.map(toBrowserTab)
+      const hydratedTerminalSessions = terminalSessions.map(toTerminalSession)
+      hydrateBrowserTabs(hydratedBrowserTabs)
+      hydrateSessions(hydratedTerminalSessions)
+      reconcileWorkspaceBackingResources({
+        browserTabIds: hydratedBrowserTabs.map((tab) => tab.id),
+        terminalSessionIds: hydratedTerminalSessions.map((session) => session.id),
+      })
       hydrateThreads(codexThreads.map(toCodexThread))
       hydrateApprovals(pendingApprovals.map(toCodexApproval))
       hydratedRef.current = true

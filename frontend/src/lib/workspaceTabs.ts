@@ -5,6 +5,7 @@ import { useWorkspaceStore } from '@/stores/workspace'
 import type { PaneId, PaneLayout, TabId } from '@/types'
 
 type BackingResource = 'browser' | 'terminal'
+type WorkspaceTabRecord = ReturnType<typeof useWorkspaceStore.getState>['tabs'] extends Map<TabId, infer T> ? T : never
 
 function collectTabsByBackingResource(
   node: PaneLayout,
@@ -46,6 +47,27 @@ function collectTabsByProjectId(
 
   for (const child of node.children) {
     collectTabsByProjectId(child, tabs, projectId, matches)
+  }
+}
+
+function collectTabsByPredicate(
+  node: PaneLayout,
+  tabs: ReturnType<typeof useWorkspaceStore.getState>['tabs'],
+  matches: Array<{ paneId: PaneId; tabId: TabId }>,
+  predicate: (tab: WorkspaceTabRecord) => boolean,
+) {
+  if (node.type === 'leaf') {
+    for (const tabId of node.tabs) {
+      const tab = tabs.get(tabId)
+      if (tab && predicate(tab)) {
+        matches.push({ paneId: node.id, tabId })
+      }
+    }
+    return
+  }
+
+  for (const child of node.children) {
+    collectTabsByPredicate(child, tabs, matches, predicate)
   }
 }
 
@@ -110,6 +132,37 @@ export function closeWorkspaceTabsForProject(projectId: string) {
   const workspace = useWorkspaceStore.getState()
   const matches: Array<{ paneId: PaneId; tabId: TabId }> = []
   collectTabsByProjectId(workspace.layout, workspace.tabs, projectId, matches)
+  for (const match of matches) {
+    useWorkspaceStore.getState().closeTab(match.paneId, match.tabId)
+  }
+}
+
+export function reconcileWorkspaceBackingResources(input: {
+  browserTabIds: Iterable<string>
+  terminalSessionIds: Iterable<string>
+}) {
+  const browserTabIds = new Set(input.browserTabIds)
+  const terminalSessionIds = new Set(input.terminalSessionIds)
+  const workspace = useWorkspaceStore.getState()
+  const matches: Array<{ paneId: PaneId; tabId: TabId }> = []
+
+  collectTabsByPredicate(
+    workspace.layout,
+    workspace.tabs,
+    matches,
+    (tab) => {
+      if (tab.type === 'browser') {
+        const browserTabId = typeof tab.meta?.tabId === 'string' ? tab.meta.tabId : null
+        return !browserTabId || !browserTabIds.has(browserTabId)
+      }
+      if (tab.type === 'terminal') {
+        const terminalSessionId = typeof tab.meta?.sessionId === 'string' ? tab.meta.sessionId : tab.id
+        return !terminalSessionIds.has(terminalSessionId)
+      }
+      return false
+    },
+  )
+
   for (const match of matches) {
     useWorkspaceStore.getState().closeTab(match.paneId, match.tabId)
   }
