@@ -227,8 +227,13 @@ export const BottomDock = memo(function BottomDock() {
               }}
               onAuxClick={(e) => {
                 if (e.button === 1) {
-                  closeSession(session.id)
-                  void terminalClose(session.id)
+                  void terminalClose(session.id).then(() => {
+                    closeSession(session.id)
+                  }).catch((error: unknown) => {
+                    const message = error instanceof Error ? error.message : 'Failed to close terminal'
+                    setSurfaceError(message)
+                    pushError('Terminal close failed', error, message)
+                  })
                 }
               }}
             >

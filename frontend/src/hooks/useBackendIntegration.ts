@@ -36,7 +36,7 @@ import {
 } from '@/lib/backend'
 import { prefetchProjectDocuments as prefetchEditorProjectDocuments } from '@/lib/editorDocuments'
 import { logFrontendEvent } from '@/lib/diagnostics'
-import { closeWorkspaceTabsForBrowserTab } from '@/lib/workspaceTabs'
+import { closeWorkspaceTabsForBrowserTab, closeWorkspaceTabsForTerminalSession } from '@/lib/workspaceTabs'
 import { useFilesStore } from '@/stores/files'
 import { useGitStore } from '@/stores/git'
 import { useNotificationsStore } from '@/stores/notifications'
@@ -303,6 +303,7 @@ export function useBackendIntegration() {
       }
       if (payload.type === 'sessionClosed' && payload.sessionId) {
         closeSession(payload.sessionId)
+        closeWorkspaceTabsForTerminalSession(payload.sessionId)
       }
     }).then((unlisten) => {
       terminalUnlisten = unlisten

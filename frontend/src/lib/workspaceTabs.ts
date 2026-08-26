@@ -1,18 +1,23 @@
-import { browserTabClose } from '@/lib/backend'
+import { browserTabClose, terminalClose } from '@/lib/backend'
 import { useBrowserStore } from '@/stores/browser'
+import { useTerminalStore } from '@/stores/terminal'
 import { useWorkspaceStore } from '@/stores/workspace'
 import type { PaneId, PaneLayout, TabId } from '@/types'
 
-function collectTabsByBrowserTabId(
+type BackingResource = 'browser' | 'terminal'
+
+function collectTabsByBackingResource(
   node: PaneLayout,
   tabs: ReturnType<typeof useWorkspaceStore.getState>['tabs'],
-  browserTabId: string,
+  resource: BackingResource,
+  resourceId: string,
   matches: Array<{ paneId: PaneId; tabId: TabId }>,
 ) {
   if (node.type === 'leaf') {
     for (const tabId of node.tabs) {
       const tab = tabs.get(tabId)
-      if (tab?.type === 'browser' && tab.meta?.tabId === browserTabId) {
+      const metaKey = resource === 'browser' ? 'tabId' : 'sessionId'
+      if (tab?.type === resource && tab.meta?.[metaKey] === resourceId) {
         matches.push({ paneId: node.id, tabId })
       }
     }
@@ -20,7 +25,7 @@ function collectTabsByBrowserTabId(
   }
 
   for (const child of node.children) {
-    collectTabsByBrowserTabId(child, tabs, browserTabId, matches)
+    collectTabsByBackingResource(child, tabs, resource, resourceId, matches)
   }
 }
 
@@ -36,13 +41,30 @@ export async function closeWorkspaceTab(paneId: PaneId, tabId: TabId) {
     useBrowserStore.getState().closeTab(browserTabId)
   }
 
+  const terminalSessionId = tab?.type === 'terminal'
+    ? ((typeof tab.meta?.sessionId === 'string' && tab.meta.sessionId) || tab.id)
+    : null
+  if (terminalSessionId && useTerminalStore.getState().sessions.has(terminalSessionId)) {
+    await terminalClose(terminalSessionId)
+    useTerminalStore.getState().closeSession(terminalSessionId)
+  }
+
   useWorkspaceStore.getState().closeTab(paneId, tabId)
 }
 
 export function closeWorkspaceTabsForBrowserTab(browserTabId: string) {
   const workspace = useWorkspaceStore.getState()
   const matches: Array<{ paneId: PaneId; tabId: TabId }> = []
-  collectTabsByBrowserTabId(workspace.layout, workspace.tabs, browserTabId, matches)
+  collectTabsByBackingResource(workspace.layout, workspace.tabs, 'browser', browserTabId, matches)
+  for (const match of matches) {
+    useWorkspaceStore.getState().closeTab(match.paneId, match.tabId)
+  }
+}
+
+export function closeWorkspaceTabsForTerminalSession(sessionId: string) {
+  const workspace = useWorkspaceStore.getState()
+  const matches: Array<{ paneId: PaneId; tabId: TabId }> = []
+  collectTabsByBackingResource(workspace.layout, workspace.tabs, 'terminal', sessionId, matches)
   for (const match of matches) {
     useWorkspaceStore.getState().closeTab(match.paneId, match.tabId)
   }
