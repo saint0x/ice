@@ -5,7 +5,6 @@ interface FilesState {
   trees: Map<ProjectId, FileEntry[]>
   selectedPath: Map<ProjectId, string | null>
   hydrateTree: (projectId: ProjectId, tree: FileEntry[]) => void
-  setTree: (projectId: ProjectId, tree: FileEntry[]) => void
   toggleExpand: (projectId: ProjectId, path: string) => void
   setSelected: (projectId: ProjectId, path: string) => void
 }
@@ -62,13 +61,6 @@ export const useFilesStore = create<FilesState>((set) => ({
         }
       }
       return { trees, selectedPath }
-    }),
-
-  setTree: (projectId, tree) =>
-    set((s) => {
-      const trees = new Map(s.trees)
-      trees.set(projectId, tree)
-      return { trees }
     }),
 
   toggleExpand: (projectId, path) =>
