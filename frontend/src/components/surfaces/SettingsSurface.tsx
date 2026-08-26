@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Bug, CheckCircle, FileSearch, FolderTree, Loader2, PlaySquare } from 'lucide-react'
+import { AlertTriangle, Bug, CheckCircle, FileSearch, FolderPlus, FolderTree, Loader2, Pencil, PlaySquare, Trash2 } from 'lucide-react'
 import type { Tab } from '@/types'
 import { createAndFocusTerminalSession } from '@/lib/terminalSessions'
 import {
@@ -7,15 +7,21 @@ import {
   appHealth,
   codexRuntimeInfo,
   codexStatus,
+  dirCreate,
+  entryDelete,
+  entryRename,
   fileSearchPaths,
   fileSearchText,
   projectSnapshot,
+  projectTreeReadNested,
+  toFileTree,
 } from '@/lib/backend'
 import { ensureEditorDocument } from '@/lib/editorDocuments'
-import { openOrFocusEditorWorkspaceTab } from '@/lib/workspaceTabs'
+import { closeWorkspaceTabsForEditorPath, openOrFocusEditorWorkspaceTab, renameWorkspaceEditorPath } from '@/lib/workspaceTabs'
 import { tabMetaUtilityTool } from '@/lib/tabMeta'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useFilesStore } from '@/stores/files'
+import { useEditorStore } from '@/stores/editor'
 import { FileTree } from '@/components/sidebar/FileTree'
 import styles from './SettingsSurface.module.css'
 
@@ -28,10 +34,17 @@ const EMPTY_TREE = [] as const
 export const SettingsSurface = memo(function SettingsSurface({ tab }: Props) {
   const tool = tabMetaUtilityTool(tab)
   const storedTree = useFilesStore((state) => state.trees.get(tab.projectId))
+  const selectedPath = useFilesStore((state) => state.selectedPath.get(tab.projectId) ?? null)
+  const hydrateTree = useFilesStore((state) => state.hydrateTree)
+  const setSelected = useFilesStore((state) => state.setSelected)
+  const removeEditorDocument = useEditorStore((state) => state.removeDocument)
+  const renameEditorDocument = useEditorStore((state) => state.renameDocument)
   const pushError = useNotificationsStore((state) => state.pushError)
   const tree = storedTree ?? EMPTY_TREE
 
   const [query, setQuery] = useState('')
+  const [newDirPath, setNewDirPath] = useState('')
+  const [renamePath, setRenamePath] = useState('')
   const [pathResults, setPathResults] = useState<string[]>([])
   const [textResults, setTextResults] = useState<Array<{
     path: string
@@ -45,7 +58,12 @@ export const SettingsSurface = memo(function SettingsSurface({ tab }: Props) {
   const [auditLog, setAuditLog] = useState<Array<Record<string, unknown>>>([])
   const [debugSnapshot, setDebugSnapshot] = useState<Record<string, unknown> | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [isFileMutating, setIsFileMutating] = useState(false)
   const [surfaceError, setSurfaceError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setRenamePath(selectedPath ?? '')
+  }, [selectedPath])
 
   useEffect(() => {
     if (tool !== 'diagnostics' && tool !== 'debug') return
@@ -150,6 +168,68 @@ export const SettingsSurface = memo(function SettingsSurface({ tab }: Props) {
     }
   }
 
+  const refreshFiles = async () => {
+    const nextTree = await projectTreeReadNested(tab.projectId)
+    hydrateTree(tab.projectId, toFileTree(nextTree))
+  }
+
+  const createDirectory = async () => {
+    const path = normalizeRelativePath(newDirPath)
+    if (!path) return
+    setIsFileMutating(true)
+    setSurfaceError(null)
+    try {
+      await dirCreate({ projectId: tab.projectId, path })
+      setNewDirPath('')
+      await refreshFiles()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to create folder'
+      setSurfaceError(message)
+      pushError('Folder create failed', error, message)
+    } finally {
+      setIsFileMutating(false)
+    }
+  }
+
+  const renameSelectedFile = async () => {
+    if (!selectedPath) return
+    const to = normalizeRelativePath(renamePath)
+    if (!to || to === selectedPath) return
+    setIsFileMutating(true)
+    setSurfaceError(null)
+    try {
+      await entryRename({ projectId: tab.projectId, from: selectedPath, to })
+      renameEditorDocument(tab.projectId, selectedPath, to)
+      renameWorkspaceEditorPath(tab.projectId, selectedPath, to)
+      setSelected(tab.projectId, to)
+      await refreshFiles()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to rename file'
+      setSurfaceError(message)
+      pushError('File rename failed', error, message)
+    } finally {
+      setIsFileMutating(false)
+    }
+  }
+
+  const deleteSelectedFile = async () => {
+    if (!selectedPath) return
+    setIsFileMutating(true)
+    setSurfaceError(null)
+    try {
+      await entryDelete({ projectId: tab.projectId, path: selectedPath })
+      removeEditorDocument(tab.projectId, selectedPath)
+      closeWorkspaceTabsForEditorPath(tab.projectId, selectedPath)
+      await refreshFiles()
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete file'
+      setSurfaceError(message)
+      pushError('File delete failed', error, message)
+    } finally {
+      setIsFileMutating(false)
+    }
+  }
+
   return (
     <div className={styles.surface}>
       <div className={styles.header}>
@@ -172,6 +252,49 @@ export const SettingsSurface = memo(function SettingsSurface({ tab }: Props) {
           <div className={styles.summaryCard}>
             <div className={styles.summaryRow}><span>Directories</span><strong>{treeStats.dirs}</strong></div>
             <div className={styles.summaryRow}><span>Files</span><strong>{treeStats.files}</strong></div>
+            <div className={styles.fileActions}>
+              <div className={styles.inlineAction}>
+                <input
+                  className={styles.compactInput}
+                  value={newDirPath}
+                  onChange={(event) => setNewDirPath(event.target.value)}
+                  placeholder="new/folder"
+                  spellCheck={false}
+                  disabled={isFileMutating}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      void createDirectory()
+                    }
+                  }}
+                />
+                <button className={styles.iconBtn} title="Create folder" onClick={() => void createDirectory()} disabled={isFileMutating || !normalizeRelativePath(newDirPath)}>
+                  {isFileMutating ? <Loader2 size={12} className={styles.spinner} /> : <FolderPlus size={12} />}
+                </button>
+              </div>
+              <div className={styles.inlineAction}>
+                <input
+                  className={styles.compactInput}
+                  value={renamePath}
+                  onChange={(event) => setRenamePath(event.target.value)}
+                  placeholder="selected/path.ts"
+                  spellCheck={false}
+                  disabled={isFileMutating || !selectedPath}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      void renameSelectedFile()
+                    }
+                  }}
+                />
+                <button className={styles.iconBtn} title="Rename selected file" onClick={() => void renameSelectedFile()} disabled={isFileMutating || !selectedPath || !normalizeRelativePath(renamePath) || normalizeRelativePath(renamePath) === selectedPath}>
+                  <Pencil size={12} />
+                </button>
+                <button className={styles.iconBtn} title="Delete selected file" onClick={() => void deleteSelectedFile()} disabled={isFileMutating || !selectedPath}>
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            </div>
             <button className={styles.actionBtn} onClick={() => void createTerminal()}>
               <PlaySquare size={12} />
               <span>Run in terminal</span>
@@ -281,3 +404,10 @@ export const SettingsSurface = memo(function SettingsSurface({ tab }: Props) {
     </div>
   )
 })
+
+function normalizeRelativePath(path: string) {
+  return path
+    .trim()
+    .replace(/^\/+/, '')
+    .replace(/\/{2,}/g, '/')
+}

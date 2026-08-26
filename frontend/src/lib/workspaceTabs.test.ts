@@ -3,6 +3,7 @@ import {
   closeBrowserTabEverywhere,
   closeTerminalSessionEverywhere,
   closeWorkspaceTab,
+  closeWorkspaceTabsForEditorPath,
   closeWorkspaceTabsForBrowserTab,
   closeWorkspaceTabsForProject,
   closeWorkspaceTabsForTerminalSession,
@@ -10,6 +11,7 @@ import {
   openOrFocusCodexWorkspaceTab,
   openOrFocusEditorWorkspaceTab,
   reconcileWorkspaceBackingResources,
+  renameWorkspaceEditorPath,
 } from '@/lib/workspaceTabs'
 import { browserTabClose, terminalClose } from '@/lib/backend'
 import { useBrowserStore } from '@/stores/browser'
@@ -427,6 +429,112 @@ describe('closeWorkspaceTab', () => {
     closeWorkspaceTabsForProject('project-1')
 
     expect([...useWorkspaceStore.getState().tabs.values()].map((tab) => tab.projectId)).toEqual(['project-2'])
+  })
+
+  it('removes every workspace tab for a deleted editor path', () => {
+    useWorkspaceStore.setState({
+      layout: {
+        id: 'split-root',
+        type: 'split',
+        direction: 'horizontal',
+        ratio: 0.5,
+        children: [
+          {
+            id: 'pane-1',
+            type: 'leaf',
+            tabs: ['tab-1'],
+            activeTabId: 'tab-1',
+          },
+          {
+            id: 'pane-2',
+            type: 'leaf',
+            tabs: ['tab-2', 'tab-3'],
+            activeTabId: 'tab-2',
+          },
+        ],
+      },
+      tabs: new Map([
+        ['tab-1', {
+          id: 'tab-1',
+          projectId: 'project-1',
+          type: 'editor',
+          title: 'main.ts',
+          meta: { path: 'src/main.ts' },
+        }],
+        ['tab-2', {
+          id: 'tab-2',
+          projectId: 'project-1',
+          type: 'editor',
+          title: 'main.ts duplicate',
+          meta: { path: 'src/main.ts' },
+        }],
+        ['tab-3', {
+          id: 'tab-3',
+          projectId: 'project-1',
+          type: 'editor',
+          title: 'other.ts',
+          meta: { path: 'src/other.ts' },
+        }],
+      ]),
+      activePaneId: 'pane-2',
+      pendingFocusPaneId: null,
+      sidebarOpen: true,
+      sidebarWidth: 240,
+      bottomDockOpen: true,
+      bottomDockHeight: 240,
+      chatPanelOpen: false,
+      chatPanelWidth: 360,
+    })
+
+    closeWorkspaceTabsForEditorPath('project-1', 'src/main.ts')
+
+    expect([...useWorkspaceStore.getState().tabs.keys()]).toEqual(['tab-3'])
+  })
+
+  it('renames every workspace tab for a moved editor path', () => {
+    useWorkspaceStore.setState({
+      layout: {
+        id: 'pane-1',
+        type: 'leaf',
+        tabs: ['tab-1', 'tab-2'],
+        activeTabId: 'tab-1',
+      },
+      tabs: new Map([
+        ['tab-1', {
+          id: 'tab-1',
+          projectId: 'project-1',
+          type: 'editor',
+          title: 'main.ts',
+          meta: { path: 'src/main.ts' },
+        }],
+        ['tab-2', {
+          id: 'tab-2',
+          projectId: 'project-1',
+          type: 'editor',
+          title: 'other.ts',
+          meta: { path: 'src/other.ts' },
+        }],
+      ]),
+      activePaneId: 'pane-1',
+      pendingFocusPaneId: null,
+      sidebarOpen: true,
+      sidebarWidth: 240,
+      bottomDockOpen: true,
+      bottomDockHeight: 240,
+      chatPanelOpen: false,
+      chatPanelWidth: 360,
+    })
+
+    renameWorkspaceEditorPath('project-1', 'src/main.ts', 'src/app.ts')
+
+    expect(useWorkspaceStore.getState().tabs.get('tab-1')).toMatchObject({
+      title: 'app.ts',
+      meta: { path: 'src/app.ts' },
+    })
+    expect(useWorkspaceStore.getState().tabs.get('tab-2')).toMatchObject({
+      title: 'other.ts',
+      meta: { path: 'src/other.ts' },
+    })
   })
 
   it('removes restored workspace tabs whose backing resources are absent', () => {

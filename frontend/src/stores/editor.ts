@@ -48,6 +48,8 @@ interface EditorState {
     error?: string,
   ) => void
   updateConflictMergeDraft: (projectId: string, path: string, mergeDraft: string) => void
+  removeDocument: (projectId: string, path: string) => void
+  renameDocument: (projectId: string, from: string, to: string) => void
   reloadFromDisk: (
     projectId: string,
     path: string,
@@ -287,6 +289,30 @@ export const useEditorStore = create<EditorState>((set) => ({
           ...current.conflict,
           mergeDraft,
         },
+      })
+      return { documents }
+    }),
+
+  removeDocument: (projectId, path) =>
+    set((state) => {
+      if (state.removedProjectIds.has(projectId)) return state
+      const documents = new Map(state.documents)
+      documents.delete(documentKey(projectId, path))
+      return { documents }
+    }),
+
+  renameDocument: (projectId, from, to) =>
+    set((state) => {
+      if (state.removedProjectIds.has(projectId)) return state
+      const fromKey = documentKey(projectId, from)
+      const current = state.documents.get(fromKey)
+      if (!current) return state
+      const documents = new Map(state.documents)
+      documents.delete(fromKey)
+      documents.set(documentKey(projectId, to), {
+        ...current,
+        path: to,
+        lastTouchedAt: Date.now(),
       })
       return { documents }
     }),

@@ -135,6 +135,52 @@ describe('editor cache retention', () => {
     expect(useEditorStore.getState().documents.has('project-a:src/other.ts')).toBe(false)
   })
 
+  it('removes a single cached editor document after file deletion', () => {
+    useEditorStore.getState().hydrateDocument({
+      projectId: 'project-a',
+      path: 'src/main.ts',
+      content: 'source',
+      isBinary: false,
+      sizeBytes: 6,
+      hasBom: false,
+      loadedAt: 1,
+      lastTouchedAt: 1,
+      syntaxMode: 'full',
+      isDirty: false,
+      isLoading: false,
+      isSaving: false,
+    })
+
+    useEditorStore.getState().removeDocument('project-a', 'src/main.ts')
+
+    expect(useEditorStore.getState().documents.has('project-a:src/main.ts')).toBe(false)
+  })
+
+  it('moves a cached editor document to the renamed file path', () => {
+    useEditorStore.getState().hydrateDocument({
+      projectId: 'project-a',
+      path: 'src/main.ts',
+      content: 'source',
+      isBinary: false,
+      sizeBytes: 6,
+      hasBom: false,
+      loadedAt: 1,
+      lastTouchedAt: 1,
+      syntaxMode: 'full',
+      isDirty: false,
+      isLoading: false,
+      isSaving: false,
+    })
+
+    useEditorStore.getState().renameDocument('project-a', 'src/main.ts', 'src/app.ts')
+
+    expect(useEditorStore.getState().documents.has('project-a:src/main.ts')).toBe(false)
+    expect(useEditorStore.getState().documents.get('project-a:src/app.ts')).toMatchObject({
+      path: 'src/app.ts',
+      content: 'source',
+    })
+  })
+
   it('does not hydrate a disk snapshot over dirty or saving editor content', () => {
     useEditorStore.setState({
       documents: new Map([

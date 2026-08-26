@@ -71,6 +71,58 @@
   margin-top: 8px;
 }
 
+.fileActions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.inlineAction {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.compactInput {
+  min-width: 0;
+  flex: 1;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.compactInput:disabled {
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  border-radius: 8px;
+  background: var(--bg-element);
+  color: var(--text-primary);
+}
+
+.iconBtn:hover:not(:disabled) {
+  background: var(--bg-element-selected);
+}
+
+.iconBtn:disabled {
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+
 .treePanel {
   min-height: 280px;
   border: 1px solid var(--border-variant);

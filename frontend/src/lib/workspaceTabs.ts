@@ -137,6 +137,37 @@ export function closeWorkspaceTabsForProject(projectId: string) {
   }
 }
 
+export function closeWorkspaceTabsForEditorPath(projectId: ProjectId, path: string) {
+  const workspace = useWorkspaceStore.getState()
+  const matches: Array<{ paneId: PaneId; tabId: TabId }> = []
+  collectTabsByPredicate(
+    workspace.layout,
+    workspace.tabs,
+    matches,
+    (tab) => (
+      tab.projectId === projectId
+      && tab.type === 'editor'
+      && tab.meta?.path === path
+    ),
+  )
+  for (const match of matches) {
+    useWorkspaceStore.getState().closeTab(match.paneId, match.tabId)
+  }
+}
+
+export function renameWorkspaceEditorPath(projectId: ProjectId, from: string, to: string) {
+  const name = to.split('/').pop() ?? to
+  const workspace = useWorkspaceStore.getState()
+  for (const tab of workspace.tabs.values()) {
+    if (tab.projectId === projectId && tab.type === 'editor' && tab.meta?.path === from) {
+      useWorkspaceStore.getState().updateTab(tab.id, {
+        title: name,
+        meta: { ...tab.meta, path: to },
+      })
+    }
+  }
+}
+
 export function openOrFocusBrowserWorkspaceTab(
   projectId: ProjectId,
   title: string,
