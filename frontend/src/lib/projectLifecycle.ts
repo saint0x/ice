@@ -30,33 +30,37 @@ export function removeProjectLocalState(projectId: string) {
   useBrowserStore.setState((state) => {
     const tabs = new Map(state.tabs)
     const runtimeNotices = new Map(state.runtimeNotices)
+    const closedTabIds = new Set(state.closedTabIds)
     for (const tab of tabs.values()) {
       if (tab.projectId === projectId) {
         tabs.delete(tab.id)
         runtimeNotices.delete(tab.id)
+        closedTabIds.add(tab.id)
       }
     }
     const activeTabId = new Map(state.activeTabId)
     activeTabId.delete(projectId)
     const sidebarItems = new Map(state.sidebarItems)
     sidebarItems.delete(projectId)
-    return { tabs, activeTabId, sidebarItems, runtimeNotices }
+    return { tabs, activeTabId, sidebarItems, runtimeNotices, closedTabIds }
   })
 
   useTerminalStore.setState((state) => {
     const sessions = new Map(state.sessions)
     const scrollback = new Map(state.scrollback)
     const diagnostics = new Map(state.diagnostics)
+    const closedSessionIds = new Set(state.closedSessionIds)
     for (const session of sessions.values()) {
       if (session.projectId === projectId) {
         sessions.delete(session.id)
         scrollback.delete(session.id)
         diagnostics.delete(session.id)
+        closedSessionIds.add(session.id)
       }
     }
     const activeSessionId = new Map(state.activeSessionId)
     activeSessionId.delete(projectId)
-    return { sessions, activeSessionId, scrollback, diagnostics }
+    return { sessions, activeSessionId, scrollback, diagnostics, closedSessionIds }
   })
 
   useCodexStore.setState((state) => {

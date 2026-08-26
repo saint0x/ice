@@ -275,11 +275,13 @@ describe('project lifecycle cleanup', () => {
     expect(useBrowserStore.getState().tabs.has('browser-2')).toBe(true)
     expect(useBrowserStore.getState().activeTabId.has('project-1')).toBe(false)
     expect(useBrowserStore.getState().sidebarItems.has('project-1')).toBe(false)
+    expect(useBrowserStore.getState().closedTabIds.has('browser-1')).toBe(true)
 
     expect(useTerminalStore.getState().sessions.has('terminal-1')).toBe(false)
     expect(useTerminalStore.getState().sessions.has('terminal-2')).toBe(true)
     expect(useTerminalStore.getState().activeSessionId.has('project-1')).toBe(false)
     expect(useTerminalStore.getState().scrollback.has('terminal-1')).toBe(false)
+    expect(useTerminalStore.getState().closedSessionIds.has('terminal-1')).toBe(true)
 
     expect(useCodexStore.getState().threads.has('thread-1')).toBe(false)
     expect(useCodexStore.getState().threads.has('thread-2')).toBe(true)
@@ -289,5 +291,31 @@ describe('project lifecycle cleanup', () => {
 
     expect(useEditorStore.getState().documents.has('project-1:old.ts')).toBe(false)
     expect(useEditorStore.getState().documents.has('project-2:keep.ts')).toBe(true)
+  })
+
+  it('does not resurrect removed project browser tabs or terminals from late backend events', () => {
+    removeProjectLocalState('project-1')
+
+    useBrowserStore.getState().upsertTab({
+      id: 'browser-1',
+      projectId: 'project-1',
+      title: 'Late Alpha',
+      url: 'https://example.com/late',
+      isPinned: false,
+      canGoBack: false,
+      canGoForward: false,
+      isLoading: false,
+      isSecure: true,
+    })
+    useTerminalStore.getState().upsertSession({
+      id: 'terminal-1',
+      projectId: 'project-1',
+      title: 'Late Alpha shell',
+      cwd: '/tmp/alpha',
+      isRunning: false,
+    })
+
+    expect(useBrowserStore.getState().tabs.has('browser-1')).toBe(false)
+    expect(useTerminalStore.getState().sessions.has('terminal-1')).toBe(false)
   })
 })

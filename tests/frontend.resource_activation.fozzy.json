@@ -6,7 +6,7 @@
       "type": "trace_event",
       "name": "verify_active_resource_backing_contract",
       "fields": {
-        "target": "frontend/lib/projectResolution+browserSurfaceActions+surfaceErrors+hooks/useBackendIntegration+stores/browser+terminal+codex"
+        "target": "frontend/lib/projectResolution+projectLifecycle+browserSurfaceActions+surfaceErrors+hooks/useBackendIntegration+stores/browser+terminal+codex"
       }
     },
     {
@@ -14,7 +14,7 @@
       "cmd": "/bin/sh",
       "args": [
         "-lc",
-        "cd frontend && npm test -- projectResolution useBackendIntegration browserSurfaceActions surfaceErrors browser terminal codex --run"
+        "cd frontend && npm test -- projectResolution projectLifecycle useBackendIntegration browserSurfaceActions surfaceErrors browser terminal codex --run"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -26,7 +26,7 @@
       "cmd": "/bin/sh",
       "args": [
         "-lc",
-        "cd frontend && npm test -- projectResolution useBackendIntegration browserSurfaceActions surfaceErrors browser terminal codex --run"
+        "cd frontend && npm test -- projectResolution projectLifecycle useBackendIntegration browserSurfaceActions surfaceErrors browser terminal codex --run"
       ],
       "expect_exit": 0
     }
