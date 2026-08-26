@@ -1,0 +1,139 @@
+{
+  "version": 1,
+  "name": "backend-production-gate",
+  "steps": [
+    {
+      "type": "trace_event",
+      "name": "verify_backend_workspace",
+      "fields": {
+        "target": "src-tauri"
+      }
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "test -f src-tauri/src/lib.rs && test -f src-tauri/src/codex/service.rs && test -f src-tauri/src/terminal/service.rs && test -f src-tauri/src/ipc/commands.rs"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "test -f src-tauri/src/lib.rs && test -f src-tauri/src/codex/service.rs && test -f src-tauri/src/terminal/service.rs && test -f src-tauri/src/ipc/commands.rs"
+      ],
+      "expect_exit": 0
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && rg -n 'home\\.join\\(\"\\.ice\"\\)|browser_tabs|terminal_sessions|app_config|CODEX_HOME' src"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && rg -n 'home\\.join\\(\"\\.ice\"\\)|browser_tabs|terminal_sessions|app_config|CODEX_HOME' src"
+      ],
+      "expect_exit": 0
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo fmt --check"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo fmt --check"
+      ],
+      "expect_exit": 0
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && CARGO_PROFILE_DEV_DEBUG=0 CARGO_INCREMENTAL=0 cargo check --jobs 1"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && CARGO_PROFILE_DEV_DEBUG=0 CARGO_INCREMENTAL=0 cargo check --jobs 1"
+      ],
+      "expect_exit": 0
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && CARGO_PROFILE_DEV_DEBUG=0 CARGO_INCREMENTAL=0 cargo test --jobs 1 persistence::db::tests::persists_workspace_browser_terminal_codex_and_config_state -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && CARGO_PROFILE_DEV_DEBUG=0 CARGO_INCREMENTAL=0 cargo test --jobs 1 persistence::db::tests::persists_workspace_browser_terminal_codex_and_config_state -- --exact"
+      ],
+      "expect_exit": 0
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && CARGO_PROFILE_DEV_DEBUG=0 CARGO_INCREMENTAL=0 cargo test --jobs 1"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && CARGO_PROFILE_DEV_DEBUG=0 CARGO_INCREMENTAL=0 cargo test --jobs 1"
+      ],
+      "expect_exit": 0
+    }
+  ]
+}

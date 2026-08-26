@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { memo, useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { FolderPlus, FolderSearch } from 'lucide-react'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { projectAdd, projectReorder, toProject } from '@/lib/backend'
@@ -27,7 +27,7 @@ export const ProjectStack = memo(function ProjectStack() {
     hasMoved: boolean
   } | null>(null)
 
-  const persistProjectOrder = async (nextOrder: string[]) => {
+  const persistProjectOrder = useCallback(async (nextOrder: string[]) => {
     const previousOrder = [...projectOrder]
     reorderProjects(nextOrder)
     setSurfaceError(null)
@@ -39,7 +39,7 @@ export const ProjectStack = memo(function ProjectStack() {
       setSurfaceError(message)
       pushError('Project reorder failed', error, message)
     }
-  }
+  }, [projectOrder, pushError, reorderProjects])
 
   useEffect(() => {
     if (!suppressProjectClickId) return
@@ -89,7 +89,7 @@ export const ProjectStack = memo(function ProjectStack() {
       window.removeEventListener('pointerup', finishDrag)
       window.removeEventListener('pointercancel', finishDrag)
     }
-  }, [dropIndicatorIndex, projectOrder])
+  }, [dropIndicatorIndex, persistProjectOrder, projectOrder])
 
   const onProjectPointerDown = (projectId: string) => (event: ReactPointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0) return

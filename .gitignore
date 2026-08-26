@@ -10,7 +10,6 @@ src-tauri/target/
 .fozzy/
 artifacts/
 *.trace.fozzy
-tests/
 
 # IDE
 .vscode/

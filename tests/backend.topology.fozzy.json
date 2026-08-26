@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "name": "backend-topology-smoke",
+  "distributed": {
+    "node_count": 3,
+    "invariants": [
+      {
+        "type": "kv_present_on_all",
+        "key": "storage_root"
+      }
+    ],
+    "steps": [
+      {
+        "type": "client_put",
+        "node": "n0",
+        "key": "storage_root",
+        "value": "~/.ice"
+      },
+      {
+        "type": "client_put",
+        "node": "n1",
+        "key": "storage_root",
+        "value": "~/.ice"
+      },
+      {
+        "type": "client_put",
+        "node": "n2",
+        "key": "storage_root",
+        "value": "~/.ice"
+      },
+      {
+        "type": "tick",
+        "duration": "10ms"
+      }
+    ]
+  }
+}

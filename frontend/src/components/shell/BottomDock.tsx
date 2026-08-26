@@ -1,14 +1,15 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronUp, Plus, Terminal, RotateCcw, PencilLine, Check, X, Clock3, FileTerminal, History, ShieldAlert, Copy, Eraser, Gauge, Layers3 } from 'lucide-react'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useTerminalStore } from '@/stores/terminal'
 import { useProjectsStore } from '@/stores/projects'
 import { useNotificationsStore } from '@/stores/notifications'
-import { TerminalSurface } from '@/components/surfaces/TerminalSurface'
 import { terminalClose, terminalDiagnosticsRead, terminalRename, terminalRespawn, terminalScrollbackClear, toTerminalDiagnostics, toTerminalSession } from '@/lib/backend'
 import { createAndFocusTerminalSession, resolveTerminalProjectId } from '@/lib/terminalSessions'
 import { ensureTerminalScrollback } from '@/lib/terminalScrollback'
 import styles from './BottomDock.module.css'
+
+const TerminalSurface = lazy(() => import('@/components/surfaces/TerminalSurface').then((module) => ({ default: module.TerminalSurface })))
 
 export const BottomDock = memo(function BottomDock() {
   const open = useWorkspaceStore((s) => s.bottomDockOpen)
@@ -371,7 +372,9 @@ export const BottomDock = memo(function BottomDock() {
                 <div className={styles.historyEmpty}>No persisted scrollback yet.</div>
               )}
             </div>
-            <TerminalSurface key={activeSession.id} session={activeSession} />
+            <Suspense fallback={<div className={styles.historyEmpty}>Loading terminal...</div>}>
+              <TerminalSurface key={activeSession.id} session={activeSession} />
+            </Suspense>
           </>
         ) : (
           <div className={styles.empty}>

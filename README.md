@@ -78,8 +78,8 @@ Fozzy verification examples:
 ```bash
 /Users/deepsaint/Desktop/fozzy/target/debug/fozzy validate tests/backend.production_gate.fozzy.json --json
 /Users/deepsaint/Desktop/fozzy/target/debug/fozzy doctor --deep --scenario tests/backend.production_gate.fozzy.json --runs 5 --seed 424242 --proc-backend host --fs-backend host --json
-/Users/deepsaint/Desktop/fozzy/target/debug/fozzy test --det --strict tests/backend.production_gate.fozzy.json tests/backend.topology.fozzy.json --proc-backend host --fs-backend host --json
-/Users/deepsaint/Desktop/fozzy/target/debug/fozzy test --det --strict tests/frontend.release_bundle.fozzy.json --proc-backend host --fs-backend host --json
+/Users/deepsaint/Desktop/fozzy/target/debug/fozzy test --det --strict-verify tests/backend.production_gate.fozzy.json tests/backend.topology.fozzy.json --proc-backend host --fs-backend host --json
+/Users/deepsaint/Desktop/fozzy/target/debug/fozzy test --det --strict-verify tests/frontend.release_bundle.fozzy.json --proc-backend host --fs-backend host --json
 ```
 
 ## Storage

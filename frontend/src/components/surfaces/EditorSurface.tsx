@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, FileCode2, Loader2, Save, Search, ChevronUp, ChevronDown, Replace, X, RefreshCcw } from 'lucide-react'
 import { basicSetup } from 'codemirror'
 import { Compartment, EditorState, type Extension, Annotation, RangeSetBuilder, StateEffect, StateField } from '@codemirror/state'
@@ -65,6 +65,11 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
   const editableCompartmentRef = useRef(new Compartment())
   const documentKeyRef = useRef<string | null>(null)
   const saveRef = useRef<() => Promise<void>>(async () => {})
+  const documentContent = document?.content
+  const documentIsBinary = document?.isBinary ?? false
+  const documentIsLoading = document?.isLoading ?? false
+  const documentIsSaving = document?.isSaving ?? false
+  const documentSyntaxMode = document?.syntaxMode
 
   const [languageLabel, setLanguageLabel] = useState<string | null>(null)
   const [findOpen, setFindOpen] = useState(false)
@@ -103,7 +108,7 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
   const boundedMatchIndex = matches.length > 0 ? Math.min(activeMatchIndex, matches.length - 1) : 0
   const activeMatch = matches.length > 0 ? matches[boundedMatchIndex] ?? null : null
 
-  const onSave = async () => {
+  const onSave = useCallback(async () => {
     if (!document || document.isBinary || document.isSaving) return
     setSaving(tab.projectId, filePath, true)
     try {
@@ -167,7 +172,17 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
       }
       setError(tab.projectId, filePath, message)
     }
-  }
+  }, [
+    document,
+    filePath,
+    markSaved,
+    setConflict,
+    setError,
+    setSaving,
+    tab.id,
+    tab.projectId,
+    updateTab,
+  ])
 
   saveRef.current = onSave
 
@@ -192,14 +207,15 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
     updateTab(tab.id, { dirty: false })
   }
 
-  const onOverwriteDisk = async () => {
+  const onOverwriteDisk = async (contentOverride?: string) => {
     if (!document || document.isBinary || document.isSaving) return
+    const content = contentOverride ?? document.content
     setSaving(tab.projectId, filePath, true)
     try {
       await fileWriteText({
         projectId: tab.projectId,
         path: filePath,
-        content: document.content,
+        content,
         encoding: document.encoding,
         hasBom: document.hasBom,
       })
@@ -235,12 +251,13 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
 
   const onSaveMergedDraft = async () => {
     if (!document?.conflict) return
-    updateContent(tab.projectId, filePath, document.conflict.mergeDraft ?? document.content)
-    await onOverwriteDisk()
+    const mergeDraft = document.conflict.mergeDraft ?? document.content
+    updateContent(tab.projectId, filePath, mergeDraft)
+    await onOverwriteDisk(mergeDraft)
   }
 
   useEffect(() => {
-    if (!editorRootRef.current || !document || document.isBinary || document.isLoading) {
+    if (!editorRootRef.current || !document || documentIsBinary || documentIsLoading) {
       if (editorViewRef.current) {
         editorViewRef.current.destroy()
         editorViewRef.current = null
@@ -267,7 +284,7 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
           syntaxDecorationsField,
           EditorState.tabSize.of(2),
           languageCompartment.of([]),
-          editableCompartment.of(EditorView.editable.of(!document.isSaving)),
+          editableCompartment.of(EditorView.editable.of(!documentIsSaving)),
           EditorView.updateListener.of((update) => {
             if (!update.docChanged) return
             if (update.transactions.some((transaction) => transaction.annotation(externalUpdate))) {
@@ -312,39 +329,39 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
         documentKeyRef.current = null
       }
     }
-  }, [document?.isBinary, document?.isLoading, documentKey, filePath, tab.projectId, updateContent])
+  }, [document, documentIsBinary, documentIsLoading, documentIsSaving, documentKey, filePath, tab.projectId, updateContent])
 
   useEffect(() => {
     const editor = editorViewRef.current
-    if (!editor || !document || document.isBinary || document.isLoading) return
+    if (!editor || documentContent == null || documentIsBinary || documentIsLoading) return
     const currentContent = editor.state.doc.toString()
-    if (currentContent === document.content) return
+    if (currentContent === documentContent) return
     editor.dispatch({
       changes: {
         from: 0,
         to: currentContent.length,
-        insert: document.content,
+        insert: documentContent,
       },
       annotations: externalUpdate.of(true),
     })
-  }, [document?.content, document?.isBinary, document?.isLoading])
+  }, [documentContent, documentIsBinary, documentIsLoading])
 
   useEffect(() => {
     const editor = editorViewRef.current
-    if (!editor || !document || document.isBinary || document.isLoading) return
+    if (!editor || documentContent == null || documentIsBinary || documentIsLoading) return
     editor.dispatch({
-      effects: editableCompartmentRef.current.reconfigure(EditorView.editable.of(!document.isSaving)),
+      effects: editableCompartmentRef.current.reconfigure(EditorView.editable.of(!documentIsSaving)),
     })
-  }, [document?.isBinary, document?.isLoading, document?.isSaving])
+  }, [documentContent, documentIsBinary, documentIsLoading, documentIsSaving])
 
   useEffect(() => {
     let cancelled = false
-    if (!document || document.isBinary || document.isLoading) {
+    if (documentContent == null || documentIsBinary || documentIsLoading) {
       setLanguageLabel(null)
       return
     }
 
-    if (document.syntaxMode === 'none') {
+    if (documentSyntaxMode === 'none') {
       setLanguageLabel(`${ext} LARGE`)
       if (editorViewRef.current) {
         editorViewRef.current.dispatch({
@@ -358,7 +375,7 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
       .then(async (profile) => {
         if (cancelled) return
         setLanguageLabel(profile.displayName)
-        if (document.syntaxMode !== 'full') {
+        if (documentSyntaxMode !== 'full') {
           if (!editorViewRef.current) return
           editorViewRef.current.dispatch({
             effects: languageCompartmentRef.current.reconfigure([]),
@@ -379,16 +396,16 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
     return () => {
       cancelled = true
     }
-  }, [document?.syntaxMode, documentKey, document?.isBinary, document?.isLoading, ext, filePath, tab.projectId])
+  }, [documentContent, documentIsBinary, documentIsLoading, documentKey, documentSyntaxMode, ext, filePath, tab.projectId])
 
   useEffect(() => {
     const editor = editorViewRef.current
     if (!editor) return
-    if (!document || document.isBinary || document.isLoading) {
+    if (documentContent == null || documentIsBinary || documentIsLoading) {
       editor.dispatch({ effects: setSyntaxDecorations.of([]) })
       return
     }
-    if (document.syntaxMode !== 'full') {
+    if (documentSyntaxMode !== 'full') {
       editor.dispatch({ effects: setSyntaxDecorations.of([]) })
       return
     }
@@ -398,7 +415,7 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
       void fileSyntaxTokens({
         projectId: tab.projectId,
         path: filePath,
-        content: document.content,
+        content: documentContent,
       })
         .then((response) => {
           if (cancelled || !editorViewRef.current) return
@@ -416,7 +433,7 @@ export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
       cancelled = true
       window.clearTimeout(timeoutId)
     }
-  }, [document?.content, document?.isBinary, document?.isLoading, document?.syntaxMode, documentKey, filePath, tab.projectId])
+  }, [documentContent, documentIsBinary, documentIsLoading, documentKey, documentSyntaxMode, filePath, tab.projectId])
 
   const focusMatch = (nextIndex: number) => {
     const editor = editorViewRef.current

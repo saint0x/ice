@@ -738,11 +738,13 @@ impl CodexService {
         match self.request_once(method, params.clone()).await {
             Ok(result) => Ok(result),
             Err(error) if is_transport_failure(&error) => {
-                self.reset_process_state("The Codex app server became unresponsive during a request.")
-                    .await?;
-                self.request_once(method, params)
-                    .await
-                    .with_context(|| format!("Codex request '{method}' failed after process restart"))
+                self.reset_process_state(
+                    "The Codex app server became unresponsive during a request.",
+                )
+                .await?;
+                self.request_once(method, params).await.with_context(|| {
+                    format!("Codex request '{method}' failed after process restart")
+                })
             }
             Err(error) => Err(error),
         }
@@ -1027,16 +1029,14 @@ impl CodexService {
         for thread in disconnected_threads {
             self.persistence.upsert_codex_thread(thread).await?;
         }
-        let _ = self
-            .app
-            .emit(
-                CODEX_EVENT,
-                json!({
-                    "type": "serverDisconnected",
-                    "reason": message,
-                    "recentLines": recent_runtime_lines(&self.state, 5),
-                }),
-            );
+        let _ = self.app.emit(
+            CODEX_EVENT,
+            json!({
+                "type": "serverDisconnected",
+                "reason": message,
+                "recentLines": recent_runtime_lines(&self.state, 5),
+            }),
+        );
         Ok(())
     }
 }
@@ -1134,18 +1134,19 @@ impl CodexService {
         {
             return Ok(());
         }
-        let resume_result = self.request(
-            "thread/resume",
-            json!({
-              "threadId": thread.thread_id,
-              "cwd": project.root_path,
-              "approvalPolicy": "never",
-              "sandbox": "danger-full-access",
-              "model": CODEX_MODEL_ID,
-              "serviceName": "ice",
-            }),
-        )
-        .await;
+        let resume_result = self
+            .request(
+                "thread/resume",
+                json!({
+                  "threadId": thread.thread_id,
+                  "cwd": project.root_path,
+                  "approvalPolicy": "never",
+                  "sandbox": "danger-full-access",
+                  "model": CODEX_MODEL_ID,
+                  "serviceName": "ice",
+                }),
+            )
+            .await;
         if let Err(error) = resume_result {
             if is_missing_thread_error(&error) {
                 self.drop_stale_thread(&thread.thread_id).await;
@@ -1548,7 +1549,14 @@ fn extract_thread_runtime_status(payload: &Value) -> Option<String> {
                         })
                     })
                     .unwrap_or(false);
-                Some(if waiting { "waitingApproval" } else { "running" }.to_string())
+                Some(
+                    if waiting {
+                        "waitingApproval"
+                    } else {
+                        "running"
+                    }
+                    .to_string(),
+                )
             }
             "idle" | "notLoaded" => Some("idle".to_string()),
             "systemError" => Some("error".to_string()),
