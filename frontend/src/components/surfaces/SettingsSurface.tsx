@@ -12,6 +12,7 @@ import {
   projectSnapshot,
 } from '@/lib/backend'
 import { ensureEditorDocument } from '@/lib/editorDocuments'
+import { tabMetaUtilityTool } from '@/lib/tabMeta'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useFilesStore } from '@/stores/files'
@@ -22,11 +23,10 @@ interface Props {
   tab: Tab
 }
 
-type UtilityTool = 'files' | 'search' | 'diagnostics' | 'debug'
 const EMPTY_TREE = [] as const
 
 export const SettingsSurface = memo(function SettingsSurface({ tab }: Props) {
-  const tool = ((tab.meta?.tool as UtilityTool | undefined) ?? 'diagnostics')
+  const tool = tabMetaUtilityTool(tab)
   const openTab = useWorkspaceStore((state) => state.openTab)
   const activePaneId = useWorkspaceStore((state) => state.activePaneId)
   const storedTree = useFilesStore((state) => state.trees.get(tab.projectId))

@@ -10,6 +10,7 @@ import { useNotificationsStore } from '@/stores/notifications'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { CodexConversation } from '@/components/codex/CodexConversation'
 import { describeCodexError } from '@/lib/errors'
+import { tabMetaString } from '@/lib/tabMeta'
 import styles from './CodexSurface.module.css'
 
 interface Props {
@@ -20,7 +21,7 @@ const EMPTY_APPROVALS: CodexApproval[] = []
 const EMPTY_MESSAGES: CodexMessage[] = []
 
 export const CodexSurface = memo(function CodexSurface({ tab }: Props) {
-  const threadId = tab.meta?.threadId as string | undefined
+  const threadId = tabMetaString(tab, 'threadId') ?? undefined
   const projectName = useProjectsStore((s) => s.projects.get(tab.projectId)?.name ?? tab.projectId)
   const projectPath = useProjectsStore((s) => s.projects.get(tab.projectId)?.path)
   const thread = useCodexStore((s) => threadId ? s.threads.get(threadId) : undefined)

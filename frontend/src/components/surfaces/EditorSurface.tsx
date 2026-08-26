@@ -8,6 +8,7 @@ import { languages } from '@codemirror/language-data'
 import type { Tab } from '@/types'
 import { fileSyntaxProfile, fileSyntaxTokens, fileWriteText } from '@/lib/backend'
 import { ensureEditorDocument } from '@/lib/editorDocuments'
+import { tabMetaString } from '@/lib/tabMeta'
 import { useEditorStore } from '@/stores/editor'
 import { useWorkspaceStore } from '@/stores/workspace'
 import styles from './EditorSurface.module.css'
@@ -44,7 +45,7 @@ interface BackendSyntaxToken {
 }
 
 export const EditorSurface = memo(function EditorSurface({ tab }: Props) {
-  const filePath = (tab.meta?.path as string) ?? tab.title
+  const filePath = tabMetaString(tab, 'path') ?? tab.title
   const documentKey = `${tab.projectId}:${filePath}`
   const document = useEditorStore((state) => state.documents.get(documentKey))
   const setLoading = useEditorStore((state) => state.setLoading)

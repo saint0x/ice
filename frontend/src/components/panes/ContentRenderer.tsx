@@ -1,5 +1,6 @@
 import { lazy, memo, Suspense } from 'react'
 import type { Tab } from '@/types'
+import { tabMetaString } from '@/lib/tabMeta'
 import { useTerminalStore } from '@/stores/terminal'
 
 const EditorSurface = lazy(() => import('@/components/surfaces/EditorSurface').then((module) => ({ default: module.EditorSurface })))
@@ -15,7 +16,7 @@ interface Props {
 
 export const ContentRenderer = memo(function ContentRenderer({ tab }: Props) {
   const terminalSession = useTerminalStore((s) => {
-    const sessionId = (tab.meta?.sessionId as string | undefined) ?? tab.id
+    const sessionId = tabMetaString(tab, 'sessionId') ?? tab.id
     return s.sessions.get(sessionId)
   })
   return (

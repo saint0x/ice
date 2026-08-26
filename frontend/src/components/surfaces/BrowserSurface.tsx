@@ -14,6 +14,7 @@ import {
   browserTabReload,
   toBrowserTab,
 } from '@/lib/backend'
+import { tabMetaString } from '@/lib/tabMeta'
 import { useBrowserStore } from '@/stores/browser'
 import { useNotificationsStore } from '@/stores/notifications'
 import styles from './BrowserSurface.module.css'
@@ -25,7 +26,7 @@ interface Props {
 const EMPTY_NOTICES: readonly BrowserRuntimeNotice[] = []
 
 export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
-  const browserTabId = tab.meta?.tabId as string | undefined
+  const browserTabId = tabMetaString(tab, 'tabId') ?? undefined
   const browserTab = useBrowserStore((s) => browserTabId ? s.tabs.get(browserTabId) : undefined)
   const upsertBrowserTab = useBrowserStore((s) => s.upsertTab)
   const storedRuntimeNotices = useBrowserStore((s) => browserTabId ? s.runtimeNotices.get(browserTabId) : undefined)
@@ -57,7 +58,7 @@ export const BrowserSurface = memo(function BrowserSurface({ tab }: Props) {
     [runtimeNotices],
   )
 
-  const url = draftUrl ?? browserTab?.url ?? (tab.meta?.url as string) ?? 'about:blank'
+  const url = draftUrl ?? browserTab?.url ?? tabMetaString(tab, 'url') ?? 'about:blank'
   const isUnsupportedScheme = useMemo(() => /^(file|data|chrome|devtools|mailto):/i.test(url), [url])
 
   useEffect(() => {
