@@ -5,6 +5,9 @@ let _paneCounter = 0
 let _tabCounter = 0
 const nextPaneId = (): PaneId => `pane-${++_paneCounter}`
 const nextTabId = (): TabId => `tab-${++_tabCounter}`
+const clampSidebarWidth = (width: number) => Math.max(180, Math.min(400, width))
+const clampBottomDockHeight = (height: number) => Math.max(100, Math.min(600, height))
+const clampChatPanelWidth = (width: number) => Math.max(280, Math.min(520, width))
 
 interface WorkspaceState {
   layout: PaneLayout
@@ -186,11 +189,11 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
         activePaneId,
         pendingFocusPaneId: null,
         sidebarOpen: input.sidebarOpen,
-        sidebarWidth: input.sidebarWidth,
+        sidebarWidth: clampSidebarWidth(input.sidebarWidth),
         bottomDockOpen: input.bottomDockOpen,
-        bottomDockHeight: input.bottomDockHeight,
+        bottomDockHeight: clampBottomDockHeight(input.bottomDockHeight),
         chatPanelOpen: input.chatPanelOpen,
-        chatPanelWidth: input.chatPanelWidth,
+        chatPanelWidth: clampChatPanelWidth(input.chatPanelWidth),
       }
     }),
 
@@ -283,11 +286,11 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     }),
 
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
-  setSidebarWidth: (width) => set({ sidebarWidth: Math.max(180, Math.min(400, width)) }),
+  setSidebarWidth: (width) => set({ sidebarWidth: clampSidebarWidth(width) }),
   setBottomDockOpen: (open) => set({ bottomDockOpen: open }),
-  setBottomDockHeight: (height) => set({ bottomDockHeight: Math.max(100, Math.min(600, height)) }),
+  setBottomDockHeight: (height) => set({ bottomDockHeight: clampBottomDockHeight(height) }),
   setChatPanelOpen: (open) => set({ chatPanelOpen: open }),
-  setChatPanelWidth: (width) => set({ chatPanelWidth: Math.max(280, Math.min(520, width)) }),
+  setChatPanelWidth: (width) => set({ chatPanelWidth: clampChatPanelWidth(width) }),
 
   updateSplitRatio: (splitId, ratio) =>
     set((s) => {

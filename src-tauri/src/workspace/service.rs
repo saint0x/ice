@@ -10,6 +10,13 @@ pub struct WorkspaceService {
     persistence: Arc<PersistenceService>,
 }
 
+const SIDEBAR_WIDTH_MIN: u16 = 180;
+const SIDEBAR_WIDTH_MAX: u16 = 400;
+const BOTTOM_DOCK_HEIGHT_MIN: u16 = 100;
+const BOTTOM_DOCK_HEIGHT_MAX: u16 = 600;
+const CHAT_PANEL_WIDTH_MIN: u16 = 280;
+const CHAT_PANEL_WIDTH_MAX: u16 = 520;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceChromeState {
@@ -78,12 +85,13 @@ impl WorkspaceService {
     }
 
     pub async fn get_chrome_state(&self, workspace_id: &str) -> Result<WorkspaceChromeState> {
-        Ok(self
-            .persistence
-            .config_get(&format!("workspace.chrome.{workspace_id}"))
-            .await?
-            .and_then(|value| serde_json::from_value(value).ok())
-            .unwrap_or_else(default_chrome_state))
+        Ok(normalize_chrome_state(
+            self.persistence
+                .config_get(&format!("workspace.chrome.{workspace_id}"))
+                .await?
+                .and_then(|value| serde_json::from_value(value).ok())
+                .unwrap_or_else(default_chrome_state),
+        ))
     }
 
     pub async fn set_chrome_state(
@@ -91,6 +99,7 @@ impl WorkspaceService {
         workspace_id: &str,
         chrome_state: WorkspaceChromeState,
     ) -> Result<()> {
+        let chrome_state = normalize_chrome_state(chrome_state);
         self.persistence
             .config_set(
                 format!("workspace.chrome.{workspace_id}"),
@@ -128,6 +137,19 @@ fn default_chrome_state() -> WorkspaceChromeState {
         chat_panel_open: false,
         chat_panel_width: 360,
     }
+}
+
+fn normalize_chrome_state(mut chrome: WorkspaceChromeState) -> WorkspaceChromeState {
+    chrome.sidebar_width = chrome
+        .sidebar_width
+        .clamp(SIDEBAR_WIDTH_MIN, SIDEBAR_WIDTH_MAX);
+    chrome.bottom_dock_height = chrome
+        .bottom_dock_height
+        .clamp(BOTTOM_DOCK_HEIGHT_MIN, BOTTOM_DOCK_HEIGHT_MAX);
+    chrome.chat_panel_width = chrome
+        .chat_panel_width
+        .clamp(CHAT_PANEL_WIDTH_MIN, CHAT_PANEL_WIDTH_MAX);
+    chrome
 }
 
 fn default_session_state() -> WorkspaceSessionState {
@@ -227,6 +249,25 @@ mod tests {
             },
         );
         validate_session_state(&session).expect("default session should be valid");
+    }
+
+    #[test]
+    fn normalizes_chrome_dimensions_to_renderable_bounds() {
+        let chrome = normalize_chrome_state(WorkspaceChromeState {
+            sidebar_open: false,
+            sidebar_width: 1,
+            bottom_dock_open: true,
+            bottom_dock_height: 65_535,
+            chat_panel_open: false,
+            chat_panel_width: 100,
+        });
+
+        assert!(!chrome.sidebar_open);
+        assert_eq!(chrome.sidebar_width, SIDEBAR_WIDTH_MIN);
+        assert!(chrome.bottom_dock_open);
+        assert_eq!(chrome.bottom_dock_height, BOTTOM_DOCK_HEIGHT_MAX);
+        assert!(!chrome.chat_panel_open);
+        assert_eq!(chrome.chat_panel_width, CHAT_PANEL_WIDTH_MIN);
     }
 
     #[test]

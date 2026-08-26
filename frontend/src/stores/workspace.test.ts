@@ -190,6 +190,30 @@ describe('workspace store focus synchronization', () => {
     })
   })
 
+  it('clamps restored chrome dimensions during hydration', () => {
+    useWorkspaceStore.getState().hydrateWorkspace({
+      layout: {
+        id: 'pane-1',
+        type: 'leaf',
+        tabs: [],
+        activeTabId: null,
+      },
+      tabs: [],
+      activePaneId: 'pane-1',
+      sidebarOpen: true,
+      sidebarWidth: 20,
+      bottomDockOpen: true,
+      bottomDockHeight: 5000,
+      chatPanelOpen: true,
+      chatPanelWidth: 50,
+    })
+
+    const state = useWorkspaceStore.getState()
+    expect(state.sidebarWidth).toBe(180)
+    expect(state.bottomDockHeight).toBe(600)
+    expect(state.chatPanelWidth).toBe(280)
+  })
+
   it('normalizes stale tab and pane references during hydration', () => {
     useWorkspaceStore.getState().hydrateWorkspace({
       layout: {
