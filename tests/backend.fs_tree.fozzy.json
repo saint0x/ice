@@ -35,6 +35,48 @@
       "cmd": "/bin/sh",
       "args": [
         "-lc",
+        "cd src-tauri && cargo test fs::service::tests::rename_rejects_existing_destination_without_overwriting -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test fs::service::tests::rename_rejects_existing_destination_without_overwriting -- --exact"
+      ],
+      "expect_exit": 0
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test fs::service::tests::rename_rejects_broken_destination_symlink -- --exact"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd src-tauri && cargo test fs::service::tests::rename_rejects_broken_destination_symlink -- --exact"
+      ],
+      "expect_exit": 0
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
         "cd src-tauri && cargo test fs::service::tests::tree_walk_respects_gitignore_and_hidden_defaults -- --exact"
       ],
       "exit_code": 0,

@@ -366,6 +366,7 @@ impl FsService {
         let root = projects.resolve_project_path(project_id).await?;
         let from_path = resolve_existing_under_root(&root, from)?;
         let to_path = resolve_creatable_under_root(&root, to)?;
+        ensure_rename_destination_available(&from_path, &to_path)?;
         if let Some(parent) = to_path.parent() {
             tokio::fs::create_dir_all(parent).await?;
         }
@@ -587,6 +588,36 @@ fn nearest_existing_parent<'a>(path: &'a Path, root: &'a Path) -> Result<PathBuf
         }
         current = current.parent().unwrap_or(root);
     }
+}
+
+fn ensure_rename_destination_available(from_path: &Path, to_path: &Path) -> Result<()> {
+    match stdfs::symlink_metadata(to_path) {
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(error).with_context(|| {
+                format!("failed to inspect rename destination {}", to_path.display())
+            });
+        }
+    }
+
+    let canonical_from = from_path
+        .canonicalize()
+        .with_context(|| format!("failed to resolve rename source {}", from_path.display()))?;
+    let canonical_to = to_path.canonicalize().with_context(|| {
+        format!(
+            "failed to resolve existing rename destination {}",
+            to_path.display()
+        )
+    })?;
+    if canonical_from == canonical_to {
+        return Ok(());
+    }
+
+    Err(anyhow!(
+        "rename destination already exists: {}",
+        to_path.display()
+    ))
 }
 
 fn walk_tree(
@@ -1011,10 +1042,11 @@ fn ensure_destination_under_root(project_root: &Path, destination: &Path) -> Res
 #[cfg(test)]
 mod tests {
     use super::{
-        copy_external_entry, decode_text_bytes, encode_text_content, file_version,
-        import_external_entries_blocking, is_binary_bytes, nest_tree_entries,
-        normalize_search_limit, parse_rg_match_record, resolve_creatable_under_root,
-        resolve_existing_under_root, search_paths_under_root, walk_tree, FsEntry, TreeReadOptions,
+        copy_external_entry, decode_text_bytes, encode_text_content,
+        ensure_rename_destination_available, file_version, import_external_entries_blocking,
+        is_binary_bytes, nest_tree_entries, normalize_search_limit, parse_rg_match_record,
+        resolve_creatable_under_root, resolve_existing_under_root, search_paths_under_root,
+        walk_tree, FsEntry, TreeReadOptions,
     };
     use std::collections::HashMap;
     use std::fs;
@@ -1198,6 +1230,55 @@ mod tests {
             fs::read_to_string(imported_file).expect("read imported file"),
             "{\"ok\":true}"
         );
+    }
+
+    #[test]
+    fn rename_rejects_existing_destination_without_overwriting() {
+        let project_root = tempdir().expect("project temp dir");
+        let from_path = project_root.path().join("from.txt");
+        let to_path = project_root.path().join("to.txt");
+        fs::write(&from_path, "source").expect("write source");
+        fs::write(&to_path, "destination").expect("write destination");
+
+        assert!(ensure_rename_destination_available(&from_path, &to_path)
+            .expect_err("destination collision should fail")
+            .to_string()
+            .contains("rename destination already exists"));
+        assert_eq!(
+            fs::read_to_string(&to_path).expect("destination unchanged"),
+            "destination"
+        );
+    }
+
+    #[test]
+    fn rename_allows_same_canonical_path() {
+        let project_root = tempdir().expect("project temp dir");
+        let from_path = project_root.path().join("same.txt");
+        fs::write(&from_path, "source").expect("write source");
+
+        ensure_rename_destination_available(&from_path, &from_path)
+            .expect("same canonical path should be allowed");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rename_rejects_broken_destination_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let project_root = tempdir().expect("project temp dir");
+        let from_path = project_root.path().join("from.txt");
+        let to_path = project_root.path().join("broken-link.txt");
+        fs::write(&from_path, "source").expect("write source");
+        symlink(project_root.path().join("missing.txt"), &to_path).expect("broken symlink");
+
+        assert!(ensure_rename_destination_available(&from_path, &to_path)
+            .expect_err("broken destination symlink should fail")
+            .to_string()
+            .contains("failed to resolve existing rename destination"));
+        assert!(fs::symlink_metadata(&to_path)
+            .expect("symlink remains")
+            .file_type()
+            .is_symlink());
     }
 
     #[cfg(unix)]
