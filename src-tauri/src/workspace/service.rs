@@ -168,10 +168,25 @@ fn validate_session_state(session_state: &WorkspaceSessionState) -> Result<()> {
         return Err(anyhow!("workspace session contains duplicate tab ids"));
     }
 
-    for tab_id in referenced_tabs {
-        if !tab_id_set.contains(&tab_id) {
+    let referenced_tab_set: HashSet<_> = referenced_tabs.iter().cloned().collect();
+    if referenced_tab_set.len() != referenced_tabs.len() {
+        return Err(anyhow!(
+            "workspace session references the same tab in multiple panes"
+        ));
+    }
+
+    for tab_id in &referenced_tabs {
+        if !tab_id_set.contains(tab_id) {
             return Err(anyhow!(
                 "workspace session references unknown tab id {}",
+                tab_id
+            ));
+        }
+    }
+    for tab_id in &tab_ids {
+        if !referenced_tab_set.contains(tab_id) {
+            return Err(anyhow!(
+                "workspace session contains orphan tab id {}",
                 tab_id
             ));
         }
@@ -183,6 +198,19 @@ fn validate_session_state(session_state: &WorkspaceSessionState) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn tab(id: &str) -> WorkspaceTabRecord {
+        WorkspaceTabRecord {
+            id: id.to_string(),
+            project_id: "project-1".to_string(),
+            kind: "editor".to_string(),
+            title: id.to_string(),
+            icon: None,
+            dirty: false,
+            pinned: false,
+            meta: None,
+        }
+    }
 
     #[test]
     fn default_session_has_no_synthetic_project_tabs() {
@@ -199,6 +227,82 @@ mod tests {
             },
         );
         validate_session_state(&session).expect("default session should be valid");
+    }
+
+    #[test]
+    fn validates_tabs_are_referenced_once_by_panes() {
+        let session = WorkspaceSessionState {
+            active_pane_id: "pane-1".to_string(),
+            tabs: vec![tab("tab-1"), tab("tab-2")],
+            root: WorkspacePaneNode::Split(WorkspaceSplitNode {
+                id: "split-1".to_string(),
+                direction: "horizontal".to_string(),
+                ratio: 0.5,
+                children: vec![
+                    WorkspacePaneNode::Leaf {
+                        id: "pane-1".to_string(),
+                        tabs: vec!["tab-1".to_string()],
+                        active_tab_id: Some("tab-1".to_string()),
+                    },
+                    WorkspacePaneNode::Leaf {
+                        id: "pane-2".to_string(),
+                        tabs: vec!["tab-2".to_string()],
+                        active_tab_id: Some("tab-2".to_string()),
+                    },
+                ],
+            }),
+        };
+
+        validate_session_state(&session).expect("valid session should pass");
+    }
+
+    #[test]
+    fn rejects_tabs_referenced_by_multiple_panes() {
+        let session = WorkspaceSessionState {
+            active_pane_id: "pane-1".to_string(),
+            tabs: vec![tab("tab-1")],
+            root: WorkspacePaneNode::Split(WorkspaceSplitNode {
+                id: "split-1".to_string(),
+                direction: "horizontal".to_string(),
+                ratio: 0.5,
+                children: vec![
+                    WorkspacePaneNode::Leaf {
+                        id: "pane-1".to_string(),
+                        tabs: vec!["tab-1".to_string()],
+                        active_tab_id: Some("tab-1".to_string()),
+                    },
+                    WorkspacePaneNode::Leaf {
+                        id: "pane-2".to_string(),
+                        tabs: vec!["tab-1".to_string()],
+                        active_tab_id: Some("tab-1".to_string()),
+                    },
+                ],
+            }),
+        };
+
+        let error =
+            validate_session_state(&session).expect_err("duplicate tab reference should fail");
+        assert!(error
+            .to_string()
+            .contains("references the same tab in multiple panes"));
+    }
+
+    #[test]
+    fn rejects_orphan_tab_records() {
+        let session = WorkspaceSessionState {
+            active_pane_id: "pane-1".to_string(),
+            tabs: vec![tab("tab-1"), tab("tab-orphan")],
+            root: WorkspacePaneNode::Leaf {
+                id: "pane-1".to_string(),
+                tabs: vec!["tab-1".to_string()],
+                active_tab_id: Some("tab-1".to_string()),
+            },
+        };
+
+        let error = validate_session_state(&session).expect_err("orphan tab record should fail");
+        assert!(error
+            .to_string()
+            .contains("workspace session contains orphan tab id tab-orphan"));
     }
 }
 
