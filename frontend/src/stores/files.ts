@@ -17,6 +17,13 @@ function collectExpanded(entries: FileEntry[], expanded: Set<string>) {
   }
 }
 
+function collectFilePaths(entries: FileEntry[], paths: Set<string>) {
+  for (const entry of entries) {
+    if (!entry.isDir) paths.add(entry.path)
+    if (entry.children) collectFilePaths(entry.children, paths)
+  }
+}
+
 function applyExpanded(entries: FileEntry[], expanded: Set<string>): FileEntry[] {
   return entries.map((entry) => ({
     ...entry,
@@ -43,8 +50,18 @@ export const useFilesStore = create<FilesState>((set) => ({
       const expanded = new Set<string>()
       const existingTree = trees.get(projectId)
       if (existingTree) collectExpanded(existingTree, expanded)
-      trees.set(projectId, applyExpanded(tree, expanded))
-      return { trees }
+      const hydratedTree = applyExpanded(tree, expanded)
+      trees.set(projectId, hydratedTree)
+      const selectedPath = new Map(s.selectedPath)
+      const currentSelectedPath = selectedPath.get(projectId)
+      if (currentSelectedPath) {
+        const filePaths = new Set<string>()
+        collectFilePaths(hydratedTree, filePaths)
+        if (!filePaths.has(currentSelectedPath)) {
+          selectedPath.set(projectId, null)
+        }
+      }
+      return { trees, selectedPath }
     }),
 
   setTree: (projectId, tree) =>

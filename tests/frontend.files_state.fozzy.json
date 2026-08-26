@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "name": "frontend-files-state",
+  "steps": [
+    {
+      "type": "trace_event",
+      "name": "verify_file_tree_selection_contract",
+      "fields": {
+        "target": "frontend/stores/files"
+      }
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd frontend && npm test -- files --run"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd frontend && npm test -- files --run"
+      ],
+      "expect_exit": 0
+    }
+  ]
+}
