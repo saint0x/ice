@@ -27,6 +27,27 @@ export function editMenuCommandForId(id: string): EditCommand | null {
   return EDIT_MENU_COMMANDS.get(id) ?? null
 }
 
+export function registerMenuEventListener(input: {
+  listenMenu: (handler: (event: Event<string>) => void) => Promise<UnlistenFn>
+  handler: (event: Event<string>) => void
+  setUnlisten: (unlisten: UnlistenFn) => void
+  isCancelled?: () => boolean
+  pushError: (title: string, error: unknown, fallbackMessage?: string) => string
+}) {
+  void input.listenMenu(input.handler)
+    .then((unlisten) => {
+      if (input.isCancelled?.()) {
+        unlisten()
+        return
+      }
+      input.setUnlisten(unlisten)
+    })
+    .catch((error: unknown) => {
+      if (input.isCancelled?.()) return
+      input.pushError('Native menu listener failed', error, 'Failed to connect native menu commands')
+    })
+}
+
 /**
  * Dispatch a semantic action to the UI. Shared with the native menu so menu
  * items and keyboard shortcuts stay in lock-step.
@@ -205,11 +226,18 @@ export function useMenuEvents(): void {
   useEffect(() => {
     let unlisten: UnlistenFn | null = null
     let cancelled = false
-    void listen<string>('app://menu', (event: Event<string>) => {
+    const notifications = useNotificationsStore.getState()
+    const handler = (event: Event<string>) => {
       void dispatchMenuAction(event.payload)
-    }).then((fn) => {
-      if (cancelled) fn()
-      else unlisten = fn
+    }
+    registerMenuEventListener({
+      listenMenu: (nextHandler) => listen<string>('app://menu', nextHandler),
+      handler,
+      setUnlisten: (nextUnlisten) => {
+        unlisten = nextUnlisten
+      },
+      isCancelled: () => cancelled,
+      pushError: notifications.pushError,
     })
     return () => {
       cancelled = true
