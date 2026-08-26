@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use rusqlite::{params, types::Type, Connection, OptionalExtension};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
@@ -676,6 +676,8 @@ impl PersistenceService {
             "
             SELECT message_id, project_id, thread_id, turn_id, role, content, state, created_at, updated_at
             FROM codex_messages
+            WHERE role IN ('user', 'assistant', 'system')
+              AND state IN ('streaming', 'complete')
             ORDER BY created_at ASC, rowid ASC
             ",
         )?;
@@ -707,6 +709,8 @@ impl PersistenceService {
                 SELECT message_id, project_id, thread_id, turn_id, role, content, state, created_at, updated_at
                 FROM codex_messages
                 WHERE thread_id = ?1
+                  AND role IN ('user', 'assistant', 'system')
+                  AND state IN ('streaming', 'complete')
                 ORDER BY created_at ASC, rowid ASC
                 ",
             )?;
@@ -732,6 +736,7 @@ impl PersistenceService {
         &self,
         message: CodexMessageRecord,
     ) -> Result<CodexMessageRecord> {
+        validate_codex_message_record(&message)?;
         let this = self.clone();
         tokio::task::spawn_blocking(move || -> Result<CodexMessageRecord> {
             let conn = this.connect()?;
@@ -768,6 +773,7 @@ impl PersistenceService {
         &self,
         update: crate::codex::service::CodexMessageUpdate,
     ) -> Result<CodexMessageRecord> {
+        validate_codex_message_role_and_state(&update.role, &update.state)?;
         let this = self.clone();
         tokio::task::spawn_blocking(move || -> Result<CodexMessageRecord> {
             let conn = this.connect()?;
@@ -1632,6 +1638,20 @@ fn read_codex_message_by_id(conn: &Connection, message_id: &str) -> Result<Codex
         .ok_or_else(|| anyhow::anyhow!("missing codex message {}", message_id))
 }
 
+fn validate_codex_message_record(message: &CodexMessageRecord) -> Result<()> {
+    validate_codex_message_role_and_state(&message.role, &message.state)
+}
+
+fn validate_codex_message_role_and_state(role: &str, state: &str) -> Result<()> {
+    if !matches!(role, "user" | "assistant" | "system") {
+        return Err(anyhow!("unknown Codex message role {}", role));
+    }
+    if !matches!(state, "streaming" | "complete") {
+        return Err(anyhow!("unknown Codex message state {}", state));
+    }
+    Ok(())
+}
+
 fn prune_workspace_session_projects(
     mut session: WorkspaceSessionState,
     project_ids: &HashSet<String>,
@@ -2420,6 +2440,78 @@ mod tests {
             .expect("messages");
         assert_eq!(messages.len(), 1);
         assert_eq!(messages[0].content, "Final answer");
+        assert_eq!(messages[0].state, "complete");
+    }
+
+    #[tokio::test]
+    async fn codex_message_writes_reject_unknown_role_and_state() {
+        let temp = tempdir().expect("temp dir");
+        let db = PersistenceService::new(temp.path().join("ice.db")).expect("db");
+
+        let unknown_role = db
+            .upsert_codex_message(CodexMessageRecord {
+                message_id: "bad-role".to_string(),
+                project_id: "project-a".to_string(),
+                thread_id: "thread-1".to_string(),
+                turn_id: Some("turn-1".to_string()),
+                role: "tool".to_string(),
+                content: "payload".to_string(),
+                state: "complete".to_string(),
+                created_at: "2026-01-01T00:00:00Z".to_string(),
+                updated_at: "2026-01-01T00:00:00Z".to_string(),
+            })
+            .await
+            .expect_err("unknown role should fail");
+        assert!(unknown_role
+            .to_string()
+            .contains("unknown Codex message role tool"));
+
+        let unknown_state = db
+            .upsert_codex_message(CodexMessageRecord {
+                message_id: "bad-state".to_string(),
+                project_id: "project-a".to_string(),
+                thread_id: "thread-1".to_string(),
+                turn_id: Some("turn-1".to_string()),
+                role: "assistant".to_string(),
+                content: "payload".to_string(),
+                state: "pending".to_string(),
+                created_at: "2026-01-01T00:00:00Z".to_string(),
+                updated_at: "2026-01-01T00:00:00Z".to_string(),
+            })
+            .await
+            .expect_err("unknown state should fail");
+        assert!(unknown_state
+            .to_string()
+            .contains("unknown Codex message state pending"));
+    }
+
+    #[tokio::test]
+    async fn codex_message_reads_hide_legacy_unknown_role_and_state_rows() {
+        let temp = tempdir().expect("temp dir");
+        let db = PersistenceService::new(temp.path().join("ice.db")).expect("db");
+        {
+            let conn = db.connect().expect("db connection");
+            conn.execute(
+                "
+                INSERT INTO codex_messages (message_id, project_id, thread_id, turn_id, role, content, state, created_at, updated_at)
+                VALUES
+                  ('valid', 'project-a', 'thread-1', 'turn-1', 'assistant', 'visible', 'complete', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+                  ('bad-role', 'project-a', 'thread-1', 'turn-1', 'tool', 'hidden', 'complete', '2026-01-01T00:00:01Z', '2026-01-01T00:00:01Z'),
+                  ('bad-state', 'project-a', 'thread-1', 'turn-1', 'assistant', 'hidden', 'pending', '2026-01-01T00:00:02Z', '2026-01-01T00:00:02Z')
+                ",
+                [],
+            )
+            .expect("insert legacy rows");
+        }
+
+        let messages = db
+            .list_codex_messages_for_thread("thread-1".to_string())
+            .await
+            .expect("list messages");
+
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].message_id, "valid");
+        assert_eq!(messages[0].role, "assistant");
         assert_eq!(messages[0].state, "complete");
     }
 

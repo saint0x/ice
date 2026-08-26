@@ -327,9 +327,9 @@ interface CodexMessageDto {
   projectId: string
   threadId: string
   turnId?: string | null
-  role: string
+  role: CodexMessage['role']
   content: string
-  state: string
+  state: CodexMessage['state']
   createdAt: string
   updatedAt: string
 }
@@ -971,9 +971,9 @@ export function toCodexMessage(dto: CodexMessageDto): CodexMessage {
     threadId: dto.threadId,
     projectId: dto.projectId,
     turnId: dto.turnId ?? undefined,
-    role: normalizeCodexRole(dto.role),
+    role: dto.role,
     content: dto.content,
-    state: dto.state === 'streaming' ? 'streaming' : 'complete',
+    state: dto.state,
     createdAt: dto.createdAt,
     updatedAt: dto.updatedAt,
   }
@@ -1171,13 +1171,6 @@ function normalizeCodexStatus(status: string): CodexThread['status'] {
     return status
   }
   return 'idle'
-}
-
-function normalizeCodexRole(role: string): CodexMessage['role'] {
-  if (role === 'user' || role === 'assistant' || role === 'system') {
-    return role
-  }
-  return 'assistant'
 }
 
 function toPaneLayout(dto: WorkspacePaneDto): PaneLayout {
