@@ -184,7 +184,7 @@ export interface CodexThread {
   title: string
   lastMessage?: string
   unread: boolean
-  status: 'idle' | 'running' | 'waiting_approval' | 'waitingApproval' | 'error' | 'disconnected'
+  status: 'idle' | 'running' | 'waitingApproval' | 'error' | 'disconnected'
 }
 
 export interface ProjectCodexSidebarItem {

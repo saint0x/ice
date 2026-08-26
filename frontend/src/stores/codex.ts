@@ -11,7 +11,6 @@ function threadStatusPreference(status: CodexThread['status']) {
     case 'running':
       return 0
     case 'waitingApproval':
-    case 'waiting_approval':
       return 1
     case 'idle':
       return 2

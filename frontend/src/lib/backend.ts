@@ -290,7 +290,7 @@ interface CodexThreadDto {
   projectId: string
   threadId: string
   title?: string | null
-  status: string
+  status: CodexThread['status']
   lastAssistantMessage?: string | null
   unread: boolean
 }
@@ -382,7 +382,7 @@ interface ProjectBrowserSidebarItemDto {
 interface ProjectCodexSidebarItemDto {
   threadId: string
   title: string
-  status: string
+  status: CodexThread['status']
   unread: boolean
   lastAssistantMessage?: string | null
 }
@@ -946,7 +946,7 @@ export function toCodexThread(dto: CodexThreadDto): CodexThread {
     title: dto.title ?? 'New Thread',
     lastMessage: dto.lastAssistantMessage ?? undefined,
     unread: dto.unread,
-    status: normalizeCodexStatus(dto.status),
+    status: dto.status,
   }
 }
 
@@ -1081,7 +1081,7 @@ export function toProjectCodexSidebarItem(dto: ProjectCodexSidebarItemDto): Proj
   return {
     threadId: dto.threadId,
     title: dto.title,
-    status: normalizeCodexStatus(dto.status),
+    status: dto.status,
     unread: dto.unread,
     lastAssistantMessage: dto.lastAssistantMessage ?? undefined,
   }
@@ -1157,20 +1157,6 @@ function toTab(dto: WorkspaceTabDto): Tab {
     pinned: dto.pinned,
     meta: dto.meta ?? undefined,
   }
-}
-
-function normalizeCodexStatus(status: string): CodexThread['status'] {
-  if (
-    status === 'idle' ||
-    status === 'running' ||
-    status === 'waiting_approval' ||
-    status === 'waitingApproval' ||
-    status === 'error' ||
-    status === 'disconnected'
-  ) {
-    return status
-  }
-  return 'idle'
 }
 
 function toPaneLayout(dto: WorkspacePaneDto): PaneLayout {

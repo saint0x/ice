@@ -3,7 +3,7 @@ import {
   MessageSquare, Loader2, ArrowRight, Sparkles
 } from 'lucide-react'
 import type { CodexApproval, CodexMessage, CodexThread, Tab } from '@/types'
-import { codexServerRequestDeny, codexServerRequestRespond, codexThreadCreate, codexThreadMessagesList, codexTurnStart, toCodexMessage } from '@/lib/backend'
+import { codexServerRequestDeny, codexServerRequestRespond, codexThreadCreate, codexThreadMessagesList, codexTurnStart, toCodexMessage, toCodexThread } from '@/lib/backend'
 import { useCodexStore } from '@/stores/codex'
 import { useProjectsStore } from '@/stores/projects'
 import { useNotificationsStore } from '@/stores/notifications'
@@ -84,7 +84,6 @@ export const CodexSurface = memo(function CodexSurface({ tab }: Props) {
       case 'running':
         return 'Running'
       case 'waitingApproval':
-      case 'waiting_approval':
         return 'Waiting Approval'
       case 'error':
         return 'Error'
@@ -116,14 +115,7 @@ export const CodexSurface = memo(function CodexSurface({ tab }: Props) {
       targetThreadId = threadId && isReusableCodexThread(thread) ? threadId : undefined
       if (!targetThreadId) {
         const created = await codexThreadCreate(tab.projectId, tab.title === 'New Thread' ? undefined : tab.title)
-        const mapped: CodexThread = {
-          id: created.threadId,
-          projectId: created.projectId,
-          title: created.title ?? 'New Thread',
-          lastMessage: created.lastAssistantMessage ?? undefined,
-          unread: false,
-          status: created.status === 'waitingApproval' ? 'waitingApproval' : (created.status as 'idle' | 'running' | 'error' | 'disconnected'),
-        }
+        const mapped = toCodexThread({ ...created, unread: false })
         addThread(mapped)
         setActiveThread(tab.projectId, mapped.id)
         bindThreadToTab(mapped)
@@ -138,14 +130,7 @@ export const CodexSurface = memo(function CodexSurface({ tab }: Props) {
             throw error
           }
           const created = await codexThreadCreate(tab.projectId, tab.title === 'New Thread' ? undefined : tab.title)
-          const mapped: CodexThread = {
-            id: created.threadId,
-            projectId: created.projectId,
-            title: created.title ?? 'New Thread',
-            lastMessage: created.lastAssistantMessage ?? undefined,
-            unread: false,
-            status: created.status === 'waitingApproval' ? 'waitingApproval' : (created.status as 'idle' | 'running' | 'error' | 'disconnected'),
-          }
+          const mapped = toCodexThread({ ...created, unread: false })
           addThread(mapped)
           setActiveThread(tab.projectId, mapped.id)
           bindThreadToTab(mapped)

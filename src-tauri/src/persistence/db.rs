@@ -577,8 +577,17 @@ impl PersistenceService {
         let conn = self.connect()?;
         let mut stmt = conn.prepare(
             "
-            SELECT project_id, thread_id, title, model, status, last_turn_id, last_assistant_message, unread
+            SELECT
+              project_id,
+              thread_id,
+              title,
+              model,
+              CASE status WHEN 'waiting_approval' THEN 'waitingApproval' ELSE status END,
+              last_turn_id,
+              last_assistant_message,
+              unread
             FROM codex_threads
+            WHERE status IN ('idle', 'running', 'waitingApproval', 'waiting_approval', 'error', 'disconnected')
             ORDER BY updated_at DESC
             ",
         )?;
@@ -634,7 +643,8 @@ impl PersistenceService {
         )?)
     }
 
-    pub async fn upsert_codex_thread(&self, thread: CodexThreadBinding) -> Result<()> {
+    pub async fn upsert_codex_thread(&self, mut thread: CodexThreadBinding) -> Result<()> {
+        thread.status = canonical_codex_thread_status(&thread.status)?.to_string();
         let this = self.clone();
         tokio::task::spawn_blocking(move || -> Result<()> {
             let conn = this.connect()?;
@@ -1638,6 +1648,17 @@ fn read_codex_message_by_id(conn: &Connection, message_id: &str) -> Result<Codex
         .ok_or_else(|| anyhow::anyhow!("missing codex message {}", message_id))
 }
 
+fn canonical_codex_thread_status(status: &str) -> Result<&'static str> {
+    match status {
+        "idle" => Ok("idle"),
+        "running" => Ok("running"),
+        "waitingApproval" | "waiting_approval" => Ok("waitingApproval"),
+        "error" => Ok("error"),
+        "disconnected" => Ok("disconnected"),
+        _ => Err(anyhow!("unknown Codex thread status {}", status)),
+    }
+}
+
 fn validate_codex_message_record(message: &CodexMessageRecord) -> Result<()> {
     validate_codex_message_role_and_state(&message.role, &message.state)
 }
@@ -2483,6 +2504,55 @@ mod tests {
         assert!(unknown_state
             .to_string()
             .contains("unknown Codex message state pending"));
+    }
+
+    #[tokio::test]
+    async fn codex_thread_writes_reject_unknown_status() {
+        let temp = tempdir().expect("temp dir");
+        let db = PersistenceService::new(temp.path().join("ice.db")).expect("db");
+
+        let error = db
+            .upsert_codex_thread(CodexThreadBinding {
+                project_id: "project-a".to_string(),
+                thread_id: "thread-1".to_string(),
+                title: Some("Agent".to_string()),
+                model: Some("gpt-5-codex".to_string()),
+                status: "ready".to_string(),
+                last_turn_id: None,
+                last_assistant_message: None,
+                unread: false,
+            })
+            .await
+            .expect_err("unknown thread status should fail");
+
+        assert!(error
+            .to_string()
+            .contains("unknown Codex thread status ready"));
+    }
+
+    #[tokio::test]
+    async fn codex_thread_reads_hide_unknown_and_canonicalize_legacy_status() {
+        let temp = tempdir().expect("temp dir");
+        let db = PersistenceService::new(temp.path().join("ice.db")).expect("db");
+        {
+            let conn = db.connect().expect("db connection");
+            conn.execute(
+                "
+                INSERT INTO codex_threads (thread_id, project_id, title, model, status, last_turn_id, last_assistant_message, unread, created_at, updated_at)
+                VALUES
+                  ('legacy', 'project-a', 'Legacy', 'gpt-5-codex', 'waiting_approval', NULL, NULL, 0, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'),
+                  ('bad-status', 'project-a', 'Bad', 'gpt-5-codex', 'ready', NULL, NULL, 0, '2026-01-01T00:00:01Z', '2026-01-01T00:00:01Z')
+                ",
+                [],
+            )
+            .expect("insert legacy rows");
+        }
+
+        let threads = db.load_codex_threads_sync().expect("codex threads");
+
+        assert_eq!(threads.len(), 1);
+        assert_eq!(threads[0].thread_id, "legacy");
+        assert_eq!(threads[0].status, "waitingApproval");
     }
 
     #[tokio::test]
