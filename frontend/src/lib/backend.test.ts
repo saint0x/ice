@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   toBrowserRuntimeNotice,
+  toCodexRuntimeError,
   toCodexThread,
   toGitMutationEvent,
   toProjectCodexSidebarItem,
@@ -52,6 +53,20 @@ describe('backend mappers', () => {
     expect(error).toEqual({
       title: 'Terminal persistence failed',
       message: 'Terminal scrollback was not saved: disk full',
+    })
+  })
+
+  it('maps Codex persistence failures to runtime errors', () => {
+    const error = toCodexRuntimeError({
+      type: 'persistenceFailed',
+      threadId: 'thread-1',
+      projectId: 'project-1',
+      errorMessage: 'Codex message was not saved: disk full',
+    })
+
+    expect(error).toEqual({
+      title: 'Codex persistence failed',
+      message: 'Codex message was not saved: disk full',
     })
   })
 

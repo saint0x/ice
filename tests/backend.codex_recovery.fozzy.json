@@ -155,6 +155,27 @@
         "cd src-tauri && cargo test security::approvals::tests::blocks_filesystem_path_outside_project_root -- --exact && cargo test security::approvals::tests::blocks_command_with_absolute_path_outside_project_root -- --exact"
       ],
       "expect_exit": 0
+    },
+    {
+      "type": "proc_when",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd frontend && npm test -- --run src/lib/backend.test.ts"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "",
+      "times": 1
+    },
+    {
+      "type": "proc_spawn",
+      "cmd": "/bin/sh",
+      "args": [
+        "-lc",
+        "cd frontend && npm test -- --run src/lib/backend.test.ts"
+      ],
+      "expect_exit": 0
     }
   ]
 }

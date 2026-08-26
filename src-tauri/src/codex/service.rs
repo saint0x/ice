@@ -3,13 +3,13 @@ use std::fs;
 use std::path::Path;
 use std::process::Command as StdCommand;
 use std::process::Stdio;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Emitter};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -23,8 +23,8 @@ use crate::persistence::db::PersistenceService;
 use crate::projects::models::ProjectCodexSidebarItem;
 use crate::projects::models::ProjectRecord;
 use crate::security::approvals::{
-    apply_approval_policy, classify_approval, enforce_project_scope_policy, PendingApprovalRecord,
-    SecurityService,
+    PendingApprovalRecord, SecurityService, apply_approval_policy, classify_approval,
+    enforce_project_scope_policy,
 };
 
 const CODEX_MODEL_ID: &str = "gpt-5.4";
@@ -837,13 +837,34 @@ impl CodexService {
                                 };
                                 let approval = scoped_approval.unwrap_or(approval);
                                 if approval.policy_action == "block" {
-                                    let _ = security.record_policy_block(approval.clone()).await;
+                                    if let Err(error) =
+                                        security.record_policy_block(approval.clone()).await
+                                    {
+                                        emit_codex_persistence_failed(
+                                            &app,
+                                            approval.thread_id.as_deref(),
+                                            Some(&approval.project_id),
+                                            format!(
+                                                "Blocked approval was not saved to the audit log: {error}"
+                                            ),
+                                        );
+                                    }
                                     if let Some(thread) = mark_thread_after_denial(
                                         &state,
                                         approval.thread_id.as_deref(),
                                     ) {
-                                        let _ =
-                                            persistence.upsert_codex_thread(thread.clone()).await;
+                                        if let Err(error) =
+                                            persistence.upsert_codex_thread(thread.clone()).await
+                                        {
+                                            emit_codex_persistence_failed(
+                                                &app,
+                                                Some(&thread.thread_id),
+                                                Some(&thread.project_id),
+                                                format!(
+                                                    "Codex approval denial state was not saved: {error}"
+                                                ),
+                                            );
+                                        }
                                         let _ = app.emit(
                                             CODEX_EVENT,
                                             json!({ "type": "threadUpdated", "thread": thread }),
@@ -875,13 +896,32 @@ impl CodexService {
                                     &state,
                                     approval.thread_id.as_deref(),
                                 ) {
-                                    let _ = persistence.upsert_codex_thread(thread.clone()).await;
+                                    if let Err(error) =
+                                        persistence.upsert_codex_thread(thread.clone()).await
+                                    {
+                                        emit_codex_persistence_failed(
+                                            &app,
+                                            Some(&thread.thread_id),
+                                            Some(&thread.project_id),
+                                            format!(
+                                                "Codex approval request state was not saved: {error}"
+                                            ),
+                                        );
+                                    }
                                     let _ = app.emit(
                                         CODEX_EVENT,
                                         json!({ "type": "threadUpdated", "thread": thread }),
                                     );
                                 }
-                                let _ = security.upsert_approval(approval.clone()).await;
+                                if let Err(error) = security.upsert_approval(approval.clone()).await
+                                {
+                                    emit_codex_persistence_failed(
+                                        &app,
+                                        approval.thread_id.as_deref(),
+                                        Some(&approval.project_id),
+                                        format!("Pending approval was not saved: {error}"),
+                                    );
+                                }
                                 let _ = app.emit(
                                     CODEX_EVENT,
                                     json!({ "type": "approvalPending", "approval": approval }),
@@ -933,33 +973,65 @@ impl CodexService {
                     } else {
                         if let Some(outcome) = apply_notification_to_threads(&state, &value) {
                             if let Some(message_update) = outcome.message_update {
-                                if let Ok(message) =
-                                    persistence.apply_codex_message_update(message_update).await
+                                match persistence
+                                    .apply_codex_message_update(message_update.clone())
+                                    .await
                                 {
-                                    let _ = app.emit(
-                                        CODEX_EVENT,
-                                        json!({ "type": "messageUpserted", "message": message }),
-                                    );
+                                    Ok(message) => {
+                                        let _ = app.emit(
+                                            CODEX_EVENT,
+                                            json!({ "type": "messageUpserted", "message": message }),
+                                        );
+                                    }
+                                    Err(error) => {
+                                        emit_codex_persistence_failed(
+                                            &app,
+                                            Some(&message_update.thread_id),
+                                            Some(&message_update.project_id),
+                                            format!("Codex message was not saved: {error}"),
+                                        );
+                                    }
                                 }
                             }
                             let thread = outcome.thread;
                             if is_terminal_thread_status(&thread.status) {
-                                if let Ok(messages) = persistence
+                                match persistence
                                     .finalize_streaming_codex_messages(
                                         thread.thread_id.clone(),
                                         thread.last_turn_id.clone(),
                                     )
                                     .await
                                 {
-                                    for message in messages {
-                                        let _ = app.emit(
-                                            CODEX_EVENT,
-                                            json!({ "type": "messageUpserted", "message": message }),
+                                    Ok(messages) => {
+                                        for message in messages {
+                                            let _ = app.emit(
+                                                CODEX_EVENT,
+                                                json!({ "type": "messageUpserted", "message": message }),
+                                            );
+                                        }
+                                    }
+                                    Err(error) => {
+                                        emit_codex_persistence_failed(
+                                            &app,
+                                            Some(&thread.thread_id),
+                                            Some(&thread.project_id),
+                                            format!(
+                                                "Codex streaming messages were not finalized: {error}"
+                                            ),
                                         );
                                     }
                                 }
                             }
-                            let _ = persistence.upsert_codex_thread(thread.clone()).await;
+                            if let Err(error) =
+                                persistence.upsert_codex_thread(thread.clone()).await
+                            {
+                                emit_codex_persistence_failed(
+                                    &app,
+                                    Some(&thread.thread_id),
+                                    Some(&thread.project_id),
+                                    format!("Codex thread state was not saved: {error}"),
+                                );
+                            }
                             let _ = app.emit(
                                 CODEX_EVENT,
                                 json!({ "type": "threadUpdated", "thread": thread }),
@@ -977,7 +1049,14 @@ impl CodexService {
             }
             let disconnected_threads = reset_runtime_state(&state);
             for thread in disconnected_threads {
-                let _ = persistence.upsert_codex_thread(thread).await;
+                if let Err(error) = persistence.upsert_codex_thread(thread.clone()).await {
+                    emit_codex_persistence_failed(
+                        &app,
+                        Some(&thread.thread_id),
+                        Some(&thread.project_id),
+                        format!("Codex disconnect state was not saved: {error}"),
+                    );
+                }
             }
             let _ = app.emit(
                 CODEX_EVENT,
@@ -1015,6 +1094,23 @@ impl CodexService {
         );
         Ok(())
     }
+}
+
+fn emit_codex_persistence_failed(
+    app: &AppHandle,
+    thread_id: Option<&str>,
+    project_id: Option<&str>,
+    message: String,
+) {
+    let _ = app.emit(
+        CODEX_EVENT,
+        json!({
+            "type": "persistenceFailed",
+            "threadId": thread_id,
+            "projectId": project_id,
+            "errorMessage": message,
+        }),
+    );
 }
 
 fn thread_has_backing_session(paths: &IcePaths, thread_id: &str) -> bool {
@@ -1778,9 +1874,9 @@ fn extract_default_listen(help_text: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_notification_to_threads, build_pending_approval, build_scoped_turn_prompt,
-        extract_default_listen, load_persisted_threads_for_startup, normalize_thread_after_startup,
-        summarize_text, CodexRuntimeState, CodexThreadBinding, CODEX_MODEL_ID,
+        CODEX_MODEL_ID, CodexRuntimeState, CodexThreadBinding, apply_notification_to_threads,
+        build_pending_approval, build_scoped_turn_prompt, extract_default_listen,
+        load_persisted_threads_for_startup, normalize_thread_after_startup, summarize_text,
     };
     use crate::app::paths::IcePaths;
     use crate::persistence::db::PersistenceService;
@@ -1843,8 +1939,10 @@ mod tests {
         );
 
         assert!(prompt.contains("Project Root: /Users/deepsaint/Desktop/ice"));
-        assert!(prompt
-            .contains("Do not read, edit, create, delete, or run commands outside that root."));
+        assert!(
+            prompt
+                .contains("Do not read, edit, create, delete, or run commands outside that root.")
+        );
         assert!(prompt.contains("[USER PROMPT]\nRefactor the git surface"));
     }
 

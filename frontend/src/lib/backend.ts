@@ -321,6 +321,9 @@ interface CodexEventPayload {
   approval?: CodexApprovalDto
   message?: CodexMessageDto
   reason?: string
+  threadId?: string
+  projectId?: string
+  errorMessage?: string
   payload?: {
     method?: string
     params?: Record<string, unknown>
@@ -981,6 +984,16 @@ export function toCodexApproval(dto: CodexApprovalDto): CodexApproval {
     policyReason: dto.policyReason ?? undefined,
     description: dto.description,
     context: dto.contextJson,
+  }
+}
+
+export function toCodexRuntimeError(payload: CodexEventPayload): RuntimeErrorNotice | null {
+  if (payload.type !== 'persistenceFailed') {
+    return null
+  }
+  return {
+    title: 'Codex persistence failed',
+    message: payload.errorMessage ?? 'Codex state could not be saved.',
   }
 }
 

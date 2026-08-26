@@ -20,6 +20,7 @@ import {
   toBrowserRuntimeNotice,
   toCodexApproval,
   toCodexMessage,
+  toCodexRuntimeError,
   toProjectBrowserSidebarItem,
   toProjectCodexSidebarItem,
   toCodexThread,
@@ -383,6 +384,11 @@ export function useBackendIntegration() {
       label: 'Codex',
       listen: listenCodexEvents,
       handler: (payload) => {
+        const codexRuntimeError = toCodexRuntimeError(payload)
+        if (codexRuntimeError) {
+          pushError(codexRuntimeError.title, codexRuntimeError.message)
+          return
+        }
         if ((payload.type === 'threadCreated' || payload.type === 'threadUpdated') && payload.thread) {
           const thread = toCodexThread(payload.thread)
           if (payload.type === 'threadCreated') {
