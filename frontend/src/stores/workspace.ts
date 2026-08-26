@@ -8,6 +8,7 @@ const nextTabId = (): TabId => `tab-${++_tabCounter}`
 const clampSidebarWidth = (width: number) => Math.max(180, Math.min(400, width))
 const clampBottomDockHeight = (height: number) => Math.max(100, Math.min(600, height))
 const clampChatPanelWidth = (width: number) => Math.max(280, Math.min(520, width))
+const clampSplitRatio = (ratio: number) => Math.max(0.15, Math.min(0.85, Number.isFinite(ratio) ? ratio : 0.5))
 
 interface WorkspaceState {
   layout: PaneLayout
@@ -133,7 +134,9 @@ function normalizeHydratedLayout(layout: PaneLayout, tabIds: Set<TabId>, claimed
 
   return {
     ...layout,
+    direction: layout.direction === 'vertical' ? 'vertical' : 'horizontal',
     children: layout.children.map((child) => normalizeHydratedLayout(child, tabIds, claimedTabs)),
+    ratio: clampSplitRatio(layout.ratio),
   }
 }
 
@@ -296,7 +299,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set) => ({
     set((s) => {
       function update(layout: PaneLayout): PaneLayout {
         if (layout.type === 'leaf') return layout
-        if (layout.id === splitId) return { ...layout, ratio: Math.max(0.15, Math.min(0.85, ratio)) }
+        if (layout.id === splitId) return { ...layout, ratio: clampSplitRatio(ratio) }
         return { ...layout, children: layout.children.map(update) }
       }
       return { layout: update(s.layout) }

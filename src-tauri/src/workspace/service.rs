@@ -16,6 +16,8 @@ const BOTTOM_DOCK_HEIGHT_MIN: u16 = 100;
 const BOTTOM_DOCK_HEIGHT_MAX: u16 = 600;
 const CHAT_PANEL_WIDTH_MIN: u16 = 280;
 const CHAT_PANEL_WIDTH_MAX: u16 = 520;
+const SPLIT_RATIO_MIN: f64 = 0.15;
+const SPLIT_RATIO_MAX: f64 = 0.85;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -109,11 +111,12 @@ impl WorkspaceService {
     }
 
     pub async fn get_session_state(&self, workspace_id: &str) -> Result<WorkspaceSessionState> {
-        Ok(self
-            .persistence
-            .read_workspace_session(workspace_id)
-            .await?
-            .unwrap_or_else(default_session_state))
+        Ok(normalize_session_state(
+            self.persistence
+                .read_workspace_session(workspace_id)
+                .await?
+                .unwrap_or_else(default_session_state),
+        ))
     }
 
     pub async fn set_session_state(
@@ -121,6 +124,7 @@ impl WorkspaceService {
         workspace_id: &str,
         session_state: WorkspaceSessionState,
     ) -> Result<()> {
+        let session_state = normalize_session_state(session_state);
         validate_session_state(&session_state)?;
         self.persistence
             .upsert_workspace_session(workspace_id.to_owned(), &session_state)
@@ -161,6 +165,27 @@ fn default_session_state() -> WorkspaceSessionState {
             tabs: Vec::new(),
             active_tab_id: None,
         },
+    }
+}
+
+fn normalize_session_state(mut session: WorkspaceSessionState) -> WorkspaceSessionState {
+    normalize_node_geometry(&mut session.root);
+    session
+}
+
+fn normalize_node_geometry(node: &mut WorkspacePaneNode) {
+    if let WorkspacePaneNode::Split(split) = node {
+        if split.direction != "horizontal" && split.direction != "vertical" {
+            split.direction = "horizontal".to_string();
+        }
+        split.ratio = if split.ratio.is_finite() {
+            split.ratio.clamp(SPLIT_RATIO_MIN, SPLIT_RATIO_MAX)
+        } else {
+            0.5
+        };
+        for child in &mut split.children {
+            normalize_node_geometry(child);
+        }
     }
 }
 
@@ -268,6 +293,58 @@ mod tests {
         assert_eq!(chrome.bottom_dock_height, BOTTOM_DOCK_HEIGHT_MAX);
         assert!(!chrome.chat_panel_open);
         assert_eq!(chrome.chat_panel_width, CHAT_PANEL_WIDTH_MIN);
+    }
+
+    #[test]
+    fn normalizes_split_geometry_to_renderable_bounds() {
+        let session = normalize_session_state(WorkspaceSessionState {
+            active_pane_id: "pane-1".to_string(),
+            tabs: Vec::new(),
+            root: WorkspacePaneNode::Split(WorkspaceSplitNode {
+                id: "split-1".to_string(),
+                direction: "diagonal".to_string(),
+                ratio: 1.0,
+                children: vec![
+                    WorkspacePaneNode::Leaf {
+                        id: "pane-1".to_string(),
+                        tabs: Vec::new(),
+                        active_tab_id: None,
+                    },
+                    WorkspacePaneNode::Split(WorkspaceSplitNode {
+                        id: "split-2".to_string(),
+                        direction: "vertical".to_string(),
+                        ratio: f64::NAN,
+                        children: vec![
+                            WorkspacePaneNode::Leaf {
+                                id: "pane-2".to_string(),
+                                tabs: Vec::new(),
+                                active_tab_id: None,
+                            },
+                            WorkspacePaneNode::Leaf {
+                                id: "pane-3".to_string(),
+                                tabs: Vec::new(),
+                                active_tab_id: None,
+                            },
+                        ],
+                    }),
+                ],
+            }),
+        });
+
+        match session.root {
+            WorkspacePaneNode::Split(root) => {
+                assert_eq!(root.direction, "horizontal");
+                assert_eq!(root.ratio, SPLIT_RATIO_MAX);
+                match &root.children[1] {
+                    WorkspacePaneNode::Split(child) => {
+                        assert_eq!(child.direction, "vertical");
+                        assert_eq!(child.ratio, 0.5);
+                    }
+                    WorkspacePaneNode::Leaf { .. } => panic!("expected nested split"),
+                }
+            }
+            WorkspacePaneNode::Leaf { .. } => panic!("expected split root"),
+        }
     }
 
     #[test]

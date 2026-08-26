@@ -219,8 +219,8 @@ describe('workspace store focus synchronization', () => {
       layout: {
         id: 'split-root',
         type: 'split',
-        direction: 'horizontal',
-        ratio: 0.5,
+        direction: 'diagonal' as 'horizontal',
+        ratio: 1.2,
         children: [
           {
             id: 'pane-10',
@@ -273,6 +273,8 @@ describe('workspace store focus synchronization', () => {
     expect(state.tabs.has('tab-orphan')).toBe(false)
     expect(state.layout).toMatchObject({
       type: 'split',
+      direction: 'horizontal',
+      ratio: 0.85,
       children: [
         {
           type: 'leaf',
