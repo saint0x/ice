@@ -6,6 +6,7 @@ import {
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useProjectsStore } from '@/stores/projects'
 import { createAndOpenBrowserTab } from '@/lib/browserTabs'
+import { createAndFocusTerminalSession } from '@/lib/terminalSessions'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useThemeStore, THEMES } from '@/stores/theme'
 import type { ThemeId } from '@/stores/theme'
@@ -82,9 +83,11 @@ export const TitleBar = memo(function TitleBar() {
       })
       return
     }
-    const state = useWorkspaceStore.getState()
-    state.setBottomDockOpen(true)
-  }, [activeProjectId, pushNotification])
+    void createAndFocusTerminalSession(activeProjectId)
+      .catch((error: unknown) => {
+        pushError('Terminal create failed', error, 'Failed to create terminal')
+      })
+  }, [activeProjectId, pushError, pushNotification])
 
   return (
     <div className={styles.titleBar} data-tauri-drag-region>

@@ -56,8 +56,10 @@ export const TerminalList = memo(function TerminalList({ projectId }: { projectI
       <button
         className={styles.addBtn}
         onClick={() => {
-          setBottomDockOpen(true)
           void createAndFocusTerminalSession(projectId)
+            .catch((error: unknown) => {
+              pushError('Terminal create failed', error, 'Failed to create terminal')
+            })
         }}
       >
         <Plus size={12} />

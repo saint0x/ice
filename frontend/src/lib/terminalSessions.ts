@@ -48,10 +48,9 @@ export async function createAndFocusTerminalSession(projectId?: string | null) {
     throw new Error('Unable to determine which project this terminal should use.')
   }
 
-  useWorkspaceStore.getState().setBottomDockOpen(true)
-
   const session = await terminalCreate(resolvedProjectId)
   const mapped = toTerminalSession(session)
+  useWorkspaceStore.getState().setBottomDockOpen(true)
   const store = useTerminalStore.getState()
   store.upsertSession(mapped)
   store.setActiveSession(resolvedProjectId, mapped.id)
