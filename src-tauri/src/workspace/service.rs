@@ -202,8 +202,19 @@ fn validate_session_state(session_state: &WorkspaceSessionState) -> Result<()> {
     use std::collections::HashSet;
 
     let mut pane_ids = Vec::new();
+    let mut node_ids = Vec::new();
     let mut referenced_tabs = Vec::new();
-    collect_node_state(&session_state.root, &mut pane_ids, &mut referenced_tabs)?;
+    collect_node_state(
+        &session_state.root,
+        &mut pane_ids,
+        &mut node_ids,
+        &mut referenced_tabs,
+    )?;
+
+    let node_id_set: HashSet<_> = node_ids.iter().cloned().collect();
+    if node_id_set.len() != node_ids.len() {
+        return Err(anyhow!("workspace session contains duplicate layout node ids"));
+    }
 
     let pane_id_set: HashSet<_> = pane_ids.iter().cloned().collect();
     if pane_id_set.len() != pane_ids.len() {
@@ -414,6 +425,49 @@ mod tests {
     }
 
     #[test]
+    fn rejects_duplicate_split_node_ids() {
+        let session = WorkspaceSessionState {
+            active_pane_id: "pane-1".to_string(),
+            tabs: Vec::new(),
+            root: WorkspacePaneNode::Split(WorkspaceSplitNode {
+                id: "split-duplicate".to_string(),
+                direction: "horizontal".to_string(),
+                ratio: 0.5,
+                children: vec![
+                    WorkspacePaneNode::Split(WorkspaceSplitNode {
+                        id: "split-duplicate".to_string(),
+                        direction: "vertical".to_string(),
+                        ratio: 0.5,
+                        children: vec![
+                            WorkspacePaneNode::Leaf {
+                                id: "pane-1".to_string(),
+                                tabs: Vec::new(),
+                                active_tab_id: None,
+                            },
+                            WorkspacePaneNode::Leaf {
+                                id: "pane-2".to_string(),
+                                tabs: Vec::new(),
+                                active_tab_id: None,
+                            },
+                        ],
+                    }),
+                    WorkspacePaneNode::Leaf {
+                        id: "pane-3".to_string(),
+                        tabs: Vec::new(),
+                        active_tab_id: None,
+                    },
+                ],
+            }),
+        };
+
+        let error =
+            validate_session_state(&session).expect_err("duplicate split ids should fail");
+        assert!(error
+            .to_string()
+            .contains("workspace session contains duplicate layout node ids"));
+    }
+
+    #[test]
     fn rejects_orphan_tab_records() {
         let session = WorkspaceSessionState {
             active_pane_id: "pane-1".to_string(),
@@ -451,6 +505,7 @@ mod tests {
 fn collect_node_state(
     node: &WorkspacePaneNode,
     pane_ids: &mut Vec<String>,
+    node_ids: &mut Vec<String>,
     referenced_tabs: &mut Vec<String>,
 ) -> Result<()> {
     use anyhow::anyhow;
@@ -461,6 +516,7 @@ fn collect_node_state(
             tabs,
             active_tab_id,
         } => {
+            node_ids.push(id.clone());
             pane_ids.push(id.clone());
             referenced_tabs.extend(tabs.iter().cloned());
             if let Some(active_tab_id) = active_tab_id {
@@ -474,6 +530,7 @@ fn collect_node_state(
             }
         }
         WorkspacePaneNode::Split(split) => {
+            node_ids.push(split.id.clone());
             if split.children.len() < 2 {
                 return Err(anyhow!(
                     "workspace split {} must have at least two children",
@@ -487,7 +544,7 @@ fn collect_node_state(
                 ));
             }
             for child in &split.children {
-                collect_node_state(child, pane_ids, referenced_tabs)?;
+                collect_node_state(child, pane_ids, node_ids, referenced_tabs)?;
             }
         }
     }
