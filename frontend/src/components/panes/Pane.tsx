@@ -1,6 +1,8 @@
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
 import { X, SplitSquareHorizontal } from 'lucide-react'
 import type { PaneNode } from '@/types'
+import { closeWorkspaceTab } from '@/lib/workspaceTabs'
+import { useNotificationsStore } from '@/stores/notifications'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { ContentRenderer } from './ContentRenderer'
 import styles from './Pane.module.css'
@@ -22,10 +24,10 @@ export const Pane = memo(function Pane({ pane }: Props) {
   const activePaneId = useWorkspaceStore((s) => s.activePaneId)
   const pendingFocusPaneId = useWorkspaceStore((s) => s.pendingFocusPaneId)
   const activateTab = useWorkspaceStore((s) => s.activateTab)
-  const closeTab = useWorkspaceStore((s) => s.closeTab)
   const setActivePane = useWorkspaceStore((s) => s.setActivePane)
   const clearPendingFocusPane = useWorkspaceStore((s) => s.clearPendingFocusPane)
   const splitPane = useWorkspaceStore((s) => s.splitPane)
+  const pushError = useNotificationsStore((s) => s.pushError)
   const paneRef = useRef<HTMLDivElement>(null)
 
   const isActive = pane.id === activePaneId
@@ -62,7 +64,12 @@ export const Pane = memo(function Pane({ pane }: Props) {
                 {tab.dirty && <span className={styles.dirty} />}
                 <button
                   className={styles.tabClose}
-                  onClick={(e) => { e.stopPropagation(); closeTab(pane.id, tab.id) }}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    void closeWorkspaceTab(pane.id, tab.id).catch((error: unknown) => {
+                      pushError('Tab close failed', error, 'Failed to close tab')
+                    })
+                  }}
                   aria-label="Close tab"
                 >
                   <X size={10} />

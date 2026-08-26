@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { terminalInterrupt, terminalRespawn, terminalScrollbackClear, terminalSendEof, toTerminalSession } from '@/lib/backend'
 import { createAndOpenBrowserTab } from '@/lib/browserTabs'
 import { createAndFocusTerminalSession } from '@/lib/terminalSessions'
+import { closeWorkspaceTab } from '@/lib/workspaceTabs'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useProjectsStore } from '@/stores/projects'
 import { useTerminalStore } from '@/stores/terminal'
@@ -71,7 +72,9 @@ export function useKeyboardShortcuts() {
           return activePaneTabs[activePaneTabs.length - 1] ?? null
         })()
         if (activeTabId) {
-          workspace.closeTab(workspace.activePaneId, activeTabId)
+          void closeWorkspaceTab(workspace.activePaneId, activeTabId).catch((error: unknown) => {
+            notifications.pushError('Tab close failed', error, 'Failed to close tab')
+          })
         }
       } else if (meta && !e.shiftKey && e.key === '\\') {
         e.preventDefault()

@@ -7,6 +7,7 @@ import {
 } from '@/lib/backend'
 import { createAndOpenBrowserTab } from '@/lib/browserTabs'
 import { createAndFocusTerminalSession } from '@/lib/terminalSessions'
+import { closeWorkspaceTab } from '@/lib/workspaceTabs'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useProjectsStore } from '@/stores/projects'
 import { useWorkspaceStore } from '@/stores/workspace'
@@ -86,7 +87,13 @@ async function dispatchMenuAction(id: string): Promise<void> {
         return null
       }
       const activeTabId = findActive(layout)
-      if (activeTabId) workspace.closeTab(activePaneId, activeTabId)
+      if (activeTabId) {
+        try {
+          await closeWorkspaceTab(activePaneId, activeTabId)
+        } catch (error) {
+          notifications.pushError('Tab close failed', error, 'Failed to close tab')
+        }
+      }
       return
     }
     case 'edit.find': {

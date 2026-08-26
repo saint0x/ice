@@ -36,6 +36,7 @@ import {
 } from '@/lib/backend'
 import { prefetchProjectDocuments as prefetchEditorProjectDocuments } from '@/lib/editorDocuments'
 import { logFrontendEvent } from '@/lib/diagnostics'
+import { closeWorkspaceTabsForBrowserTab } from '@/lib/workspaceTabs'
 import { useFilesStore } from '@/stores/files'
 import { useGitStore } from '@/stores/git'
 import { useNotificationsStore } from '@/stores/notifications'
@@ -272,6 +273,7 @@ export function useBackendIntegration() {
       }
       if (payload.type === 'tabClosed' && payload.tabId) {
         closeBrowserTab(payload.tabId)
+        closeWorkspaceTabsForBrowserTab(payload.tabId)
       }
     }).then((unlisten) => {
       browserUnlisten = unlisten

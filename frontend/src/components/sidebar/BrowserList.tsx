@@ -11,6 +11,7 @@ import {
 } from '@/lib/backend'
 import { createAndOpenBrowserTab } from '@/lib/browserTabs'
 import { useBrowserStore } from '@/stores/browser'
+import { useNotificationsStore } from '@/stores/notifications'
 import { useWorkspaceStore } from '@/stores/workspace'
 import styles from './BrowserList.module.css'
 
@@ -22,6 +23,7 @@ export const BrowserList = memo(function BrowserList({ projectId }: { projectId:
   const setActiveTab = useBrowserStore((s) => s.setActiveTab)
   const upsertTab = useBrowserStore((s) => s.upsertTab)
   const closeTab = useBrowserStore((s) => s.closeTab)
+  const pushError = useNotificationsStore((s) => s.pushError)
   const openTab = useWorkspaceStore((s) => s.openTab)
   const activePaneId = useWorkspaceStore((s) => s.activePaneId)
   const [restorePolicy, setRestorePolicy] = useState<BrowserRestorePolicy | null>(null)
@@ -96,8 +98,11 @@ export const BrowserList = memo(function BrowserList({ projectId }: { projectId:
             className={styles.iconBtn}
             onClick={(event) => {
               event.stopPropagation()
-              closeTab(tab.tabId)
-              void browserTabClose(tab.tabId)
+              void browserTabClose(tab.tabId).then(() => {
+                closeTab(tab.tabId)
+              }).catch((error: unknown) => {
+                pushError('Browser tab close failed', error, 'Failed to close browser tab')
+              })
             }}
             aria-label="Close browser tab"
           >
