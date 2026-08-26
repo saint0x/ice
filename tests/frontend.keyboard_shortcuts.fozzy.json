@@ -6,7 +6,7 @@
       "type": "trace_event",
       "name": "verify_keyboard_active_tab_contract",
       "fields": {
-        "target": "frontend/lib/projectResolution+hooks/useKeyboardShortcuts"
+        "target": "frontend/lib/projectResolution+terminalShortcutActions+hooks/useKeyboardShortcuts"
       }
     },
     {
@@ -14,7 +14,7 @@
       "cmd": "/bin/sh",
       "args": [
         "-lc",
-        "cd frontend && npm test -- projectResolution --run"
+        "cd frontend && npm test -- projectResolution terminalShortcutActions --run"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -26,7 +26,7 @@
       "cmd": "/bin/sh",
       "args": [
         "-lc",
-        "cd frontend && npm test -- projectResolution --run"
+        "cd frontend && npm test -- projectResolution terminalShortcutActions --run"
       ],
       "expect_exit": 0
     }

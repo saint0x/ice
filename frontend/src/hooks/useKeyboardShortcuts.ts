@@ -3,6 +3,7 @@ import { terminalInterrupt, terminalRespawn, terminalScrollbackClear, terminalSe
 import { createAndOpenBrowserTab } from '@/lib/browserTabs'
 import { findActiveTabId, resolveWorkbenchProjectId } from '@/lib/projectResolution'
 import { createAndFocusTerminalSession } from '@/lib/terminalSessions'
+import { runTerminalShortcutAction } from '@/lib/terminalShortcutActions'
 import { closeWorkspaceTab } from '@/lib/workspaceTabs'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useProjectsStore } from '@/stores/projects'
@@ -73,26 +74,44 @@ export function useKeyboardShortcuts() {
         })
       } else if (meta && e.key === '.' && activeSession?.isRunning && !editable) {
         e.preventDefault()
-        void terminalInterrupt(activeSession.id)
+        void runTerminalShortcutAction(terminalInterrupt(activeSession.id), {
+          title: 'Terminal interrupt failed',
+          fallbackMessage: 'Failed to send interrupt',
+          pushError: notifications.pushError,
+        })
       } else if (meta && e.shiftKey && e.key.toLowerCase() === 'd' && activeSession?.isRunning && !editable) {
         e.preventDefault()
-        void terminalSendEof(activeSession.id)
+        void runTerminalShortcutAction(terminalSendEof(activeSession.id), {
+          title: 'Terminal EOF failed',
+          fallbackMessage: 'Failed to send EOF',
+          pushError: notifications.pushError,
+        })
       } else if (meta && e.shiftKey && e.key.toLowerCase() === 'k' && activeSession && !editable) {
         e.preventDefault()
-        void terminalScrollbackClear(activeSession.id).then((session) => {
-          const store = useTerminalStore.getState()
-          store.upsertSession(toTerminalSession(session))
-          store.clearScrollback(activeSession.id)
+        void runTerminalShortcutAction(terminalScrollbackClear(activeSession.id), {
+          title: 'Terminal history clear failed',
+          fallbackMessage: 'Failed to clear terminal history',
+          pushError: notifications.pushError,
+          onSuccess: (session) => {
+            const store = useTerminalStore.getState()
+            store.upsertSession(toTerminalSession(session))
+            store.clearScrollback(activeSession.id)
+          },
         })
       } else if (meta && e.shiftKey && e.key.toLowerCase() === 'r' && activeSession && !activeSession.isRunning && !editable) {
         e.preventDefault()
-        void terminalRespawn(activeSession.id).then((session) => {
-          const mapped = toTerminalSession(session)
-          const store = useTerminalStore.getState()
-          store.upsertSession(mapped)
-          if (activeProjectId) {
-            store.setActiveSession(activeProjectId, mapped.id)
-          }
+        void runTerminalShortcutAction(terminalRespawn(activeSession.id), {
+          title: 'Terminal restart failed',
+          fallbackMessage: 'Failed to restart terminal',
+          pushError: notifications.pushError,
+          onSuccess: (session) => {
+            const mapped = toTerminalSession(session)
+            const store = useTerminalStore.getState()
+            store.upsertSession(mapped)
+            if (activeProjectId) {
+              store.setActiveSession(activeProjectId, mapped.id)
+            }
+          },
         })
       } else if (meta && e.altKey && e.key === 'ArrowRight' && activePaneTabs.length > 1 && !editable) {
         e.preventDefault()
