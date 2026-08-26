@@ -602,6 +602,29 @@ export async function fileWriteText(input: {
   return invoke<void>('file_write_text', { input })
 }
 
+export async function dirCreate(input: {
+  projectId: string
+  path: string
+}) {
+  return invoke<void>('dir_create', { input })
+}
+
+export async function entryDelete(input: {
+  projectId: string
+  path: string
+  recursive?: boolean
+}) {
+  return invoke<void>('entry_delete', { input })
+}
+
+export async function entryRename(input: {
+  projectId: string
+  from: string
+  to: string
+}) {
+  return invoke<void>('entry_rename', { input })
+}
+
 export async function fileImportExternal(input: {
   projectId: string
   sourcePaths: string[]

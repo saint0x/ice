@@ -14,7 +14,7 @@
       "cmd": "/bin/sh",
       "args": [
         "-lc",
-        "cd frontend && npm test -- files editor editorDocuments git projectLifecycle --run"
+        "cd frontend && npm test -- files editor editorDocuments backendInvoke git projectLifecycle --run"
       ],
       "exit_code": 0,
       "stdout": "",
@@ -26,7 +26,7 @@
       "cmd": "/bin/sh",
       "args": [
         "-lc",
-        "cd frontend && npm test -- files editor editorDocuments git projectLifecycle --run"
+        "cd frontend && npm test -- files editor editorDocuments backendInvoke git projectLifecycle --run"
       ],
       "expect_exit": 0
     }
