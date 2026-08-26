@@ -636,9 +636,10 @@ pub async fn browser_tab_create(
     input: BrowserTabCreateInput,
     state: State<'_, AppState>,
 ) -> Result<crate::browser::service::BrowserTabRecord, AppError> {
+    let project = state.projects.require_project(&input.project_id).await?;
     Ok(state
         .browser
-        .create_tab(input.project_id, input.url, input.title)
+        .create_tab(project.id, input.url, input.title)
         .await?)
 }
 
@@ -823,7 +824,12 @@ pub async fn browser_tabs_list(
     project_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Vec<crate::browser::service::BrowserTabRecord>, AppError> {
-    Ok(state.browser.list_tabs(project_id.as_deref()).await)
+    if let Some(project_id) = project_id.as_deref() {
+        let project = state.projects.require_project(project_id).await?;
+        return Ok(state.browser.list_tabs(Some(&project.id)).await);
+    }
+
+    Ok(state.browser.list_tabs(None).await)
 }
 
 #[tauri::command]
