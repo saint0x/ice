@@ -4,9 +4,10 @@ import { useWorkspaceStore } from '@/stores/workspace'
 import { useTerminalStore } from '@/stores/terminal'
 import { useProjectsStore } from '@/stores/projects'
 import { useNotificationsStore } from '@/stores/notifications'
-import { terminalClose, terminalDiagnosticsRead, terminalRename, terminalRespawn, terminalScrollbackClear, toTerminalDiagnostics, toTerminalSession } from '@/lib/backend'
+import { terminalDiagnosticsRead, terminalRename, terminalRespawn, terminalScrollbackClear, toTerminalDiagnostics, toTerminalSession } from '@/lib/backend'
 import { createAndFocusTerminalSession, resolveTerminalProjectId } from '@/lib/terminalSessions'
 import { ensureTerminalScrollback } from '@/lib/terminalScrollback'
+import { closeTerminalSessionEverywhere } from '@/lib/workspaceTabs'
 import styles from './BottomDock.module.css'
 
 const TerminalSurface = lazy(() => import('@/components/surfaces/TerminalSurface').then((module) => ({ default: module.TerminalSurface })))
@@ -23,7 +24,6 @@ export const BottomDock = memo(function BottomDock() {
   const resolvedProjectId = resolveTerminalProjectId(activeProjectId)
   const activeSessionId = useTerminalStore((s) => resolvedProjectId ? s.activeSessionId.get(resolvedProjectId) : null)
   const setActiveSession = useTerminalStore((s) => s.setActiveSession)
-  const closeSession = useTerminalStore((s) => s.closeSession)
   const upsertSession = useTerminalStore((s) => s.upsertSession)
   const diagnostics = useTerminalStore((s) => s.diagnostics)
   const upsertDiagnostics = useTerminalStore((s) => s.upsertDiagnostics)
@@ -227,13 +227,12 @@ export const BottomDock = memo(function BottomDock() {
               }}
               onAuxClick={(e) => {
                 if (e.button === 1) {
-                  void terminalClose(session.id).then(() => {
-                    closeSession(session.id)
-                  }).catch((error: unknown) => {
-                    const message = error instanceof Error ? error.message : 'Failed to close terminal'
-                    setSurfaceError(message)
-                    pushError('Terminal close failed', error, message)
-                  })
+                  void closeTerminalSessionEverywhere(session.id)
+                    .catch((error: unknown) => {
+                      const message = error instanceof Error ? error.message : 'Failed to close terminal'
+                      setSurfaceError(message)
+                      pushError('Terminal close failed', error, message)
+                    })
                 }
               }}
             >
