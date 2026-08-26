@@ -808,6 +808,9 @@ fn ensure_paths(paths: &[String]) -> Result<()> {
     if paths.is_empty() {
         return Err(anyhow!("at least one path is required"));
     }
+    if paths.iter().any(|path| path.trim().is_empty()) {
+        return Err(anyhow!("git path entries cannot be empty"));
+    }
     Ok(())
 }
 
@@ -934,6 +937,8 @@ mod tests {
     #[test]
     fn ensure_paths_requires_non_empty_input() {
         assert!(ensure_paths(&[]).is_err());
+        assert!(ensure_paths(&[String::from("")]).is_err());
+        assert!(ensure_paths(&[String::from("   ")]).is_err());
         assert!(ensure_paths(&[String::from("src/main.rs")]).is_ok());
     }
 
