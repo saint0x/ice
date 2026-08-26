@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   closeWorkspaceTab,
   closeWorkspaceTabsForBrowserTab,
+  closeWorkspaceTabsForProject,
   closeWorkspaceTabsForTerminalSession,
 } from '@/lib/workspaceTabs'
 import { browserTabClose, terminalClose } from '@/lib/backend'
@@ -252,5 +253,44 @@ describe('closeWorkspaceTab', () => {
 
     expect(useWorkspaceStore.getState().tabs.has('tab-1')).toBe(false)
     expect(useWorkspaceStore.getState().tabs.has('tab-2')).toBe(false)
+  })
+
+  it('removes every workspace tab owned by a project', () => {
+    useWorkspaceStore.setState((state) => ({
+      layout: {
+        id: 'split-1',
+        type: 'split',
+        direction: 'horizontal',
+        ratio: 0.5,
+        children: [
+          {
+            id: 'pane-1',
+            type: 'leaf',
+            tabs: ['tab-1'],
+            activeTabId: 'tab-1',
+          },
+          {
+            id: 'pane-2',
+            type: 'leaf',
+            tabs: ['tab-2'],
+            activeTabId: 'tab-2',
+          },
+        ],
+      },
+      tabs: new Map([
+        ...state.tabs,
+        ['tab-2', {
+          id: 'tab-2',
+          projectId: 'project-2',
+          type: 'editor',
+          title: 'keep.ts',
+          meta: { path: 'keep.ts' },
+        }],
+      ]),
+    }))
+
+    closeWorkspaceTabsForProject('project-1')
+
+    expect([...useWorkspaceStore.getState().tabs.values()].map((tab) => tab.projectId)).toEqual(['project-2'])
   })
 })

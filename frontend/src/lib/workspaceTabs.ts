@@ -29,6 +29,26 @@ function collectTabsByBackingResource(
   }
 }
 
+function collectTabsByProjectId(
+  node: PaneLayout,
+  tabs: ReturnType<typeof useWorkspaceStore.getState>['tabs'],
+  projectId: string,
+  matches: Array<{ paneId: PaneId; tabId: TabId }>,
+) {
+  if (node.type === 'leaf') {
+    for (const tabId of node.tabs) {
+      if (tabs.get(tabId)?.projectId === projectId) {
+        matches.push({ paneId: node.id, tabId })
+      }
+    }
+    return
+  }
+
+  for (const child of node.children) {
+    collectTabsByProjectId(child, tabs, projectId, matches)
+  }
+}
+
 export async function closeWorkspaceTab(paneId: PaneId, tabId: TabId) {
   const workspace = useWorkspaceStore.getState()
   const tab = workspace.tabs.get(tabId)
@@ -65,6 +85,15 @@ export function closeWorkspaceTabsForTerminalSession(sessionId: string) {
   const workspace = useWorkspaceStore.getState()
   const matches: Array<{ paneId: PaneId; tabId: TabId }> = []
   collectTabsByBackingResource(workspace.layout, workspace.tabs, 'terminal', sessionId, matches)
+  for (const match of matches) {
+    useWorkspaceStore.getState().closeTab(match.paneId, match.tabId)
+  }
+}
+
+export function closeWorkspaceTabsForProject(projectId: string) {
+  const workspace = useWorkspaceStore.getState()
+  const matches: Array<{ paneId: PaneId; tabId: TabId }> = []
+  collectTabsByProjectId(workspace.layout, workspace.tabs, projectId, matches)
   for (const match of matches) {
     useWorkspaceStore.getState().closeTab(match.paneId, match.tabId)
   }

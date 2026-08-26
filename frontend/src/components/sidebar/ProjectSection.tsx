@@ -6,6 +6,7 @@ import {
 import type { Project, SidebarSection } from '@/types'
 import { codexThreadCreate, projectRemove, toCodexThread } from '@/lib/backend'
 import { describeCodexError } from '@/lib/errors'
+import { removeProjectLocalState } from '@/lib/projectLifecycle'
 import { createAndFocusTerminalSession } from '@/lib/terminalSessions'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useProjectsStore } from '@/stores/projects'
@@ -41,7 +42,6 @@ export const ProjectSection = memo(function ProjectSection({
 }: Props) {
   const activeProjectId = useProjectsStore((s) => s.activeProjectId)
   const setActiveProject = useProjectsStore((s) => s.setActiveProject)
-  const removeProject = useProjectsStore((s) => s.removeProject)
   const toggleSection = useProjectsStore((s) => s.toggleSection)
   const toggleProjectCollapsed = useProjectsStore((s) => s.toggleProjectCollapsed)
   const gitChangeCount = useGitStore((s) => s.gitState.get(project.id)?.changes.length ?? 0)
@@ -135,13 +135,13 @@ export const ProjectSection = memo(function ProjectSection({
     setSurfaceError(null)
     try {
       await projectRemove(project.id)
-      removeProject(project.id)
+      removeProjectLocalState(project.id)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to remove project'
       setSurfaceError(message)
       pushError('Project removal failed', error, message)
     }
-  }, [project.id, pushError, removeProject])
+  }, [project.id, pushError])
 
   const getBadge = (section: SidebarSection): string | undefined => {
     if (section === 'git' && gitChangeCount > 0) return String(gitChangeCount)
