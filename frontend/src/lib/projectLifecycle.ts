@@ -11,21 +11,9 @@ export function removeProjectLocalState(projectId: string) {
   useProjectsStore.getState().removeProject(projectId)
   closeWorkspaceTabsForProject(projectId)
 
-  useFilesStore.setState((state) => {
-    const trees = new Map(state.trees)
-    trees.delete(projectId)
-    const selectedPath = new Map(state.selectedPath)
-    selectedPath.delete(projectId)
-    return { trees, selectedPath }
-  })
+  useFilesStore.getState().removeProjectFiles(projectId)
 
-  useGitStore.setState((state) => {
-    const gitState = new Map(state.gitState)
-    gitState.delete(projectId)
-    const lastMutation = new Map(state.lastMutation)
-    lastMutation.delete(projectId)
-    return { gitState, lastMutation }
-  })
+  useGitStore.getState().removeProjectGitState(projectId)
 
   useBrowserStore.setState((state) => {
     const tabs = new Map(state.tabs)

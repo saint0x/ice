@@ -6,6 +6,7 @@ describe('files store hydration', () => {
     useFilesStore.setState({
       trees: new Map(),
       selectedPath: new Map(),
+      removedProjectIds: new Set(),
     })
   })
 
@@ -108,5 +109,31 @@ describe('files store hydration', () => {
     ])
 
     expect(useFilesStore.getState().trees.get('project-1')?.[0]?.children?.[0]?.expanded).toBe(true)
+  })
+
+  it('does not rehydrate files for a removed project', () => {
+    useFilesStore.getState().hydrateTree('project-1', [
+      {
+        name: 'README.md',
+        path: 'README.md',
+        isDir: false,
+        depth: 0,
+      },
+    ])
+    useFilesStore.getState().setSelected('project-1', 'README.md')
+
+    useFilesStore.getState().removeProjectFiles('project-1')
+    useFilesStore.getState().hydrateTree('project-1', [
+      {
+        name: 'late.ts',
+        path: 'late.ts',
+        isDir: false,
+        depth: 0,
+      },
+    ])
+    useFilesStore.getState().setSelected('project-1', 'late.ts')
+
+    expect(useFilesStore.getState().trees.has('project-1')).toBe(false)
+    expect(useFilesStore.getState().selectedPath.has('project-1')).toBe(false)
   })
 })

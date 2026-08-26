@@ -4,9 +4,11 @@ import type { FileEntry, ProjectId } from '@/types'
 interface FilesState {
   trees: Map<ProjectId, FileEntry[]>
   selectedPath: Map<ProjectId, string | null>
+  removedProjectIds: Set<ProjectId>
   hydrateTree: (projectId: ProjectId, tree: FileEntry[]) => void
   toggleExpand: (projectId: ProjectId, path: string) => void
   setSelected: (projectId: ProjectId, path: string) => void
+  removeProjectFiles: (projectId: ProjectId) => void
 }
 
 function collectExpanded(entries: FileEntry[], expanded: Set<string>) {
@@ -42,9 +44,11 @@ function toggleInTree(entries: FileEntry[], path: string): FileEntry[] {
 export const useFilesStore = create<FilesState>((set) => ({
   trees: new Map<ProjectId, FileEntry[]>(),
   selectedPath: new Map(),
+  removedProjectIds: new Set(),
 
   hydrateTree: (projectId, tree) =>
     set((s) => {
+      if (s.removedProjectIds.has(projectId)) return s
       const trees = new Map(s.trees)
       const expanded = new Set<string>()
       const existingTree = trees.get(projectId)
@@ -65,6 +69,7 @@ export const useFilesStore = create<FilesState>((set) => ({
 
   toggleExpand: (projectId, path) =>
     set((s) => {
+      if (s.removedProjectIds.has(projectId)) return s
       const trees = new Map(s.trees)
       const tree = trees.get(projectId)
       if (!tree) return s
@@ -74,8 +79,20 @@ export const useFilesStore = create<FilesState>((set) => ({
 
   setSelected: (projectId, path) =>
     set((s) => {
+      if (s.removedProjectIds.has(projectId)) return s
       const selectedPath = new Map(s.selectedPath)
       selectedPath.set(projectId, path)
       return { selectedPath }
+    }),
+
+  removeProjectFiles: (projectId) =>
+    set((s) => {
+      const trees = new Map(s.trees)
+      trees.delete(projectId)
+      const selectedPath = new Map(s.selectedPath)
+      selectedPath.delete(projectId)
+      const removedProjectIds = new Set(s.removedProjectIds)
+      removedProjectIds.add(projectId)
+      return { trees, selectedPath, removedProjectIds }
     }),
 }))

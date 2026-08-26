@@ -72,6 +72,7 @@ function resetStores() {
   })
 
   useFilesStore.setState({
+    removedProjectIds: new Set(),
     trees: new Map([
       ['project-1', []],
       ['project-2', []],
@@ -83,6 +84,7 @@ function resetStores() {
   })
 
   useGitStore.setState({
+    removedProjectIds: new Set(),
     gitState: new Map([
       ['project-1', { branch: 'main', ahead: 0, behind: 0, changes: [] }],
       ['project-2', { branch: 'main', ahead: 0, behind: 0, changes: [] }],
@@ -270,7 +272,9 @@ describe('project lifecycle cleanup', () => {
     expect([...useWorkspaceStore.getState().tabs.values()].map((tab) => tab.projectId)).toEqual(['project-2'])
     expect(useFilesStore.getState().trees.has('project-1')).toBe(false)
     expect(useFilesStore.getState().selectedPath.has('project-1')).toBe(false)
+    expect(useFilesStore.getState().removedProjectIds.has('project-1')).toBe(true)
     expect(useGitStore.getState().gitState.has('project-1')).toBe(false)
+    expect(useGitStore.getState().removedProjectIds.has('project-1')).toBe(true)
 
     expect(useBrowserStore.getState().tabs.has('browser-1')).toBe(false)
     expect(useBrowserStore.getState().tabs.has('browser-2')).toBe(true)
