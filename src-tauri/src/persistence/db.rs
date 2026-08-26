@@ -570,6 +570,8 @@ impl PersistenceService {
     pub fn delete_project_sync(&self, project_id: &str) -> Result<()> {
         let conn = self.connect()?;
         conn.execute("DELETE FROM projects WHERE id = ?1", params![project_id])?;
+        drop(conn);
+        self.prune_orphaned_project_state_sync()?;
         Ok(())
     }
 
@@ -2047,6 +2049,191 @@ mod tests {
             .load_pending_approvals_sync()
             .expect("approval empty")
             .is_empty());
+    }
+
+    #[tokio::test]
+    async fn deleting_project_prunes_owned_persisted_state() {
+        let temp = tempdir().expect("temp dir");
+        let db = PersistenceService::new(temp.path().join("ice.db")).expect("db");
+        let project = ProjectRecord {
+            id: "project-a".to_string(),
+            name: "Alpha".to_string(),
+            root_path: "/tmp/alpha".to_string(),
+            color_token: "blue".to_string(),
+            icon_hint: None,
+            is_trusted: true,
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            last_opened_at: "2026-01-01T00:00:00Z".to_string(),
+        };
+        db.insert_project_sync(&project).expect("insert project");
+
+        let workspace_session = WorkspaceSessionState {
+            active_pane_id: "pane-1".to_string(),
+            tabs: vec![WorkspaceTabRecord {
+                id: "workspace-tab".to_string(),
+                project_id: "project-a".to_string(),
+                kind: "editor".to_string(),
+                title: "main.rs".to_string(),
+                icon: None,
+                dirty: false,
+                pinned: false,
+                meta: Some(json!({"path":"src/main.rs"})),
+            }],
+            root: WorkspacePaneNode::Leaf {
+                id: "pane-1".to_string(),
+                tabs: vec!["workspace-tab".to_string()],
+                active_tab_id: Some("workspace-tab".to_string()),
+            },
+        };
+        db.upsert_workspace_session("workspace-a".to_string(), &workspace_session)
+            .await
+            .expect("workspace session write");
+        db.upsert_browser_tab(BrowserTabRecord {
+            tab_id: "browser-1".to_string(),
+            project_id: "project-a".to_string(),
+            url: "https://example.com".to_string(),
+            title: "Example".to_string(),
+            is_pinned: false,
+            can_go_back: false,
+            can_go_forward: false,
+            is_loading: false,
+            favicon_url: None,
+            security_origin: Some("https://example.com".to_string()),
+            is_secure: true,
+        })
+        .await
+        .expect("browser write");
+        db.replace_browser_history(
+            "browser-1".to_string(),
+            vec![BrowserHistoryEntry {
+                tab_id: "browser-1".to_string(),
+                position: 0,
+                url: "https://example.com".to_string(),
+                title: "Example".to_string(),
+            }],
+        )
+        .await
+        .expect("browser history write");
+        db.upsert_terminal_session(TerminalSessionRecord {
+            session_id: "terminal-1".to_string(),
+            project_id: "project-a".to_string(),
+            cwd: "/tmp/alpha".to_string(),
+            shell: "zsh".to_string(),
+            shell_path: "/bin/zsh".to_string(),
+            title: "Terminal".to_string(),
+            cols: 120,
+            rows: 40,
+            is_running: false,
+            startup_command: None,
+            env_overrides: None,
+            restored_from_persistence: false,
+            last_exit_code: None,
+            last_exit_signal: None,
+            last_exit_reason: None,
+            scrollback_bytes: 5,
+        })
+        .await
+        .expect("terminal write");
+        db.upsert_terminal_scrollback("terminal-1".to_string(), "hello".to_string())
+            .await
+            .expect("scrollback write");
+        db.upsert_codex_thread(CodexThreadBinding {
+            project_id: "project-a".to_string(),
+            thread_id: "thread-1".to_string(),
+            title: Some("Agent".to_string()),
+            model: None,
+            status: "idle".to_string(),
+            last_turn_id: Some("turn-1".to_string()),
+            last_assistant_message: None,
+            unread: false,
+        })
+        .await
+        .expect("codex thread write");
+        db.upsert_codex_message(CodexMessageRecord {
+            message_id: "message-1".to_string(),
+            project_id: "project-a".to_string(),
+            thread_id: "thread-1".to_string(),
+            turn_id: Some("turn-1".to_string()),
+            role: "assistant".to_string(),
+            content: "done".to_string(),
+            state: "complete".to_string(),
+            created_at: "2026-01-01T00:00:00Z".to_string(),
+            updated_at: "2026-01-01T00:00:00Z".to_string(),
+        })
+        .await
+        .expect("codex message write");
+        db.upsert_pending_approval(PendingApprovalRecord {
+            request_id: 9,
+            project_id: "project-a".to_string(),
+            thread_id: Some("thread-1".to_string()),
+            action_type: "approval/request".to_string(),
+            category: "shell".to_string(),
+            risk_level: "low".to_string(),
+            policy_action: "prompt".to_string(),
+            policy_reason: None,
+            description: "Allow command".to_string(),
+            context_json: None,
+        })
+        .await
+        .expect("approval write");
+        db.config_set(
+            "browser.restorePolicy.project-a".to_string(),
+            json!("pinned"),
+        )
+        .await
+        .expect("config write");
+
+        db.delete_project_sync("project-a").expect("delete project");
+
+        assert!(db.load_projects_sync().expect("projects").is_empty());
+        assert!(db
+            .load_browser_tabs_sync()
+            .expect("browser tabs")
+            .is_empty());
+        assert!(db
+            .load_browser_history_sync()
+            .expect("browser history")
+            .is_empty());
+        assert!(db
+            .load_terminal_sessions_sync()
+            .expect("terminal sessions")
+            .is_empty());
+        assert!(db
+            .load_terminal_scrollback_sync()
+            .expect("terminal scrollback")
+            .is_empty());
+        assert!(db
+            .load_codex_threads_sync()
+            .expect("codex threads")
+            .is_empty());
+        assert!(db
+            .load_codex_messages_sync()
+            .expect("codex messages")
+            .is_empty());
+        assert!(db
+            .load_pending_approvals_sync()
+            .expect("approvals")
+            .is_empty());
+        assert_eq!(
+            db.config_get("browser.restorePolicy.project-a")
+                .await
+                .expect("config read"),
+            None
+        );
+        assert_eq!(
+            db.read_workspace_session("workspace-a")
+                .await
+                .expect("workspace read"),
+            Some(WorkspaceSessionState {
+                active_pane_id: "pane-1".to_string(),
+                tabs: Vec::new(),
+                root: WorkspacePaneNode::Leaf {
+                    id: "pane-1".to_string(),
+                    tabs: Vec::new(),
+                    active_tab_id: None,
+                },
+            })
+        );
     }
 
     #[tokio::test]
