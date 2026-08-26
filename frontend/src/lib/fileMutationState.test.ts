@@ -73,4 +73,24 @@ describe('file mutation state', () => {
     expect(onMutationError).not.toHaveBeenCalled()
     expect(onRefreshError).toHaveBeenCalledWith(refreshError)
   })
+
+  it('passes the mutation result to success handlers before refreshing', async () => {
+    const order: string[] = []
+    const onMutationSuccess = vi.fn((paths: string[]) => {
+      order.push(`success:${paths.join(',')}`)
+    })
+
+    await expect(runFileMutationWithRefresh({
+      mutate: async () => ['notes.txt'],
+      refresh: async () => {
+        order.push('refresh')
+      },
+      onMutationSuccess,
+      onMutationError: vi.fn(),
+      onRefreshError: vi.fn(),
+    })).resolves.toBe(true)
+
+    expect(onMutationSuccess).toHaveBeenCalledWith(['notes.txt'])
+    expect(order).toEqual(['success:notes.txt', 'refresh'])
+  })
 })

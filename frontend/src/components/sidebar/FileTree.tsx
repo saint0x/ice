@@ -2,7 +2,8 @@ import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { ChevronRight, ChevronDown, File, Folder, FolderOpen, Upload } from 'lucide-react'
 import { ensureEditorDocument, scheduleEditorPrefetch } from '@/lib/editorDocuments'
-import { fileImportExternal } from '@/lib/backend'
+import { fileImportExternal, projectTreeReadNested, toFileTree } from '@/lib/backend'
+import { runFileMutationWithRefresh } from '@/lib/fileMutationState'
 import { openOrFocusEditorWorkspaceTab } from '@/lib/workspaceTabs'
 import { useNotificationsStore } from '@/stores/notifications'
 import type { FileEntry, ProjectId } from '@/types'
@@ -90,6 +91,7 @@ const FileRow = memo(function FileRow({
 export const FileTree = memo(function FileTree({ projectId }: Props) {
   const tree = useFilesStore((s) => s.trees.get(projectId))
   const selectedPath = useFilesStore((s) => s.selectedPath.get(projectId) ?? null)
+  const hydrateTree = useFilesStore((s) => s.hydrateTree)
   const toggleExpand = useFilesStore((s) => s.toggleExpand)
   const setSelected = useFilesStore((s) => s.setSelected)
   const pushError = useNotificationsStore((s) => s.pushError)
@@ -146,19 +148,28 @@ export const FileTree = memo(function FileTree({ projectId }: Props) {
       }
 
       setIsImporting(true)
-      try {
-        await fileImportExternal({
+      await runFileMutationWithRefresh({
+        mutate: () => fileImportExternal({
           projectId,
           sourcePaths: normalized,
-        })
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Failed to import files'
-        pushError('File import failed', error, message)
-      } finally {
+        }),
+        refresh: async () => {
+          const nextTree = await projectTreeReadNested(projectId)
+          hydrateTree(projectId, toFileTree(nextTree))
+        },
+        onMutationError: (error) => {
+          const message = error instanceof Error ? error.message : 'Failed to import files'
+          pushError('File import failed', error, message)
+        },
+        onRefreshError: (error) => {
+          const message = error instanceof Error ? error.message : 'Project tree refresh failed'
+          pushError('Project tree refresh failed', error, message)
+        },
+      }).finally(() => {
         setIsImporting(false)
-      }
+      })
     },
-    [projectId, pushError],
+    [hydrateTree, projectId, pushError],
   )
 
   const onOpenImporter = useCallback(async (mode: 'files' | 'folders') => {

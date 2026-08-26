@@ -3,10 +3,10 @@ export interface DeleteIntent {
   armedPath: string | null
 }
 
-interface FileMutationWithRefreshInput {
-  mutate: () => Promise<void>
+interface FileMutationWithRefreshInput<T = void> {
+  mutate: () => Promise<T>
   refresh: () => Promise<void>
-  onMutationSuccess?: () => void
+  onMutationSuccess?: (result: T) => void
   onMutationError: (error: unknown) => void
   onRefreshError: (error: unknown) => void
 }
@@ -23,15 +23,16 @@ export function resolveDeleteIntent(selectedPath: string | null, armedPath: stri
   return { confirmed: false, armedPath: selectedPath }
 }
 
-export async function runFileMutationWithRefresh(input: FileMutationWithRefreshInput) {
+export async function runFileMutationWithRefresh<T = void>(input: FileMutationWithRefreshInput<T>) {
+  let result: T
   try {
-    await input.mutate()
+    result = await input.mutate()
   } catch (error) {
     input.onMutationError(error)
     return false
   }
 
-  input.onMutationSuccess?.()
+  input.onMutationSuccess?.(result)
 
   try {
     await input.refresh()
