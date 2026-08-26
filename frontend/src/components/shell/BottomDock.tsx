@@ -85,6 +85,14 @@ export const BottomDock = memo(function BottomDock() {
   }, [activeSession?.id, activeSession?.title])
 
   useEffect(() => {
+    if (activeSession) return
+    setIsDiagnosticsLoading(false)
+    setIsClearingHistory(false)
+    setIsRestarting(false)
+    setSurfaceError(null)
+  }, [activeSession])
+
+  useEffect(() => {
     if (!activeSession) {
       return
     }
