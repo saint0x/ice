@@ -61,9 +61,29 @@ describe('browser store hydration', () => {
     const state = useBrowserStore.getState()
     expect(state.tabs.has('browser-stale')).toBe(false)
     expect(state.activeTabId.get('project-1')).toBe('browser-live')
-    expect(state.activeTabId.get('project-2')).toBeNull()
+    expect(state.activeTabId.has('project-2')).toBe(false)
     expect(state.runtimeNotices.has('browser-stale')).toBe(false)
     expect(state.runtimeNotices.has('browser-live')).toBe(true)
+  })
+
+  it('drops active browser entries for projects absent from authoritative tab hydration', () => {
+    useBrowserStore.setState({
+      tabs: new Map(),
+      activeTabId: new Map([
+        ['project-removed', null],
+        ['project-stale', 'browser-missing'],
+      ]),
+      sidebarItems: new Map(),
+      runtimeNotices: new Map(),
+      closedTabIds: new Set(),
+    })
+
+    useBrowserStore.getState().hydrateTabs([browserTab])
+
+    const state = useBrowserStore.getState()
+    expect(state.activeTabId.has('project-removed')).toBe(false)
+    expect(state.activeTabId.has('project-stale')).toBe(false)
+    expect(state.activeTabId.get('project-1')).toBe('browser-live')
   })
 
   it('reconciles sidebar browser rows to hydrated backend tabs', () => {

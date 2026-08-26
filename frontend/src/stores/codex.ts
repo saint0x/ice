@@ -218,6 +218,10 @@ export const useCodexStore = create<CodexState>((set) => ({
       for (const projectId of projectIds) {
         const activeId = nextActiveThreadId.get(projectId)
         const projectThreads = threads.filter((thread) => thread.projectId === projectId)
+        if (projectThreads.length === 0) {
+          nextActiveThreadId.delete(projectId)
+          continue
+        }
         const preferredThread = choosePreferredThread(projectThreads)
         const activeThread = activeId ? nextThreads.get(activeId) : undefined
         if (
@@ -229,7 +233,7 @@ export const useCodexStore = create<CodexState>((set) => ({
             && preferredThread.status !== 'disconnected'
           )
         ) {
-          nextActiveThreadId.set(projectId, preferredThread?.id ?? null)
+          nextActiveThreadId.set(projectId, preferredThread!.id)
         }
       }
       let messagesByThread = s.messagesByThread

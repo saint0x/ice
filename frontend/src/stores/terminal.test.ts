@@ -76,10 +76,30 @@ describe('terminal scrollback retention', () => {
     const state = useTerminalStore.getState()
     expect(state.sessions.has('session-stale')).toBe(false)
     expect(state.activeSessionId.get('project-1')).toBe('session-live')
-    expect(state.activeSessionId.get('project-2')).toBeNull()
+    expect(state.activeSessionId.has('project-2')).toBe(false)
     expect(state.scrollback.has('session-stale')).toBe(false)
     expect(state.scrollback.get('session-live')).toBe('current')
     expect(state.diagnostics.has('session-stale')).toBe(false)
+  })
+
+  it('drops active terminal entries for projects absent from authoritative session hydration', () => {
+    useTerminalStore.setState({
+      sessions: new Map(),
+      activeSessionId: new Map([
+        ['project-removed', null],
+        ['project-stale', 'session-missing'],
+      ]),
+      scrollback: new Map(),
+      diagnostics: new Map(),
+      closedSessionIds: new Set(),
+    })
+
+    useTerminalStore.getState().hydrateSessions([liveSession])
+
+    const state = useTerminalStore.getState()
+    expect(state.activeSessionId.has('project-removed')).toBe(false)
+    expect(state.activeSessionId.has('project-stale')).toBe(false)
+    expect(state.activeSessionId.get('project-1')).toBe('session-live')
   })
 
   it('ignores attempts to activate missing or cross-project terminal sessions', () => {

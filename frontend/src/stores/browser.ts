@@ -42,8 +42,12 @@ export const useBrowserStore = create<BrowserState>((set) => ({
       for (const projectId of projectIds) {
         const activeId = nextActiveTabId.get(projectId)
         const projectTabs = tabsByProject.get(projectId) ?? []
+        if (projectTabs.length === 0) {
+          nextActiveTabId.delete(projectId)
+          continue
+        }
         if (!activeId || !nextTabs.has(activeId)) {
-          nextActiveTabId.set(projectId, projectTabs[0]?.id ?? null)
+          nextActiveTabId.set(projectId, projectTabs[0]!.id)
         }
       }
       const runtimeNotices = new Map(s.runtimeNotices)

@@ -53,8 +53,12 @@ export const useTerminalStore = create<TerminalState>((set) => ({
       for (const projectId of projectIds) {
         const activeId = nextActiveSessionId.get(projectId)
         const projectSessions = sessionsByProject.get(projectId) ?? []
+        if (projectSessions.length === 0) {
+          nextActiveSessionId.delete(projectId)
+          continue
+        }
         if (!activeId || !nextSessions.has(activeId)) {
-          nextActiveSessionId.set(projectId, projectSessions[0]?.id ?? null)
+          nextActiveSessionId.set(projectId, projectSessions[0]!.id)
         }
       }
       const scrollback = new Map(s.scrollback)

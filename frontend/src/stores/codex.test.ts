@@ -281,8 +281,32 @@ describe('codex store reconciliation', () => {
 
     useCodexStore.getState().hydrateThreads([])
 
-    expect(useCodexStore.getState().activeThreadId.get('project-a')).toBeNull()
+    expect(useCodexStore.getState().activeThreadId.has('project-a')).toBe(false)
     expect(useCodexStore.getState().messagesByThread.has('thread-stale')).toBe(false)
+  })
+
+  it('drops active Codex entries for projects absent from authoritative thread hydration', () => {
+    useCodexStore.setState({
+      activeThreadId: new Map([
+        ['project-removed', null],
+        ['project-stale', 'thread-missing'],
+      ]),
+    })
+
+    useCodexStore.getState().hydrateThreads([
+      {
+        id: 'thread-live',
+        projectId: 'project-a',
+        title: 'Live',
+        unread: false,
+        status: 'idle',
+      },
+    ])
+
+    const state = useCodexStore.getState()
+    expect(state.activeThreadId.has('project-removed')).toBe(false)
+    expect(state.activeThreadId.has('project-stale')).toBe(false)
+    expect(state.activeThreadId.get('project-a')).toBe('thread-live')
   })
 
   it('ignores message hydration and late message events for missing Codex threads', () => {
