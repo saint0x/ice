@@ -1,42 +1,17 @@
 import { terminalCreate, toTerminalSession } from '@/lib/backend'
+import { resolveWorkbenchProjectId } from '@/lib/projectResolution'
 import { useProjectsStore } from '@/stores/projects'
 import { useTerminalStore } from '@/stores/terminal'
 import { useWorkspaceStore } from '@/stores/workspace'
 
-function findActiveTabId(
-  layout: ReturnType<typeof useWorkspaceStore.getState>['layout'],
-  activePaneId: string,
-): string | null {
-  if (layout.type === 'leaf') {
-    return layout.id === activePaneId ? layout.activeTabId : null
-  }
-  for (const child of layout.children) {
-    const tabId = findActiveTabId(child, activePaneId)
-    if (tabId) return tabId
-  }
-  return null
-}
-
 export function resolveTerminalProjectId(explicitProjectId?: string | null) {
-  if (explicitProjectId) return explicitProjectId
-
-  const projects = useProjectsStore.getState()
-  if (projects.activeProjectId) return projects.activeProjectId
-
-  const workspace = useWorkspaceStore.getState()
-  const activeTabId = findActiveTabId(workspace.layout, workspace.activePaneId)
-  const workspaceProjectId = activeTabId ? workspace.tabs.get(activeTabId)?.projectId : null
-  if (workspaceProjectId) return workspaceProjectId
-
+  const resolvedProjectId = resolveWorkbenchProjectId(explicitProjectId)
+  if (resolvedProjectId) return resolvedProjectId
   const terminals = useTerminalStore.getState()
   for (const [projectId, sessionId] of terminals.activeSessionId.entries()) {
-    if (sessionId && terminals.sessions.has(sessionId)) {
+    if (sessionId && terminals.sessions.has(sessionId) && useProjectsStore.getState().projects.has(projectId)) {
       return projectId
     }
-  }
-
-  if (projects.projectOrder.length === 1) {
-    return projects.projectOrder[0] ?? null
   }
 
   return null

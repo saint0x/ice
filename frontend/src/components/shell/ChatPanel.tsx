@@ -2,9 +2,10 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   MessageSquare, X, Loader2, Sparkles, ArrowRight
 } from 'lucide-react'
-import type { CodexApproval, CodexMessage, CodexThread, PaneLayout, ProjectId, Tab, ThreadId } from '@/types'
+import type { CodexApproval, CodexMessage, CodexThread, ProjectId, ThreadId } from '@/types'
 import { codexServerRequestDeny, codexServerRequestRespond, codexThreadCreate, codexThreadMessagesList, codexTurnStart, toCodexMessage, toCodexThread } from '@/lib/backend'
 import { CodexConversation } from '@/components/codex/CodexConversation'
+import { resolveProjectIdFromWorkspace } from '@/lib/projectResolution'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useProjectsStore } from '@/stores/projects'
 import { useCodexStore } from '@/stores/codex'
@@ -334,27 +335,6 @@ export const ChatPanel = memo(function ChatPanel() {
     </div>
   )
 })
-
-function resolveProjectIdFromWorkspace(
-  layout: PaneLayout,
-  activePaneId: string,
-  tabs: Map<string, Tab>,
-): ProjectId | null {
-  const activeTabId = findActiveTabId(layout, activePaneId)
-  if (!activeTabId) return null
-  return tabs.get(activeTabId)?.projectId ?? null
-}
-
-function findActiveTabId(layout: PaneLayout, activePaneId: string): string | null {
-  if (layout.type === 'leaf') {
-    return layout.id === activePaneId ? layout.activeTabId : null
-  }
-  for (const child of layout.children) {
-    const tabId = findActiveTabId(child, activePaneId)
-    if (tabId) return tabId
-  }
-  return null
-}
 
 function inferChatProjectId(
   activeProjectId: ProjectId | null,

@@ -6,6 +6,7 @@ import {
   toProject,
 } from '@/lib/backend'
 import { createAndOpenBrowserTab } from '@/lib/browserTabs'
+import { resolveWorkbenchProjectId } from '@/lib/projectResolution'
 import { createAndFocusTerminalSession } from '@/lib/terminalSessions'
 import { closeWorkspaceTab } from '@/lib/workspaceTabs'
 import { useNotificationsStore } from '@/stores/notifications'
@@ -56,7 +57,7 @@ async function dispatchMenuAction(id: string): Promise<void> {
   const workspace = useWorkspaceStore.getState()
   const projects = useProjectsStore.getState()
   const notifications = useNotificationsStore.getState()
-  const activeProjectId = projects.activeProjectId
+  const activeProjectId = resolveWorkbenchProjectId()
   const activeProject = activeProjectId ? projects.projects.get(activeProjectId) : null
   const requireActiveProject = (actionLabel: string): string | null => {
     if (activeProjectId) return activeProjectId

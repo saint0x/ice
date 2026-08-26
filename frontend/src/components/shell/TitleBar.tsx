@@ -6,6 +6,7 @@ import {
 import { useWorkspaceStore } from '@/stores/workspace'
 import { useProjectsStore } from '@/stores/projects'
 import { createAndOpenBrowserTab } from '@/lib/browserTabs'
+import { resolveWorkbenchProjectId } from '@/lib/projectResolution'
 import { createAndFocusTerminalSession } from '@/lib/terminalSessions'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useThemeStore, THEMES } from '@/stores/theme'
@@ -21,8 +22,7 @@ export const TitleBar = memo(function TitleBar() {
   const setChatPanelOpen = useWorkspaceStore((s) => s.setChatPanelOpen)
   const openTab = useWorkspaceStore((s) => s.openTab)
   const activePaneId = useWorkspaceStore((s) => s.activePaneId)
-  const activeProjectId = useProjectsStore((s) => s.activeProjectId)
-  const activeProject = useProjectsStore((s) => activeProjectId ? s.projects.get(activeProjectId) : undefined)
+  const projects = useProjectsStore((s) => s.projects)
   const themeId = useThemeStore((s) => s.themeId)
   const setTheme = useThemeStore((s) => s.setTheme)
   const pushNotification = useNotificationsStore((s) => s.pushNotification)
@@ -48,7 +48,9 @@ export const TitleBar = memo(function TitleBar() {
   }
 
   const onOpenFiles = useCallback(() => {
-    if (!activeProjectId || !activeProject) {
+    const resolvedProjectId = resolveWorkbenchProjectId()
+    const activeProject = resolvedProjectId ? projects.get(resolvedProjectId) : undefined
+    if (!resolvedProjectId || !activeProject) {
       pushNotification({
         title: 'Select a project first',
         message: 'Open or add a project to use Files.',
@@ -56,11 +58,12 @@ export const TitleBar = memo(function TitleBar() {
       })
       return
     }
-    openTab(activePaneId, 'settings', `${activeProject.name} Files`, activeProjectId, { tool: 'files' })
-  }, [activeProjectId, activeProject, activePaneId, openTab, pushNotification])
+    openTab(activePaneId, 'settings', `${activeProject.name} Files`, resolvedProjectId, { tool: 'files' })
+  }, [activePaneId, openTab, projects, pushNotification])
 
   const onOpenBrowser = useCallback(() => {
-    if (!activeProjectId) {
+    const resolvedProjectId = resolveWorkbenchProjectId()
+    if (!resolvedProjectId) {
       pushNotification({
         title: 'Select a project first',
         message: 'Open or add a project to create a browser tab.',
@@ -68,14 +71,15 @@ export const TitleBar = memo(function TitleBar() {
       })
       return
     }
-    void createAndOpenBrowserTab(activeProjectId)
+    void createAndOpenBrowserTab(resolvedProjectId)
       .catch((error: unknown) => {
         pushError('Browser tab failed', error, 'Failed to create browser tab')
       })
-  }, [activeProjectId, pushError, pushNotification])
+  }, [pushError, pushNotification])
 
   const onOpenTerminal = useCallback(() => {
-    if (!activeProjectId) {
+    const resolvedProjectId = resolveWorkbenchProjectId()
+    if (!resolvedProjectId) {
       pushNotification({
         title: 'Select a project first',
         message: 'Open or add a project to use the terminal.',
@@ -83,11 +87,11 @@ export const TitleBar = memo(function TitleBar() {
       })
       return
     }
-    void createAndFocusTerminalSession(activeProjectId)
+    void createAndFocusTerminalSession(resolvedProjectId)
       .catch((error: unknown) => {
         pushError('Terminal create failed', error, 'Failed to create terminal')
       })
-  }, [activeProjectId, pushError, pushNotification])
+  }, [pushError, pushNotification])
 
   return (
     <div className={styles.titleBar} data-tauri-drag-region>

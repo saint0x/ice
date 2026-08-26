@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { terminalInterrupt, terminalRespawn, terminalScrollbackClear, terminalSendEof, toTerminalSession } from '@/lib/backend'
 import { createAndOpenBrowserTab } from '@/lib/browserTabs'
+import { findActiveTabId, resolveWorkbenchProjectId } from '@/lib/projectResolution'
 import { createAndFocusTerminalSession } from '@/lib/terminalSessions'
 import { closeWorkspaceTab } from '@/lib/workspaceTabs'
 import { useNotificationsStore } from '@/stores/notifications'
@@ -26,17 +27,6 @@ function findPaneTabs(layout: PaneLayout, paneId: string): string[] {
   return []
 }
 
-export function findActiveTabId(layout: PaneLayout, paneId: string): string | null {
-  if (layout.type === 'leaf') {
-    return layout.id === paneId ? layout.activeTabId : null
-  }
-  for (const child of layout.children) {
-    const activeTabId = findActiveTabId(child, paneId)
-    if (activeTabId) return activeTabId
-  }
-  return null
-}
-
 export function useKeyboardShortcuts() {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -45,7 +35,7 @@ export function useKeyboardShortcuts() {
       const projects = useProjectsStore.getState()
       const terminals = useTerminalStore.getState()
       const notifications = useNotificationsStore.getState()
-      const activeProjectId = projects.activeProjectId
+      const activeProjectId = resolveWorkbenchProjectId()
       const activeProject = activeProjectId ? projects.projects.get(activeProjectId) : null
       const activeSessionId = activeProjectId ? terminals.activeSessionId.get(activeProjectId) : null
       const activeSession = activeSessionId ? terminals.sessions.get(activeSessionId) : null
