@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { resolveDeleteIntent } from '@/lib/fileMutationState'
+import { describe, expect, it, vi } from 'vitest'
+import { resolveDeleteIntent, runFileMutationWithRefresh } from '@/lib/fileMutationState'
 
 describe('file mutation state', () => {
   it('does not confirm delete without a selected path', () => {
@@ -28,5 +28,49 @@ describe('file mutation state', () => {
       confirmed: false,
       armedPath: 'src/next.ts',
     })
+  })
+
+  it('does not refresh or report refresh errors when the mutation fails', async () => {
+    const mutationError = new Error('permission denied')
+    const refresh = vi.fn()
+    const onMutationSuccess = vi.fn()
+    const onMutationError = vi.fn()
+    const onRefreshError = vi.fn()
+
+    await expect(runFileMutationWithRefresh({
+      mutate: async () => {
+        throw mutationError
+      },
+      refresh,
+      onMutationSuccess,
+      onMutationError,
+      onRefreshError,
+    })).resolves.toBe(false)
+
+    expect(refresh).not.toHaveBeenCalled()
+    expect(onMutationSuccess).not.toHaveBeenCalled()
+    expect(onMutationError).toHaveBeenCalledWith(mutationError)
+    expect(onRefreshError).not.toHaveBeenCalled()
+  })
+
+  it('reports refresh failure separately after a successful mutation', async () => {
+    const refreshError = new Error('watcher unavailable')
+    const onMutationSuccess = vi.fn()
+    const onMutationError = vi.fn()
+    const onRefreshError = vi.fn()
+
+    await expect(runFileMutationWithRefresh({
+      mutate: async () => undefined,
+      refresh: async () => {
+        throw refreshError
+      },
+      onMutationSuccess,
+      onMutationError,
+      onRefreshError,
+    })).resolves.toBe(true)
+
+    expect(onMutationSuccess).toHaveBeenCalledTimes(1)
+    expect(onMutationError).not.toHaveBeenCalled()
+    expect(onRefreshError).toHaveBeenCalledWith(refreshError)
   })
 })

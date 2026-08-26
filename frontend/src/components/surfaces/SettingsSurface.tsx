@@ -17,7 +17,7 @@ import {
   toFileTree,
 } from '@/lib/backend'
 import { ensureEditorDocument } from '@/lib/editorDocuments'
-import { resolveDeleteIntent } from '@/lib/fileMutationState'
+import { resolveDeleteIntent, runFileMutationWithRefresh } from '@/lib/fileMutationState'
 import { closeWorkspaceTabsForEditorPath, openOrFocusEditorWorkspaceTab, renameWorkspaceEditorPath } from '@/lib/workspaceTabs'
 import { tabMetaUtilityTool } from '@/lib/tabMeta'
 import { useNotificationsStore } from '@/stores/notifications'
@@ -176,22 +176,30 @@ export const SettingsSurface = memo(function SettingsSurface({ tab }: Props) {
     hydrateTree(tab.projectId, toFileTree(nextTree))
   }
 
+  const reportFileRefreshError = (error: unknown) => {
+    const message = error instanceof Error ? error.message : 'Project tree refresh failed'
+    setSurfaceError(message)
+    pushError('Project tree refresh failed', error, message)
+  }
+
   const createDirectory = async () => {
     const path = normalizeRelativePath(newDirPath)
     if (!path) return
     setIsFileMutating(true)
     setSurfaceError(null)
-    try {
-      await dirCreate({ projectId: tab.projectId, path })
-      setNewDirPath('')
-      await refreshFiles()
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to create folder'
-      setSurfaceError(message)
-      pushError('Folder create failed', error, message)
-    } finally {
+    await runFileMutationWithRefresh({
+      mutate: () => dirCreate({ projectId: tab.projectId, path }),
+      refresh: refreshFiles,
+      onMutationSuccess: () => setNewDirPath(''),
+      onMutationError: (error) => {
+        const message = error instanceof Error ? error.message : 'Failed to create folder'
+        setSurfaceError(message)
+        pushError('Folder create failed', error, message)
+      },
+      onRefreshError: reportFileRefreshError,
+    }).finally(() => {
       setIsFileMutating(false)
-    }
+    })
   }
 
   const renameSelectedFile = async () => {
@@ -200,19 +208,23 @@ export const SettingsSurface = memo(function SettingsSurface({ tab }: Props) {
     if (!to || to === selectedPath) return
     setIsFileMutating(true)
     setSurfaceError(null)
-    try {
-      await entryRename({ projectId: tab.projectId, from: selectedPath, to })
-      renameEditorDocument(tab.projectId, selectedPath, to)
-      renameWorkspaceEditorPath(tab.projectId, selectedPath, to)
-      setSelected(tab.projectId, to)
-      await refreshFiles()
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to rename file'
-      setSurfaceError(message)
-      pushError('File rename failed', error, message)
-    } finally {
+    await runFileMutationWithRefresh({
+      mutate: () => entryRename({ projectId: tab.projectId, from: selectedPath, to }),
+      refresh: refreshFiles,
+      onMutationSuccess: () => {
+        renameEditorDocument(tab.projectId, selectedPath, to)
+        renameWorkspaceEditorPath(tab.projectId, selectedPath, to)
+        setSelected(tab.projectId, to)
+      },
+      onMutationError: (error) => {
+        const message = error instanceof Error ? error.message : 'Failed to rename file'
+        setSurfaceError(message)
+        pushError('File rename failed', error, message)
+      },
+      onRefreshError: reportFileRefreshError,
+    }).finally(() => {
       setIsFileMutating(false)
-    }
+    })
   }
 
   const deleteSelectedFile = async () => {
@@ -222,19 +234,23 @@ export const SettingsSurface = memo(function SettingsSurface({ tab }: Props) {
 
     setIsFileMutating(true)
     setSurfaceError(null)
-    try {
-      await entryDelete({ projectId: tab.projectId, path: selectedPath })
-      removeEditorDocument(tab.projectId, selectedPath)
-      closeWorkspaceTabsForEditorPath(tab.projectId, selectedPath)
-      await refreshFiles()
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to delete file'
-      setSurfaceError(message)
-      pushError('File delete failed', error, message)
-    } finally {
+    await runFileMutationWithRefresh({
+      mutate: () => entryDelete({ projectId: tab.projectId, path: selectedPath }),
+      refresh: refreshFiles,
+      onMutationSuccess: () => {
+        removeEditorDocument(tab.projectId, selectedPath)
+        closeWorkspaceTabsForEditorPath(tab.projectId, selectedPath)
+      },
+      onMutationError: (error) => {
+        const message = error instanceof Error ? error.message : 'Failed to delete file'
+        setSurfaceError(message)
+        pushError('File delete failed', error, message)
+      },
+      onRefreshError: reportFileRefreshError,
+    }).finally(() => {
       setDeleteArmedPath(null)
       setIsFileMutating(false)
-    }
+    })
   }
 
   return (
