@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::path::Path;
 use std::process::Command as StdCommand;
@@ -138,37 +138,13 @@ impl CodexService {
         persistence: Arc<PersistenceService>,
         paths: IcePaths,
         security: Arc<SecurityService>,
-    ) -> Self {
-        let persisted_threads = persistence.load_codex_threads_sync().unwrap_or_default();
-        let orphaned_thread_ids = persisted_threads
-            .iter()
-            .filter(|thread| !thread_has_backing_session(&paths, &thread.thread_id))
-            .map(|thread| thread.thread_id.clone())
-            .collect::<Vec<_>>();
-        for thread_id in orphaned_thread_ids {
-            let _ = persistence.delete_codex_thread_sync(&thread_id);
-        }
-        let superseded_disconnected_thread_ids =
-            find_superseded_disconnected_thread_ids(&persisted_threads);
-        for thread_id in &superseded_disconnected_thread_ids {
-            let _ = persistence.delete_codex_thread_sync(thread_id);
-        }
-        let _ = persistence.delete_scoped_prompt_assistant_messages_sync();
-        let _ = persistence.delete_empty_assistant_messages_sync();
-        let persisted_threads = persisted_threads
-            .into_iter()
-            .filter(|thread| thread_has_backing_session(&paths, &thread.thread_id))
-            .filter(|thread| !superseded_disconnected_thread_ids.contains(&thread.thread_id))
-            .map(normalize_thread_after_startup)
-            .collect::<Vec<_>>();
-        for thread in &persisted_threads {
-            let _ = tauri::async_runtime::block_on(persistence.upsert_codex_thread(thread.clone()));
-        }
+    ) -> Result<Self> {
+        let persisted_threads = load_persisted_threads_for_startup(&persistence, &paths)?;
         let threads = persisted_threads
             .into_iter()
             .map(|thread| (thread.thread_id.clone(), thread))
             .collect();
-        Self {
+        Ok(Self {
             app,
             persistence,
             paths,
@@ -181,7 +157,7 @@ impl CodexService {
                 recent_stderr: VecDeque::new(),
             })),
             next_id: AtomicU64::new(1),
-        }
+        })
     }
 
     pub async fn codex_available(&self) -> bool {
@@ -1047,6 +1023,52 @@ fn thread_has_backing_session(paths: &IcePaths, thread_id: &str) -> bool {
         .unwrap_or(false)
 }
 
+fn load_persisted_threads_for_startup(
+    persistence: &PersistenceService,
+    paths: &IcePaths,
+) -> Result<Vec<CodexThreadBinding>> {
+    let persisted_threads = persistence
+        .load_codex_threads_sync()
+        .context("failed to load persisted Codex threads")?;
+    let orphaned_thread_ids = persisted_threads
+        .iter()
+        .filter(|thread| !thread_has_backing_session(paths, &thread.thread_id))
+        .map(|thread| thread.thread_id.clone())
+        .collect::<HashSet<_>>();
+    for thread_id in &orphaned_thread_ids {
+        persistence
+            .delete_codex_thread_sync(thread_id)
+            .with_context(|| format!("failed to delete orphaned Codex thread {thread_id}"))?;
+    }
+    let superseded_disconnected_thread_ids =
+        find_superseded_disconnected_thread_ids(&persisted_threads)
+            .into_iter()
+            .collect::<HashSet<_>>();
+    for thread_id in &superseded_disconnected_thread_ids {
+        persistence
+            .delete_codex_thread_sync(thread_id)
+            .with_context(|| format!("failed to delete superseded Codex thread {thread_id}"))?;
+    }
+    persistence
+        .delete_scoped_prompt_assistant_messages_sync()
+        .context("failed to delete scoped prompt assistant messages")?;
+    persistence
+        .delete_empty_assistant_messages_sync()
+        .context("failed to delete empty assistant messages")?;
+
+    let threads = persisted_threads
+        .into_iter()
+        .filter(|thread| !orphaned_thread_ids.contains(&thread.thread_id))
+        .filter(|thread| !superseded_disconnected_thread_ids.contains(&thread.thread_id))
+        .map(normalize_thread_after_startup)
+        .collect::<Vec<_>>();
+    for thread in &threads {
+        tauri::async_runtime::block_on(persistence.upsert_codex_thread(thread.clone()))
+            .with_context(|| format!("failed to normalize Codex thread {}", thread.thread_id))?;
+    }
+    Ok(threads)
+}
+
 fn codex_sessions_dir(paths: &IcePaths) -> Option<std::path::PathBuf> {
     let root = paths.concern_dir("codex").join("sessions");
     root.is_dir().then_some(root)
@@ -1757,14 +1779,18 @@ fn extract_default_listen(help_text: &str) -> Option<String> {
 mod tests {
     use super::{
         apply_notification_to_threads, build_pending_approval, build_scoped_turn_prompt,
-        extract_default_listen, normalize_thread_after_startup, summarize_text, CodexRuntimeState,
-        CodexThreadBinding, CODEX_MODEL_ID,
+        extract_default_listen, load_persisted_threads_for_startup, normalize_thread_after_startup,
+        summarize_text, CodexRuntimeState, CodexThreadBinding, CODEX_MODEL_ID,
     };
+    use crate::app::paths::IcePaths;
+    use crate::persistence::db::PersistenceService;
     use crate::projects::models::ProjectRecord;
     use parking_lot::Mutex;
     use serde_json::json;
     use std::collections::{HashMap, VecDeque};
+    use std::fs;
     use std::sync::Arc;
+    use tempfile::tempdir;
 
     #[test]
     fn extracts_default_listen_from_help_text() {
@@ -2105,6 +2131,68 @@ mod tests {
         assert_eq!(normalized.model.as_deref(), Some(CODEX_MODEL_ID));
         assert_eq!(normalized.status, "disconnected");
         assert_eq!(normalized.last_assistant_message, None);
+    }
+
+    #[test]
+    fn startup_hydration_preserves_backed_threads_and_prunes_orphans() {
+        let temp = tempdir().expect("temp dir");
+        let paths = IcePaths::from_root(temp.path().join("ice-storage"));
+        paths.ensure_layout().expect("storage layout");
+        let db = PersistenceService::new(paths.db_path().to_path_buf()).expect("db");
+        let backed_thread_id = "thread-backed";
+        let orphan_thread_id = "thread-orphan";
+        fs::create_dir_all(paths.concern_dir("codex").join("sessions/2026/08/26"))
+            .expect("sessions dir");
+        fs::write(
+            paths
+                .concern_dir("codex")
+                .join(format!("sessions/2026/08/26/{backed_thread_id}.jsonl")),
+            b"session",
+        )
+        .expect("session file");
+
+        tauri::async_runtime::block_on(async {
+            db.upsert_codex_thread(CodexThreadBinding {
+                project_id: "project-a".to_string(),
+                thread_id: backed_thread_id.to_string(),
+                title: Some("Backed".to_string()),
+                model: Some("gpt-5-codex".to_string()),
+                status: "running".to_string(),
+                last_turn_id: Some("turn-1".to_string()),
+                last_assistant_message: Some("[ICE PROJECT SCOPE]\nHidden".to_string()),
+                unread: false,
+            })
+            .await
+            .expect("backed thread write");
+            db.upsert_codex_thread(CodexThreadBinding {
+                project_id: "project-a".to_string(),
+                thread_id: orphan_thread_id.to_string(),
+                title: Some("Orphan".to_string()),
+                model: Some("gpt-5-codex".to_string()),
+                status: "idle".to_string(),
+                last_turn_id: None,
+                last_assistant_message: None,
+                unread: false,
+            })
+            .await
+            .expect("orphan thread write");
+        });
+
+        let threads = load_persisted_threads_for_startup(&db, &paths).expect("startup hydration");
+
+        assert_eq!(threads.len(), 1);
+        assert_eq!(threads[0].thread_id, backed_thread_id);
+        assert_eq!(threads[0].status, "disconnected");
+        assert_eq!(threads[0].model.as_deref(), Some(CODEX_MODEL_ID));
+        assert_eq!(threads[0].last_assistant_message, None);
+        assert_eq!(
+            db.load_codex_threads_sync()
+                .expect("persisted threads")
+                .iter()
+                .map(|thread| thread.thread_id.as_str())
+                .collect::<Vec<_>>(),
+            vec![backed_thread_id]
+        );
     }
 
     #[test]

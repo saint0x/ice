@@ -69,7 +69,7 @@ pub fn build_state(app: AppHandle) -> Result<AppState> {
         persistence.clone(),
         paths.clone(),
         security.clone(),
-    ));
+    )?);
     let projects = Arc::new(ProjectService::new(
         persistence.clone(),
         git.clone(),
