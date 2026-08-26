@@ -9,10 +9,9 @@ import {
   type BrowserRestorePolicy,
 } from '@/lib/backend'
 import { createAndOpenBrowserTab } from '@/lib/browserTabs'
-import { closeBrowserTabEverywhere } from '@/lib/workspaceTabs'
+import { closeBrowserTabEverywhere, openOrFocusBrowserWorkspaceTab } from '@/lib/workspaceTabs'
 import { useBrowserStore } from '@/stores/browser'
 import { useNotificationsStore } from '@/stores/notifications'
-import { useWorkspaceStore } from '@/stores/workspace'
 import styles from './BrowserList.module.css'
 
 const EMPTY_SIDEBAR_ITEMS = [] as const
@@ -23,8 +22,6 @@ export const BrowserList = memo(function BrowserList({ projectId }: { projectId:
   const setActiveTab = useBrowserStore((s) => s.setActiveTab)
   const upsertTab = useBrowserStore((s) => s.upsertTab)
   const pushError = useNotificationsStore((s) => s.pushError)
-  const openTab = useWorkspaceStore((s) => s.openTab)
-  const activePaneId = useWorkspaceStore((s) => s.activePaneId)
   const [restorePolicy, setRestorePolicy] = useState<BrowserRestorePolicy | null>(null)
   const sidebarItems = storedSidebarItems ?? EMPTY_SIDEBAR_ITEMS
 
@@ -81,7 +78,7 @@ export const BrowserList = memo(function BrowserList({ projectId }: { projectId:
           className={`${styles.row} ${tab.tabId === activeTabId ? styles.active : ''}`}
           onClick={() => {
             setActiveTab(projectId, tab.tabId)
-            openTab(activePaneId, 'browser', tab.title, projectId, { tabId: tab.tabId, url: tab.url })
+            openOrFocusBrowserWorkspaceTab(projectId, tab.title, tab.tabId, tab.url)
           }}
         >
           {tab.isSecure ? <Lock size={12} /> : <Globe size={12} />}

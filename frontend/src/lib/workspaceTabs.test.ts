@@ -6,6 +6,8 @@ import {
   closeWorkspaceTabsForBrowserTab,
   closeWorkspaceTabsForProject,
   closeWorkspaceTabsForTerminalSession,
+  openOrFocusBrowserWorkspaceTab,
+  openOrFocusCodexWorkspaceTab,
   reconcileWorkspaceBackingResources,
 } from '@/lib/workspaceTabs'
 import { browserTabClose, terminalClose } from '@/lib/backend'
@@ -591,5 +593,131 @@ describe('closeWorkspaceTab', () => {
     })
 
     expect(useWorkspaceStore.getState().tabs.has('terminal-1')).toBe(true)
+  })
+})
+
+describe('open workspace backing resources', () => {
+  beforeEach(() => {
+    resetStores()
+  })
+
+  it('focuses an existing browser workspace tab instead of duplicating the backing tab', () => {
+    useWorkspaceStore.setState({
+      layout: {
+        id: 'split-root',
+        type: 'split',
+        direction: 'horizontal',
+        ratio: 0.5,
+        children: [
+          {
+            id: 'pane-1',
+            type: 'leaf',
+            tabs: ['tab-1'],
+            activeTabId: 'tab-1',
+          },
+          {
+            id: 'pane-2',
+            type: 'leaf',
+            tabs: ['tab-2'],
+            activeTabId: 'tab-2',
+          },
+        ],
+      },
+      tabs: new Map([
+        ['tab-1', {
+          id: 'tab-1',
+          projectId: 'project-1',
+          type: 'browser',
+          title: 'Old docs',
+          meta: { tabId: 'browser-1', url: 'https://old.example.com' },
+        }],
+        ['tab-2', {
+          id: 'tab-2',
+          projectId: 'project-1',
+          type: 'git',
+          title: 'Git',
+        }],
+      ]),
+      activePaneId: 'pane-2',
+      pendingFocusPaneId: null,
+      sidebarOpen: true,
+      sidebarWidth: 240,
+      bottomDockOpen: true,
+      bottomDockHeight: 240,
+      chatPanelOpen: false,
+      chatPanelWidth: 360,
+    })
+
+    const tabId = openOrFocusBrowserWorkspaceTab('project-1', 'Docs', 'browser-1', 'https://example.com')
+
+    const state = useWorkspaceStore.getState()
+    expect(tabId).toBe('tab-1')
+    expect([...state.tabs.keys()]).toEqual(['tab-1', 'tab-2'])
+    expect(state.activePaneId).toBe('pane-1')
+    expect(state.pendingFocusPaneId).toBe('pane-1')
+    expect(state.tabs.get('tab-1')).toMatchObject({
+      title: 'Docs',
+      meta: { tabId: 'browser-1', url: 'https://example.com' },
+    })
+  })
+
+  it('focuses an existing Codex workspace tab instead of duplicating the backing thread', () => {
+    useWorkspaceStore.setState({
+      layout: {
+        id: 'split-root',
+        type: 'split',
+        direction: 'horizontal',
+        ratio: 0.5,
+        children: [
+          {
+            id: 'pane-1',
+            type: 'leaf',
+            tabs: ['tab-1'],
+            activeTabId: 'tab-1',
+          },
+          {
+            id: 'pane-2',
+            type: 'leaf',
+            tabs: ['tab-2'],
+            activeTabId: 'tab-2',
+          },
+        ],
+      },
+      tabs: new Map([
+        ['tab-1', {
+          id: 'tab-1',
+          projectId: 'project-1',
+          type: 'codex',
+          title: 'Old Thread',
+          meta: { threadId: 'thread-1' },
+        }],
+        ['tab-2', {
+          id: 'tab-2',
+          projectId: 'project-1',
+          type: 'git',
+          title: 'Git',
+        }],
+      ]),
+      activePaneId: 'pane-2',
+      pendingFocusPaneId: null,
+      sidebarOpen: true,
+      sidebarWidth: 240,
+      bottomDockOpen: true,
+      bottomDockHeight: 240,
+      chatPanelOpen: false,
+      chatPanelWidth: 360,
+    })
+
+    const tabId = openOrFocusCodexWorkspaceTab('project-1', 'Thread', 'thread-1')
+
+    const state = useWorkspaceStore.getState()
+    expect(tabId).toBe('tab-1')
+    expect([...state.tabs.keys()]).toEqual(['tab-1', 'tab-2'])
+    expect(state.activePaneId).toBe('pane-1')
+    expect(state.pendingFocusPaneId).toBe('pane-1')
+    expect(state.tabs.get('tab-1')).toMatchObject({
+      title: 'Thread',
+      meta: { threadId: 'thread-1' },
+    })
   })
 })

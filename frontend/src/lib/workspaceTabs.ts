@@ -2,7 +2,7 @@ import { browserTabClose, terminalClose } from '@/lib/backend'
 import { useBrowserStore } from '@/stores/browser'
 import { useTerminalStore } from '@/stores/terminal'
 import { useWorkspaceStore } from '@/stores/workspace'
-import type { PaneId, PaneLayout, TabId } from '@/types'
+import type { PaneId, PaneLayout, ProjectId, TabId } from '@/types'
 
 type BackingResource = 'browser' | 'terminal'
 type WorkspaceTabRecord = ReturnType<typeof useWorkspaceStore.getState>['tabs'] extends Map<TabId, infer T> ? T : never
@@ -135,6 +135,69 @@ export function closeWorkspaceTabsForProject(projectId: string) {
   for (const match of matches) {
     useWorkspaceStore.getState().closeTab(match.paneId, match.tabId)
   }
+}
+
+export function openOrFocusBrowserWorkspaceTab(
+  projectId: ProjectId,
+  title: string,
+  browserTabId: string,
+  url: string,
+) {
+  const workspace = useWorkspaceStore.getState()
+  const matches: Array<{ paneId: PaneId; tabId: TabId }> = []
+  collectTabsByPredicate(
+    workspace.layout,
+    workspace.tabs,
+    matches,
+    (tab) => (
+      tab.projectId === projectId
+      && tab.type === 'browser'
+      && tab.meta?.tabId === browserTabId
+    ),
+  )
+
+  const existing = matches[0]
+  if (existing) {
+    useWorkspaceStore.getState().activateTab(existing.paneId, existing.tabId)
+    useWorkspaceStore.getState().updateTab(existing.tabId, {
+      title,
+      meta: { tabId: browserTabId, url },
+    })
+    return existing.tabId
+  }
+
+  return workspace.openTab(workspace.activePaneId, 'browser', title, projectId, { tabId: browserTabId, url })
+}
+
+export function openOrFocusCodexWorkspaceTab(
+  projectId: ProjectId,
+  title: string,
+  threadId: string,
+) {
+  const workspace = useWorkspaceStore.getState()
+  const matches: Array<{ paneId: PaneId; tabId: TabId }> = []
+  collectTabsByPredicate(
+    workspace.layout,
+    workspace.tabs,
+    matches,
+    (tab) => (
+      tab.projectId === projectId
+      && tab.type === 'codex'
+      && tab.meta?.threadId === threadId
+    ),
+  )
+
+  const existing = matches[0]
+  if (existing) {
+    useWorkspaceStore.getState().activateTab(existing.paneId, existing.tabId)
+    useWorkspaceStore.getState().updateTab(existing.tabId, {
+      title,
+      meta: { threadId },
+    })
+    return existing.tabId
+  }
+
+  return workspace.openTab(workspace.activePaneId, 'codex', title, projectId, { threadId })
 }
 
 export function reconcileWorkspaceBackingResources(input: {

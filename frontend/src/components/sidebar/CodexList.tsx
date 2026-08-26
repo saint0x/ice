@@ -2,15 +2,13 @@ import { memo } from 'react'
 import { MessageSquare, Circle, Loader2 } from 'lucide-react'
 import type { ProjectId } from '@/types'
 import { useCodexStore } from '@/stores/codex'
-import { useWorkspaceStore } from '@/stores/workspace'
+import { openOrFocusCodexWorkspaceTab } from '@/lib/workspaceTabs'
 import styles from './CodexList.module.css'
 
 export const CodexList = memo(function CodexList({ projectId }: { projectId: ProjectId }) {
   const threads = useCodexStore((s) => s.sidebarItems.get(projectId) ?? [])
   const activeThreadId = useCodexStore((s) => s.activeThreadId.get(projectId))
   const setActiveThread = useCodexStore((s) => s.setActiveThread)
-  const openTab = useWorkspaceStore((s) => s.openTab)
-  const activePaneId = useWorkspaceStore((s) => s.activePaneId)
 
   return (
     <div className={styles.list}>
@@ -20,7 +18,7 @@ export const CodexList = memo(function CodexList({ projectId }: { projectId: Pro
           className={`${styles.row} ${thread.threadId === activeThreadId ? styles.active : ''}`}
           onClick={() => {
             setActiveThread(projectId, thread.threadId)
-            openTab(activePaneId, 'codex', thread.title, projectId, { threadId: thread.threadId })
+            openOrFocusCodexWorkspaceTab(projectId, thread.title, thread.threadId)
           }}
         >
           <MessageSquare size={12} />
