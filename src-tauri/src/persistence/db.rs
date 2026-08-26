@@ -772,6 +772,11 @@ impl PersistenceService {
         tokio::task::spawn_blocking(move || -> Result<CodexMessageRecord> {
             let conn = this.connect()?;
             let existing = read_codex_message_optional(&conn, &update.message_id)?;
+            if let Some(message) = existing.as_ref() {
+                if message.state == "complete" && update.state == "streaming" {
+                    return Ok(message.clone());
+                }
+            }
             let next_content = if update.append {
                 format!(
                     "{}{}",
@@ -2370,6 +2375,52 @@ mod tests {
             .expect("final chunk");
         assert_eq!(final_message.content, "Hello world");
         assert_eq!(final_message.state, "complete");
+    }
+
+    #[tokio::test]
+    async fn codex_message_update_ignores_late_streaming_delta_after_completion() {
+        let temp = tempdir().expect("temp dir");
+        let db = PersistenceService::new(temp.path().join("ice.db")).expect("db");
+
+        let final_message = db
+            .apply_codex_message_update(crate::codex::service::CodexMessageUpdate {
+                message_id: "thread-1:turn-1:assistant".to_string(),
+                project_id: "project-a".to_string(),
+                thread_id: "thread-1".to_string(),
+                turn_id: Some("turn-1".to_string()),
+                role: "assistant".to_string(),
+                content: "Final answer".to_string(),
+                state: "complete".to_string(),
+                append: false,
+            })
+            .await
+            .expect("final message");
+        assert_eq!(final_message.content, "Final answer");
+        assert_eq!(final_message.state, "complete");
+
+        let late_delta = db
+            .apply_codex_message_update(crate::codex::service::CodexMessageUpdate {
+                message_id: "thread-1:turn-1:assistant".to_string(),
+                project_id: "project-a".to_string(),
+                thread_id: "thread-1".to_string(),
+                turn_id: Some("turn-1".to_string()),
+                role: "assistant".to_string(),
+                content: " stale".to_string(),
+                state: "streaming".to_string(),
+                append: true,
+            })
+            .await
+            .expect("late delta");
+
+        assert_eq!(late_delta.content, "Final answer");
+        assert_eq!(late_delta.state, "complete");
+        let messages = db
+            .list_codex_messages_for_thread("thread-1".to_string())
+            .await
+            .expect("messages");
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].content, "Final answer");
+        assert_eq!(messages[0].state, "complete");
     }
 
     #[tokio::test]
