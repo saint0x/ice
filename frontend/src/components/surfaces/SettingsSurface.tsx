@@ -12,8 +12,8 @@ import {
   projectSnapshot,
 } from '@/lib/backend'
 import { ensureEditorDocument } from '@/lib/editorDocuments'
+import { openOrFocusEditorWorkspaceTab } from '@/lib/workspaceTabs'
 import { tabMetaUtilityTool } from '@/lib/tabMeta'
-import { useWorkspaceStore } from '@/stores/workspace'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useFilesStore } from '@/stores/files'
 import { FileTree } from '@/components/sidebar/FileTree'
@@ -27,8 +27,6 @@ const EMPTY_TREE = [] as const
 
 export const SettingsSurface = memo(function SettingsSurface({ tab }: Props) {
   const tool = tabMetaUtilityTool(tab)
-  const openTab = useWorkspaceStore((state) => state.openTab)
-  const activePaneId = useWorkspaceStore((state) => state.activePaneId)
   const storedTree = useFilesStore((state) => state.trees.get(tab.projectId))
   const pushError = useNotificationsStore((state) => state.pushError)
   const tree = storedTree ?? EMPTY_TREE
@@ -135,7 +133,7 @@ export const SettingsSurface = memo(function SettingsSurface({ tab }: Props) {
   const openEditor = (path: string) => {
     void ensureEditorDocument(tab.projectId, path)
     const name = path.split('/').pop() ?? path
-    openTab(activePaneId, 'editor', name, tab.projectId, { path })
+    openOrFocusEditorWorkspaceTab(tab.projectId, name, path)
   }
 
   const createTerminal = async () => {

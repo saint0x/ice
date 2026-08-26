@@ -3,10 +3,10 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog'
 import { ChevronRight, ChevronDown, File, Folder, FolderOpen, Upload } from 'lucide-react'
 import { ensureEditorDocument, scheduleEditorPrefetch } from '@/lib/editorDocuments'
 import { fileImportExternal } from '@/lib/backend'
+import { openOrFocusEditorWorkspaceTab } from '@/lib/workspaceTabs'
 import { useNotificationsStore } from '@/stores/notifications'
 import type { FileEntry, ProjectId } from '@/types'
 import { useFilesStore } from '@/stores/files'
-import { useWorkspaceStore } from '@/stores/workspace'
 import styles from './FileTree.module.css'
 
 interface Props {
@@ -92,8 +92,6 @@ export const FileTree = memo(function FileTree({ projectId }: Props) {
   const selectedPath = useFilesStore((s) => s.selectedPath.get(projectId) ?? null)
   const toggleExpand = useFilesStore((s) => s.toggleExpand)
   const setSelected = useFilesStore((s) => s.setSelected)
-  const openTab = useWorkspaceStore((s) => s.openTab)
-  const activePaneId = useWorkspaceStore((s) => s.activePaneId)
   const pushError = useNotificationsStore((s) => s.pushError)
   const [isDragOver, setIsDragOver] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
@@ -104,9 +102,9 @@ export const FileTree = memo(function FileTree({ projectId }: Props) {
       setSelected(projectId, path)
       void ensureEditorDocument(projectId, path)
       const name = path.split('/').pop() ?? path
-      openTab(activePaneId, 'editor', name, projectId, { path })
+      openOrFocusEditorWorkspaceTab(projectId, name, path)
     },
-    [projectId, setSelected, openTab, activePaneId]
+    [projectId, setSelected]
   )
 
   const onToggle = useCallback(

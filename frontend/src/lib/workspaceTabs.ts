@@ -200,6 +200,37 @@ export function openOrFocusCodexWorkspaceTab(
   return workspace.openTab(workspace.activePaneId, 'codex', title, projectId, { threadId })
 }
 
+export function openOrFocusEditorWorkspaceTab(
+  projectId: ProjectId,
+  title: string,
+  path: string,
+) {
+  const workspace = useWorkspaceStore.getState()
+  const matches: Array<{ paneId: PaneId; tabId: TabId }> = []
+  collectTabsByPredicate(
+    workspace.layout,
+    workspace.tabs,
+    matches,
+    (tab) => (
+      tab.projectId === projectId
+      && tab.type === 'editor'
+      && tab.meta?.path === path
+    ),
+  )
+
+  const existing = matches[0]
+  if (existing) {
+    useWorkspaceStore.getState().activateTab(existing.paneId, existing.tabId)
+    useWorkspaceStore.getState().updateTab(existing.tabId, {
+      title,
+      meta: { path },
+    })
+    return existing.tabId
+  }
+
+  return workspace.openTab(workspace.activePaneId, 'editor', title, projectId, { path })
+}
+
 export function reconcileWorkspaceBackingResources(input: {
   browserTabIds: Iterable<string>
   terminalSessionIds: Iterable<string>
