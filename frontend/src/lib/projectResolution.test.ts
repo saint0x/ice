@@ -58,6 +58,7 @@ describe('project resolution', () => {
       projects: new Map(),
       projectOrder: [],
       activeProjectId: null,
+      removedProjectIds: new Set(),
     })
     useWorkspaceStore.setState({
       layout: splitLayout,

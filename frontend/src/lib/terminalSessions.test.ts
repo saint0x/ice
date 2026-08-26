@@ -59,6 +59,7 @@ function resetStores() {
     projects: new Map(),
     projectOrder: [],
     activeProjectId: null,
+    removedProjectIds: new Set(),
   })
   useTerminalStore.setState({
     sessions: new Map(),

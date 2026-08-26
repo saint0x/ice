@@ -7,6 +7,7 @@ describe('projects store active project selection', () => {
       projects: new Map(),
       projectOrder: [],
       activeProjectId: null,
+      removedProjectIds: new Set(),
     })
   })
 
@@ -149,5 +150,72 @@ describe('projects store active project selection', () => {
     useProjectsStore.getState().setActiveProject('project-missing')
 
     expect(useProjectsStore.getState().activeProjectId).toBe('project-1')
+  })
+
+  it('does not resurrect a removed project from stale hydration', () => {
+    useProjectsStore.getState().hydrateProjects([
+      {
+        id: 'project-1',
+        name: 'Alpha',
+        path: '/tmp/alpha',
+        color: 'blue',
+        branch: 'main',
+        collapsed: false,
+        expandedSections: new Set(),
+      },
+      {
+        id: 'project-2',
+        name: 'Beta',
+        path: '/tmp/beta',
+        color: 'green',
+        branch: 'main',
+        collapsed: false,
+        expandedSections: new Set(),
+      },
+    ])
+
+    useProjectsStore.getState().removeProject('project-1')
+    useProjectsStore.getState().hydrateProjects([
+      {
+        id: 'project-1',
+        name: 'Alpha stale',
+        path: '/tmp/alpha',
+        color: 'amber',
+        branch: 'stale',
+        collapsed: false,
+        expandedSections: new Set(),
+      },
+      {
+        id: 'project-2',
+        name: 'Beta',
+        path: '/tmp/beta',
+        color: 'green',
+        branch: 'main',
+        collapsed: false,
+        expandedSections: new Set(),
+      },
+    ])
+
+    expect(useProjectsStore.getState().projects.has('project-1')).toBe(false)
+    expect(useProjectsStore.getState().projectOrder).toEqual(['project-2'])
+    expect(useProjectsStore.getState().removedProjectIds.has('project-1')).toBe(true)
+  })
+
+  it('allows an explicit add to replace a removed-project tombstone', () => {
+    useProjectsStore.getState().removeProject('project-1')
+
+    useProjectsStore.getState().addProject({
+      id: 'project-1',
+      name: 'Alpha re-added',
+      path: '/tmp/alpha',
+      color: 'blue',
+      branch: 'main',
+      collapsed: false,
+      expandedSections: new Set(),
+    })
+
+    expect(useProjectsStore.getState().projects.get('project-1')?.name).toBe('Alpha re-added')
+    expect(useProjectsStore.getState().projectOrder).toEqual(['project-1'])
+    expect(useProjectsStore.getState().removedProjectIds.has('project-1')).toBe(false)
   })
 })

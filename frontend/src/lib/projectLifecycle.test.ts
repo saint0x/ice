@@ -33,6 +33,7 @@ function resetStores() {
     ]),
     projectOrder: ['project-1', 'project-2'],
     activeProjectId: 'project-1',
+    removedProjectIds: new Set(),
   })
 
   useWorkspaceStore.setState({
@@ -331,5 +332,34 @@ describe('project lifecycle cleanup', () => {
 
     expect(useBrowserStore.getState().tabs.has('browser-1')).toBe(false)
     expect(useTerminalStore.getState().sessions.has('terminal-1')).toBe(false)
+  })
+
+  it('does not resurrect a removed project from a late backend project list', () => {
+    removeProjectLocalState('project-1')
+
+    useProjectsStore.getState().hydrateProjects([
+      {
+        id: 'project-1',
+        name: 'Alpha stale',
+        path: '/tmp/alpha',
+        color: 'amber',
+        branch: 'stale',
+        collapsed: false,
+        expandedSections: new Set(['files']),
+      },
+      {
+        id: 'project-2',
+        name: 'Beta',
+        path: '/tmp/beta',
+        color: 'green',
+        branch: 'main',
+        collapsed: false,
+        expandedSections: new Set(['files']),
+      },
+    ])
+
+    expect(useProjectsStore.getState().projects.has('project-1')).toBe(false)
+    expect(useProjectsStore.getState().projectOrder).toEqual(['project-2'])
+    expect(useProjectsStore.getState().removedProjectIds.has('project-1')).toBe(true)
   })
 })
