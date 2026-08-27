@@ -163,6 +163,8 @@ export function useBackendIntegration() {
   const pendingCodexMessagesRef = useRef(new Map<string, ReturnType<typeof toCodexMessage>>())
   const pendingCodexSidebarRefreshRef = useRef(new Set<string>())
   const codexSidebarRefreshTimerRef = useRef<number | null>(null)
+  const terminalScrollbackFrameRef = useRef<number | null>(null)
+  const pendingTerminalScrollbackRef = useRef(new Map<string, string>())
   const lastCodexDisconnectRef = useRef<{ message: string; at: number } | null>(null)
   useEffect(() => {
     let disposed = false
@@ -171,6 +173,9 @@ export function useBackendIntegration() {
     let browserUnlisten: (() => void) | undefined
     let terminalUnlisten: (() => void) | undefined
     let codexUnlisten: (() => void) | undefined
+    const pendingCodexMessages = pendingCodexMessagesRef.current
+    const pendingCodexSidebarRefresh = pendingCodexSidebarRefreshRef.current
+    const pendingTerminalScrollback = pendingTerminalScrollbackRef.current
     const refreshTree = async (projectId: string) => {
       try {
         const nodes = await projectTreeReadNested(projectId)
@@ -208,19 +213,19 @@ export function useBackendIntegration() {
     const flushCodexMessages = () => {
       codexMessageFrameRef.current = null
       if (disposed) return
-      const bufferedMessages = Array.from(pendingCodexMessagesRef.current.values())
-      pendingCodexMessagesRef.current.clear()
+      const bufferedMessages = Array.from(pendingCodexMessages.values())
+      pendingCodexMessages.clear()
       for (const message of bufferedMessages) {
         upsertMessage(message)
       }
       if (
-        pendingCodexSidebarRefreshRef.current.size > 0
+        pendingCodexSidebarRefresh.size > 0
         && codexSidebarRefreshTimerRef.current == null
       ) {
         codexSidebarRefreshTimerRef.current = window.setTimeout(() => {
           codexSidebarRefreshTimerRef.current = null
-          const projectIds = Array.from(pendingCodexSidebarRefreshRef.current.values())
-          pendingCodexSidebarRefreshRef.current.clear()
+          const projectIds = Array.from(pendingCodexSidebarRefresh.values())
+          pendingCodexSidebarRefresh.clear()
           for (const projectId of projectIds) {
             void refreshCodexSidebar(projectId)
           }
@@ -229,12 +234,32 @@ export function useBackendIntegration() {
     }
 
     const scheduleCodexMessage = (message: ReturnType<typeof toCodexMessage>) => {
-      pendingCodexMessagesRef.current.set(message.id, message)
+      pendingCodexMessages.set(message.id, message)
       if (message.state === 'complete') {
-        pendingCodexSidebarRefreshRef.current.add(message.projectId)
+        pendingCodexSidebarRefresh.add(message.projectId)
       }
       if (codexMessageFrameRef.current == null) {
         codexMessageFrameRef.current = window.requestAnimationFrame(flushCodexMessages)
+      }
+    }
+
+    const flushTerminalScrollback = () => {
+      terminalScrollbackFrameRef.current = null
+      if (disposed) return
+      const bufferedScrollback = Array.from(pendingTerminalScrollback.entries())
+      pendingTerminalScrollback.clear()
+      for (const [sessionId, chunk] of bufferedScrollback) {
+        appendScrollback(sessionId, chunk)
+      }
+    }
+
+    const scheduleTerminalScrollback = (sessionId: string, chunk: string) => {
+      pendingTerminalScrollback.set(
+        sessionId,
+        `${pendingTerminalScrollback.get(sessionId) ?? ''}${chunk}`,
+      )
+      if (terminalScrollbackFrameRef.current == null) {
+        terminalScrollbackFrameRef.current = window.requestAnimationFrame(flushTerminalScrollback)
       }
     }
 
@@ -386,7 +411,7 @@ export function useBackendIntegration() {
           return
         }
         if (payload.type === 'data' && payload.sessionId && payload.data) {
-          appendScrollback(payload.sessionId, payload.data)
+          scheduleTerminalScrollback(payload.sessionId, payload.data)
           return
         }
         const terminalRuntimeError = toTerminalRuntimeError(payload)
@@ -395,6 +420,7 @@ export function useBackendIntegration() {
           return
         }
         if (payload.type === 'scrollbackCleared' && payload.sessionId) {
+          pendingTerminalScrollback.delete(payload.sessionId)
           clearScrollback(payload.sessionId)
           if (payload.session) {
             upsertSession(toTerminalSession(payload.session))
@@ -402,6 +428,7 @@ export function useBackendIntegration() {
           return
         }
         if (payload.type === 'sessionClosed' && payload.sessionId) {
+          pendingTerminalScrollback.delete(payload.sessionId)
           closeSession(payload.sessionId)
           closeWorkspaceTabsForTerminalSession(payload.sessionId)
         }
@@ -509,9 +536,15 @@ export function useBackendIntegration() {
       if (codexMessageFrameRef.current != null) {
         window.cancelAnimationFrame(codexMessageFrameRef.current)
       }
+      if (terminalScrollbackFrameRef.current != null) {
+        window.cancelAnimationFrame(terminalScrollbackFrameRef.current)
+      }
       if (codexSidebarRefreshTimerRef.current != null) {
         window.clearTimeout(codexSidebarRefreshTimerRef.current)
       }
+      pendingTerminalScrollback.clear()
+      pendingCodexMessages.clear()
+      pendingCodexSidebarRefresh.clear()
       if (watchedProjectRef.current) {
         void projectWatchStop(watchedProjectRef.current)
       }

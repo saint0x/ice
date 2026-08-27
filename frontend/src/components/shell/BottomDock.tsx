@@ -9,6 +9,7 @@ import { terminalDiagnosticsRead, terminalRename, terminalRespawn, terminalScrol
 import { createAndFocusTerminalSession, resolveTerminalProjectId } from '@/lib/terminalSessions'
 import { copyTerminalHistory } from '@/lib/terminalHistoryActions'
 import { ensureTerminalScrollback } from '@/lib/terminalScrollback'
+import { terminalLineCount, terminalLivePreview } from '@/lib/terminalPreview'
 import { closeTerminalSessionEverywhere } from '@/lib/workspaceTabs'
 import styles from './BottomDock.module.css'
 
@@ -74,13 +75,10 @@ export const BottomDock = memo(function BottomDock() {
   const activeDiagnostics = activeSession ? diagnostics.get(activeSession.id) : undefined
   const activeScrollback = activeSession ? allScrollback.get(activeSession.id) ?? '' : ''
   const livePreview = useMemo(() => {
-    const normalized = activeScrollback.replace(/\r/g, '').trim()
-    if (!normalized) return activeDiagnostics?.recentLines.join('\n') ?? ''
-    return normalized.split('\n').slice(-12).join('\n')
+    return terminalLivePreview(activeScrollback, activeDiagnostics?.recentLines)
   }, [activeDiagnostics?.recentLines, activeScrollback])
   const liveLineCount = useMemo(() => {
-    const normalized = activeScrollback.replace(/\r/g, '')
-    return normalized ? normalized.split('\n').length : (activeDiagnostics?.scrollbackLineCount ?? 0)
+    return terminalLineCount(activeScrollback, activeDiagnostics?.scrollbackLineCount ?? 0)
   }, [activeDiagnostics?.scrollbackLineCount, activeScrollback])
 
   useEffect(() => {

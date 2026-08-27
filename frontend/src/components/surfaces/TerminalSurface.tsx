@@ -1,9 +1,10 @@
-import { memo, useCallback, useRef, useEffect, useState } from 'react'
+import { memo, useCallback, useRef, useEffect, useMemo, useState } from 'react'
 import { Loader2, RotateCcw, TerminalSquare, Hand, CornerDownLeft, History, Gauge, ShieldAlert } from 'lucide-react'
 import type { TerminalSession } from '@/types'
 import { terminalDiagnosticsRead, terminalInterrupt, terminalResize, terminalRespawn, terminalSendEof, terminalWrite, toTerminalDiagnostics, toTerminalSession } from '@/lib/backend'
 import { describeError } from '@/lib/errors'
 import { ensureTerminalScrollback } from '@/lib/terminalScrollback'
+import { terminalLineCount } from '@/lib/terminalPreview'
 import { useThemeStore } from '@/stores/theme'
 import { useNotificationsStore } from '@/stores/notifications'
 import { useTerminalStore } from '@/stores/terminal'
@@ -59,7 +60,10 @@ export const TerminalSurface = memo(function TerminalSurface({ session }: Props)
   const [isRespawning, setIsRespawning] = useState(false)
   const [surfaceError, setSurfaceError] = useState<string | null>(null)
   const [isDiagnosticsLoading, setIsDiagnosticsLoading] = useState(false)
-  const liveLineCount = scrollback.replace(/\r/g, '') ? scrollback.replace(/\r/g, '').split('\n').length : (diagnostics?.scrollbackLineCount ?? 0)
+  const liveLineCount = useMemo(
+    () => terminalLineCount(scrollback, diagnostics?.scrollbackLineCount ?? 0),
+    [diagnostics?.scrollbackLineCount, scrollback],
+  )
 
   const reportBackendError = useCallback((key: string, title: string, error: unknown, fallbackMessage: string) => {
     const message = describeError(error, fallbackMessage)
@@ -103,6 +107,9 @@ export const TerminalSurface = memo(function TerminalSurface({ session }: Props)
       term.open(containerRef.current)
       fitAddon.fit()
       fitRef.current = fitAddon
+      let resizeFrame: number | null = null
+      let lastCols = term.cols
+      let lastRows = term.rows
 
       term.onData((data) => {
         void terminalWrite(session.id, data)
@@ -120,9 +127,14 @@ export const TerminalSurface = memo(function TerminalSurface({ session }: Props)
 
       termRef.current = term
 
-      const observer = new ResizeObserver(() => {
+      const persistResize = () => {
         if (disposed) return
         fitAddon.fit()
+        if (term.cols === lastCols && term.rows === lastRows) {
+          return
+        }
+        lastCols = term.cols
+        lastRows = term.rows
         void terminalResize(session.id, term.cols, term.rows)
           .then(() => {
             if (!disposed) {
@@ -134,10 +146,21 @@ export const TerminalSurface = memo(function TerminalSurface({ session }: Props)
               reportBackendError('terminal-resize', 'Terminal resize failed', error, 'Failed to resize terminal')
             }
           })
+      }
+      const observer = new ResizeObserver(() => {
+        if (disposed || resizeFrame !== null) return
+        resizeFrame = window.requestAnimationFrame(() => {
+          resizeFrame = null
+          persistResize()
+        })
       })
       observer.observe(containerRef.current)
 
       return () => {
+        if (resizeFrame !== null) {
+          window.cancelAnimationFrame(resizeFrame)
+          resizeFrame = null
+        }
         observer.disconnect()
         term.dispose()
         termRef.current = null
@@ -179,7 +202,6 @@ export const TerminalSurface = memo(function TerminalSurface({ session }: Props)
       terminal.write(scrollback)
     }
     scrollbackRef.current = scrollback
-    fitRef.current?.fit()
   }, [scrollback])
 
   useEffect(() => {
