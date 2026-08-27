@@ -4,6 +4,7 @@ import { useWorkspaceStore } from '@/stores/workspace'
 import { useTerminalStore } from '@/stores/terminal'
 import { useProjectsStore } from '@/stores/projects'
 import { useNotificationsStore } from '@/stores/notifications'
+import { useRafCoalescedCallback } from '@/hooks/useRafCoalescedCallback'
 import { terminalDiagnosticsRead, terminalRename, terminalRespawn, terminalScrollbackClear, toTerminalDiagnostics, toTerminalSession } from '@/lib/backend'
 import { createAndFocusTerminalSession, resolveTerminalProjectId } from '@/lib/terminalSessions'
 import { copyTerminalHistory } from '@/lib/terminalHistoryActions'
@@ -18,6 +19,7 @@ export const BottomDock = memo(function BottomDock() {
   const height = useWorkspaceStore((s) => s.bottomDockHeight)
   const setOpen = useWorkspaceStore((s) => s.setBottomDockOpen)
   const setHeight = useWorkspaceStore((s) => s.setBottomDockHeight)
+  const resizeHeight = useRafCoalescedCallback((nextHeight: number) => setHeight(nextHeight))
   const activeProjectId = useProjectsStore((s) => s.activeProjectId)
   const setActiveProject = useProjectsStore((s) => s.setActiveProject)
   const allSessions = useTerminalStore((s) => s.sessions)
@@ -54,9 +56,10 @@ export const BottomDock = memo(function BottomDock() {
       const onMove = (e: MouseEvent) => {
         if (!resizeRef.current) return
         const delta = resizeRef.current.startY - e.clientY
-        setHeight(resizeRef.current.startH + delta)
+        resizeHeight.schedule(resizeRef.current.startH + delta)
       }
       const onUp = () => {
+        resizeHeight.flush()
         resizeRef.current = null
         window.removeEventListener('mousemove', onMove)
         window.removeEventListener('mouseup', onUp)
@@ -64,7 +67,7 @@ export const BottomDock = memo(function BottomDock() {
       window.addEventListener('mousemove', onMove)
       window.addEventListener('mouseup', onUp)
     },
-    [height, setHeight]
+    [height, resizeHeight]
   )
 
   const activeSession = activeSessionId ? allSessions.get(activeSessionId) : null

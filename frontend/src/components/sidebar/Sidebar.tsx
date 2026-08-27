@@ -1,5 +1,6 @@
 import { memo, useCallback, useRef } from 'react'
 import { useWorkspaceStore } from '@/stores/workspace'
+import { useRafCoalescedCallback } from '@/hooks/useRafCoalescedCallback'
 import { ProjectStack } from './ProjectStack'
 import styles from './Sidebar.module.css'
 
@@ -7,6 +8,7 @@ export const Sidebar = memo(function Sidebar() {
   const open = useWorkspaceStore((s) => s.sidebarOpen)
   const width = useWorkspaceStore((s) => s.sidebarWidth)
   const setWidth = useWorkspaceStore((s) => s.setSidebarWidth)
+  const resizeWidth = useRafCoalescedCallback((nextWidth: number) => setWidth(nextWidth))
   const resizeRef = useRef<{ startX: number; startW: number } | null>(null)
 
   const onResizeStart = useCallback(
@@ -16,9 +18,10 @@ export const Sidebar = memo(function Sidebar() {
       const onMove = (e: MouseEvent) => {
         if (!resizeRef.current) return
         const delta = e.clientX - resizeRef.current.startX
-        setWidth(resizeRef.current.startW + delta)
+        resizeWidth.schedule(resizeRef.current.startW + delta)
       }
       const onUp = () => {
+        resizeWidth.flush()
         resizeRef.current = null
         window.removeEventListener('mousemove', onMove)
         window.removeEventListener('mouseup', onUp)
@@ -26,7 +29,7 @@ export const Sidebar = memo(function Sidebar() {
       window.addEventListener('mousemove', onMove)
       window.addEventListener('mouseup', onUp)
     },
-    [width, setWidth]
+    [resizeWidth, width]
   )
 
   if (!open) return null

@@ -1,6 +1,7 @@
 import { memo, useCallback, useRef } from 'react'
 import type { PaneLayout } from '@/types'
 import { useWorkspaceStore } from '@/stores/workspace'
+import { useRafCoalescedCallback } from '@/hooks/useRafCoalescedCallback'
 import { Pane } from './Pane'
 import styles from './PaneGrid.module.css'
 
@@ -16,6 +17,7 @@ const SplitHandle = memo(function SplitHandle({
   direction: 'horizontal' | 'vertical'
 }) {
   const updateSplitRatio = useWorkspaceStore((s) => s.updateSplitRatio)
+  const resizeSplit = useRafCoalescedCallback((ratio: number) => updateSplitRatio(splitId, ratio))
   const ref = useRef<HTMLDivElement>(null)
   const dragRef = useRef<{ startPos: number; startRatio: number; parentSize: number } | null>(null)
 
@@ -52,9 +54,10 @@ const SplitHandle = memo(function SplitHandle({
         const pos = direction === 'horizontal' ? e.clientX : e.clientY
         const delta = pos - dragRef.current.startPos
         const ratioDelta = delta / dragRef.current.parentSize
-        updateSplitRatio(splitId, dragRef.current.startRatio + ratioDelta)
+        resizeSplit.schedule(dragRef.current.startRatio + ratioDelta)
       }
       const onUp = () => {
+        resizeSplit.flush()
         dragRef.current = null
         window.removeEventListener('mousemove', onMove)
         window.removeEventListener('mouseup', onUp)
@@ -62,7 +65,7 @@ const SplitHandle = memo(function SplitHandle({
       window.addEventListener('mousemove', onMove)
       window.addEventListener('mouseup', onUp)
     },
-    [splitId, direction, updateSplitRatio]
+    [splitId, direction, resizeSplit]
   )
 
   return (

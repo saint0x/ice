@@ -10,6 +10,7 @@ import { useWorkspaceStore } from '@/stores/workspace'
 import { useProjectsStore } from '@/stores/projects'
 import { useCodexStore } from '@/stores/codex'
 import { useNotificationsStore } from '@/stores/notifications'
+import { useRafCoalescedCallback } from '@/hooks/useRafCoalescedCallback'
 import { describeCodexError } from '@/lib/errors'
 import styles from './ChatPanel.module.css'
 
@@ -21,6 +22,7 @@ export const ChatPanel = memo(function ChatPanel() {
   const chatWidth = useWorkspaceStore((s) => s.chatPanelWidth)
   const setChatOpen = useWorkspaceStore((s) => s.setChatPanelOpen)
   const setChatWidth = useWorkspaceStore((s) => s.setChatPanelWidth)
+  const resizeWidth = useRafCoalescedCallback((nextWidth: number) => setChatWidth(nextWidth))
   const layout = useWorkspaceStore((s) => s.layout)
   const activePaneId = useWorkspaceStore((s) => s.activePaneId)
   const workspaceTabs = useWorkspaceStore((s) => s.tabs)
@@ -207,9 +209,10 @@ export const ChatPanel = memo(function ChatPanel() {
       const onMove = (e: MouseEvent) => {
         if (!resizeRef.current) return
         const delta = resizeRef.current.startX - e.clientX
-        setChatWidth(resizeRef.current.startW + delta)
+        resizeWidth.schedule(resizeRef.current.startW + delta)
       }
       const onUp = () => {
+        resizeWidth.flush()
         resizeRef.current = null
         window.removeEventListener('mousemove', onMove)
         window.removeEventListener('mouseup', onUp)
@@ -217,7 +220,7 @@ export const ChatPanel = memo(function ChatPanel() {
       window.addEventListener('mousemove', onMove)
       window.addEventListener('mouseup', onUp)
     },
-    [chatWidth, setChatWidth]
+    [chatWidth, resizeWidth]
   )
 
   if (!chatOpen) return null

@@ -21,6 +21,9 @@ export const ProjectStack = memo(function ProjectStack() {
   const [dropIndicatorIndex, setDropIndicatorIndex] = useState<number | null>(null)
   const [suppressProjectClickId, setSuppressProjectClickId] = useState<string | null>(null)
   const itemRefs = useRef(new Map<string, HTMLDivElement>())
+  const projectOrderRef = useRef(projectOrder)
+  const dropIndicatorIndexRef = useRef(dropIndicatorIndex)
+  const persistProjectOrderRef = useRef<(nextOrder: string[]) => Promise<void>>(async () => undefined)
   const pointerDragRef = useRef<{
     projectId: string
     startY: number
@@ -42,6 +45,23 @@ export const ProjectStack = memo(function ProjectStack() {
   }, [projectOrder, pushError, reorderProjects])
 
   useEffect(() => {
+    persistProjectOrderRef.current = persistProjectOrder
+  }, [persistProjectOrder])
+
+  useEffect(() => {
+    projectOrderRef.current = projectOrder
+  }, [projectOrder])
+
+  useEffect(() => {
+    dropIndicatorIndexRef.current = dropIndicatorIndex
+  }, [dropIndicatorIndex])
+
+  const setTrackedDropIndicatorIndex = useCallback((index: number | null) => {
+    dropIndicatorIndexRef.current = index
+    setDropIndicatorIndex(index)
+  }, [])
+
+  useEffect(() => {
     if (!suppressProjectClickId) return
     const timeout = window.setTimeout(() => {
       setSuppressProjectClickId((current) => (current === suppressProjectClickId ? null : current))
@@ -61,24 +81,27 @@ export const ProjectStack = memo(function ProjectStack() {
         setDraggedProjectId(drag.projectId)
         setSuppressProjectClickId(drag.projectId)
       }
-      setDropIndicatorIndex(getDropIndicatorIndex(projectOrder, itemRefs.current, event.clientY))
+      setTrackedDropIndicatorIndex(
+        getDropIndicatorIndex(projectOrderRef.current, itemRefs.current, event.clientY),
+      )
     }
 
     const finishDrag = () => {
       const drag = pointerDragRef.current
       pointerDragRef.current = null
       if (!drag) return
-      const nextIndex = dropIndicatorIndex
+      const nextIndex = dropIndicatorIndexRef.current
       setDraggedProjectId(null)
-      setDropIndicatorIndex(null)
+      setTrackedDropIndicatorIndex(null)
       if (!drag.hasMoved || nextIndex == null) {
         return
       }
-      const nextOrder = reorderProjectIds(projectOrder, drag.projectId, nextIndex)
-      if (nextOrder === projectOrder) {
+      const currentOrder = projectOrderRef.current
+      const nextOrder = reorderProjectIds(currentOrder, drag.projectId, nextIndex)
+      if (nextOrder === currentOrder) {
         return
       }
-      void persistProjectOrder(nextOrder)
+      void persistProjectOrderRef.current(nextOrder)
     }
 
     window.addEventListener('pointermove', onPointerMove)
@@ -89,7 +112,7 @@ export const ProjectStack = memo(function ProjectStack() {
       window.removeEventListener('pointerup', finishDrag)
       window.removeEventListener('pointercancel', finishDrag)
     }
-  }, [dropIndicatorIndex, persistProjectOrder, projectOrder])
+  }, [setTrackedDropIndicatorIndex])
 
   const onProjectPointerDown = (projectId: string) => (event: ReactPointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0) return
@@ -98,7 +121,7 @@ export const ProjectStack = memo(function ProjectStack() {
       startY: event.clientY,
       hasMoved: false,
     }
-    setDropIndicatorIndex(projectOrder.indexOf(projectId))
+    setTrackedDropIndicatorIndex(projectOrder.indexOf(projectId))
   }
 
   const addProjectAtPath = async (rootPath: string) => {
